@@ -1,0 +1,78 @@
+from calendar import monthrange,weekday
+from datetime import datetime, timedelta
+from os import sep
+from id_employer import id_employer
+import sys
+
+def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
+    """ Я не знаю как работает эта функция :) Надо разобраться
+        Функция принимает в себя значение первого и последнего дня месяца
+        в формате datetime, а потом зачем то ранжирует их
+    """
+    if step.days > 0:
+        while start < stop:
+            yield start
+            start = start + step
+    elif step.days < 0:
+        while start > stop:
+            yield start
+            start = start + step
+    if inclusive and start == stop:
+        yield start
+
+def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month:int):
+    """Функция поиска пропущенных отметок прихода или ухода в словаре
+       Принимает весь словарь целиком, в котором структурированы id работников, даты и временные отметки из файла данных.
+       Принимает значения рассматриваемого года и месяца
+       Фукнция ничего не возвращает
+    """
+    first_day_month = datetime(requested_year,requested_month,1)
+    last_day_month_type = datetime(requested_year,requested_month,last_day_month)
+    for day_month in daterange(first_day_month,last_day_month_type,inclusive = True):
+        date_day = day_month.strptime("%Y-%m-%d")
+        if date_day in A.keys():
+            for id in A[date_day].keys():
+                if id != 7 and id != 27 and id != 8 and id != 2:
+                    if A[date_day][id][0] == A[date_day][id][1]:
+                        name_list = id_employer()
+                        name_employer = name_list[id]
+                        print("ПРЕДУПРЕЖДЕНИЕ! " + name_employer + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
+                        print('Дата и  время отметки, сохраненной в системе:',A[date_day][id][0],sep = ' ')
+                        print('\n\n\tВыберете, какой вариант отметки будет введен:\n\n\t1.Отметка прихода\n\t2.Отметка ухода')
+                        white_veribal = 0
+                        while white_veribal!=1:
+                            user_choice = input('Выберете пункт меню:')
+                            if user_choice == '1' or user_choice =='2':
+                                white_veribal = 1
+                                entered_time = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00')
+                                data_to_write = datetime.strptime(str(entered_time + ' ' + date_day),"%Y-%m-%d %H %M %S")
+                                if user_choice == '1':
+                                    A[date_day][id][0] = data_to_write
+                                else:
+                                    A[date_day][id][1] = data_to_write
+                                print('Ввод данных об отметки подвержден!')
+                            else:
+                                print('Введите цифру, соответсвующую пункту меню!')
+    pass
+def search_for_missed_day(A:dict,all_day_month:list):
+    """Функция поиска пропущенных рабочих дней в месяце.
+       Принимает весь структурированный словарь целиком.
+       Возвращет список рабочих дней, которые были пропущены
+    """
+    list_work_date = []
+    for work_date in A.keys():
+        # print(work_date)
+        # print(A[work_date])
+        list_work_date.append(work_date)
+    print('Рабочие дни месяца:')
+    print(list_work_date)
+    pass
+
+def analyze_data(A,requested_year:int,requested_month:int,):
+    """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
+        за какие дни нет даных. 
+    """
+    last_day_month = monthrange(requested_year,requested_month)[1]
+    all_day_request_month = list(range(1,last_day_month+1,1))
+    
+    pass
