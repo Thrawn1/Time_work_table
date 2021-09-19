@@ -1,5 +1,5 @@
-from calendar import monthrange,weekday
-from datetime import datetime, timedelta
+from calendar import  calendar, monthrange, weekday
+from datetime import datetime, timedelta, date
 from os import sep
 from id_employer import id_employer
 import sys
@@ -54,19 +54,53 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
                             else:
                                 print('Введите цифру, соответсвующую пункту меню!')
     pass
-def search_for_missed_day(A:dict,all_day_month:list):
+def search_for_missed_day(A:dict,all_day_month:list,requested_year:int,requested_month:int):
     """Функция поиска пропущенных рабочих дней в месяце.
        Принимает весь структурированный словарь целиком.
        Возвращет список рабочих дней, которые были пропущены
     """
     list_work_date = []
+    work_days_without_data = []
     for work_date in A.keys():
         # print(work_date)
         # print(A[work_date])
         list_work_date.append(work_date)
     print('Рабочие дни месяца:')
     print(list_work_date)
+    for day in list_work_date:
+        a = weekday(requested_year,requested_month,int(day[8:]))
+        week_day_dic = {0:'Понедельник',1:'Вторник',2:'Среда',3:'Четверг',4:'Пятница',5:'Суббота',6:'Воскресенье'}
+        b = week_day_dic.get(a)
+        #print(day,b, sep = '|||')
+    for day_month_number in all_day_month:
+        day_month_data = date(requested_year,requested_month,day_month_number)
+        day_month = day_month_data.strftime("%Y-%m-%d") + ' '
+        mark_day=list_work_date.count(day_month)
+        if mark_day == 0:
+            week_day_work = weekday(requested_year,requested_month,day_month_number)
+            if week_day_work != 5 and week_day_work != 6:
+                work_days_without_data.append(day_month)
+    print('Дней без отметок: \n',work_days_without_data)
+
     pass
+
+def analyze_employer_work_date(data_dict:dict):
+    """Функция анализа всех рабочих дней, который отработал сотрудник"""
+    data_employer_work = {}
+    employer_list = id_employer()
+    for id in employer_list:
+        data_employer_work[id] = []
+    for data_date in data_dict.keys():
+        for id in data_dict[data_date].keys():
+            data_employer_work[id].append(data_date)
+    for id in data_employer_work.keys():
+        name = employer_list[id]
+        print(name,":\n" )
+        for date in data_employer_work[id]:
+            print(date)
+    return data_employer_work
+
+
 
 def analyze_data(A,requested_year:int,requested_month:int,):
     """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
