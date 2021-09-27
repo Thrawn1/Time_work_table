@@ -29,6 +29,8 @@ def id_employer_new(name_id_file = 'id_employer_new_v2.dat',name_roules_file = '
     print('\n\n\n')
     for line in roules_file:
         rules_data = line.split(' ')
+        if len(rules_data) > 2:
+            rules_data[1] = rules_data[1] + ' ' + rules_data[len(rules_data)-1]
         print(rules_data)
         roles_employer_list[rules_data[0]] = rules_data[1].rstrip('\n')
     for line in file_id_name:
