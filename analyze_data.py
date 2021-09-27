@@ -98,6 +98,8 @@ def analyze_employer_work_date(data_dict:dict):
         print(name,":\n" )
         for date in data_employer_work[id]:
             print(date)
+    print(data_employer_work)
+    print(employer_list)
     return data_employer_work
 
 
