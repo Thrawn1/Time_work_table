@@ -34,7 +34,8 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
             for id in A[date_day].keys():
                 if id != 7 and id != 27 and id != 8 and id != 2:
                     if A[date_day][id][0] == A[date_day][id][1]:
-                        name_list = id_employer()
+                        name_list_tmp = id_employer(type_data = 2)
+                        name_list = name_list_tmp[1]
                         name_employer = name_list[id]
                         print("ПРЕДУПРЕЖДЕНИЕ! " + name_employer + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
                         print('Дата и  время отметки, сохраненной в системе:',A[date_day][id][0],sep = ' ')
