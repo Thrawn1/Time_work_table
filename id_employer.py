@@ -36,9 +36,8 @@ def id_employer(name_id_file = 'id_employer_new_v2.dat',name_roles_file = 'roles
             line_data[0] = int(line_data[0])
             for i in range(0,(number_roles+1)):
                 if line_data[1] == i:
-                    id_employer_data = {}
                     id = line_data[0]
                     name = line_data[2]
-                    id_employer_data[id] = name
-                    id_employer_list[i].append(id_employer_data)
+                    employer_dict_role = id_employer_list[i]
+                    employer_dict_role[id] = name
         return id_employer_list
