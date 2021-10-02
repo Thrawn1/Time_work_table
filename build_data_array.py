@@ -12,7 +12,7 @@ def build_data_array(list_month: list):
     for line in list_month:
         id_employer_data = int(line[7:10])
         date_and_time = datetime.strptime(line[10:29], "%Y-%m-%d %H:%M:%S")
-        key_data = line[10:21]
+        key_data = line[10:20]
         family_employer = list_employer.get(id_employer_data)
         if family_employer == None:
             print('Ошибка! Не указан id пользователя в файле!')

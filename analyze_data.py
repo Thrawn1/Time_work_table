@@ -5,9 +5,7 @@ from id_employer import id_employer
 import sys
 
 def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
-    """ Я не знаю как работает эта функция :) Надо разобраться
-        Функция принимает в себя значение первого и последнего дня месяца
-        в формате datetime, а потом зачем то ранжирует их
+    """Функция-генератор 
     """
     if step.days > 0:
         while start < stop:
@@ -28,15 +26,17 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
     """
     first_day_month = datetime(requested_year,requested_month,1)
     last_day_month_type = datetime(requested_year,requested_month,last_day_month)
+    name_list_tmp = id_employer(type_data = 2)
+    name_list = name_list_tmp[1]
     for day_month in daterange(first_day_month,last_day_month_type,inclusive = True):
-        date_day = day_month.strptime("%Y-%m-%d")
+        #print(day_month,type(day_month))
+        date_day = day_month.strftime("%Y-%m-%d")
         if date_day in A.keys():
             for id in A[date_day].keys():
-                if id != 7 and id != 27 and id != 8 and id != 2:
+                if id in name_list:
                     if A[date_day][id][0] == A[date_day][id][1]:
-                        name_list_tmp = id_employer(type_data = 2)
-                        name_list = name_list_tmp[1]
                         name_employer = name_list[id]
+                        print(name_employer)
                         print("ПРЕДУПРЕЖДЕНИЕ! " + name_employer + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
                         print('Дата и  время отметки, сохраненной в системе:',A[date_day][id][0],sep = ' ')
                         print('\n\n\tВыберете, какой вариант отметки будет введен:\n\n\t1.Отметка прихода\n\t2.Отметка ухода')
@@ -45,16 +45,23 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
                             user_choice = input('Выберете пункт меню:')
                             if user_choice == '1' or user_choice =='2':
                                 white_veribal = 1
-                                entered_time = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00')
-                                data_to_write = datetime.strptime(str(entered_time + ' ' + date_day),"%Y-%m-%d %H %M %S")
+                                entered_time = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
+                                data_to_write = datetime.strptime(str(date_day + ' ' + entered_time),"%Y-%m-%d %H %M %S")
                                 if user_choice == '1':
                                     A[date_day][id][0] = data_to_write
                                 else:
                                     A[date_day][id][1] = data_to_write
                                 print('Ввод данных об отметки подвержден!')
+                                print("Данные в системе\n\n\n")
+                                print("Время прихода:",A[date_day][id][0],"Время ухода:",A[date_day][id][1],sep=' ')
                             else:
                                 print('Введите цифру, соответсвующую пункту меню!')
-    pass
+
+                else:
+                    pass
+        else:
+            pass
+
 def search_for_missed_day(A:dict,all_day_month:list,requested_year:int,requested_month:int):
     """Функция поиска пропущенных рабочих дней в месяце.
        Принимает весь структурированный словарь целиком.
@@ -102,7 +109,6 @@ def analyze_employer_work_date(data_dict:dict):
     print(data_employer_work)
     print(employer_list)
     return data_employer_work
-
 
 
 def analyze_data(A,requested_year:int,requested_month:int,):
