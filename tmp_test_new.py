@@ -17,6 +17,6 @@ list_employer = id_employer()
 for id in list_employer.keys():
     name = list_employer[id]
     print(name)
-    data = output_data_employer(data_array,id)
+    output_data_employer(data_array,id)
 print(analyze_employer_work_date_new(data_array,4))
 print('ГОТОВО!')
