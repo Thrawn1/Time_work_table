@@ -13,23 +13,6 @@ def generation_of_lists_of_days(requested_year:int,requested_month:int):
             list_day_month[key_date] = 'Выходной'
     return list_day_month
 
-def analyze_employers_work_date_new(data_dict:dict):
-    """Функция анализа всех рабочих дней, которые отработали сотрудники"""
-    data_employer_work = {}
-    employer_list = id_employer()
-    for id in employer_list:
-        data_employer_work[id] = []
-    for data_date in data_dict.keys():
-        for id in data_dict[data_date].keys():
-            data_employer_work[id].append(data_date)
-    for id in data_employer_work.keys():
-        name = employer_list[id]
-        print(name,":\n" )
-        for date in data_employer_work[id]:
-            print(date)
-    print(data_employer_work)
-    return data_employer_work
-
 def analyze_employer_work_date_new(data_dict:dict,id:int):
     """Функция анализа всех рабочих дней, который отработал сотрудник"""
     data_employer_work = []
@@ -37,6 +20,17 @@ def analyze_employer_work_date_new(data_dict:dict,id:int):
         if id in data_dict[data_date].keys():
             data_employer_work.append(data_date)
     return data_employer_work
+
+
+def output_data_employer(data_dict:dict,id:int):
+    """Функция анализа всех рабочих дней, которые отработали сотрудники"""
+    id_data= []
+    for data_date in data_dict.keys():
+        for id in data_dict[data_date].keys():
+            id_data.append(data_date)
+    for date in id_data:
+        print(date)
+
 
 def search_for_missed_day_new():
     """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя, а так же списки рабочих выходных и праздников"""
