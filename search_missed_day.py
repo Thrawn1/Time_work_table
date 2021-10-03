@@ -45,7 +45,9 @@ def definition_of_working_day(date:str):
     month = int(date[6:7])
     day = int(date[8:10])
     name_holiday_file = 'holidays.dat'
+    name_postponed_working_days = ' 7  '
     file_holiday = open(name_holiday_file, 'r',encoding='utf-8')
+    file_postponed_working_days = open(name_postponed_working_days,'r',encoding='utf-8')
     list_holiday = []
     for line in file_holiday:
         new_line = line.rstrip('\n')
@@ -57,13 +59,15 @@ def definition_of_working_day(date:str):
     month = int(date[6:7])
     day = int(date[8:10])
     number_day = weekday(year,month,day)
+    week_day_dic = {0:'Понедельник',1:'Вторник',2:'Среда',3:'Четверг',4:'Пятница',5:'Суббота',6:'Воскресенье'}
+    str_weekday = week_day_dic[number_day]
     if date not in list_holiday:
         if number_day != 5 and number_day !=6:
-            return 'work'
+            return ('work',str_weekday)
         else:
-            return 'weekend'
+            return ('weekend',str_weekday)
     else:
-        return 'holiday'
+        return ('holiday',str_weekday)
 
 
 def search_for_missed_day_new():
