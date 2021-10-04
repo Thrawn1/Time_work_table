@@ -76,9 +76,15 @@ def search_for_missed_day_new(data_dict:dict,id:int,requested_year:int,requested
     missed_days = []
     month_days_work = generation_of_lists_of_days(requested_year,requested_month)
     emoyee_days_work = analyze_employer_work_date_new(data_dict,id)
-    for day in month_days_work[0]:
-        if day not in emoyee_days_work:
-            missed_days.append(day)
+    if len(emoyee_days_work) != 0:
+        for day in month_days_work[0]:
+            if day not in emoyee_days_work:
+                missed_days.append(day)
+            else:
+                pass
+        if len(missed_days) != 0:
+            print(missed_days)
         else:
             pass
-    print(missed_days)
+    else: 
+        print('Нет записей о рабочих днях. Возможно человек не работает')
