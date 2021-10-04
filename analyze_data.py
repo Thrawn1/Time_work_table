@@ -29,16 +29,34 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
     last_day_month_type = datetime(requested_year,requested_month,last_day_month)
     name_list_tmp = id_employer(type_data = 2)
     name_list = name_list_tmp[1]
+    for id in name_list:
+        missing_mark_dict[id] = []
     for day_month in daterange(first_day_month,last_day_month_type,inclusive = True):
         date_day = day_month.strftime("%Y-%m-%d")
         if date_day in A.keys():
             for id in A[date_day].keys():
                 if id in name_list:
                     if A[date_day][id][0] == A[date_day][id][1]:
-                        name_employer = name_list[id]
-                        print(name_employer)
-                        print("ПРЕДУПРЕЖДЕНИЕ! " + name_employer + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
-                        print('Дата и  время отметки, сохраненной в системе:',A[date_day][id][0],sep = ' ')
+                        # name_employer = name_list[id]
+                        # print(name_employer)
+                        # print("ПРЕДУПРЕЖДЕНИЕ! " + name_employer + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
+                        # print('Дата и  время отметки, сохраненной в системе:',A[date_day][id][0],sep = ' ')
+                        missing_mark_dict[id].append(date_day)
+    for id in list(missing_mark_dict):
+        a = missing_mark_dict[id]
+        if len(a) == 0:
+            missing_mark_dict.pop(id)
+        else:
+            pass
+        pass
+    for id in list(missing_mark_dict):
+        name = name_list[id]
+        print('\n',"ПРЕДУПРЕЖДЕНИЕ! " + name + " имеет только одну отметку в рабочем дне!", file=sys.stderr,end='\n\n')
+        for date in missing_mark_dict[id]:
+            time = A[date][id][0]
+            print('Дата:',date,'Время имеющейся отметки:',time)
+        print('\n')
+    return missing_mark_dict
 
 def search_for_missed_day(A:dict,all_day_month:list,requested_year:int,requested_month:int):
     """Функция поиска пропущенных рабочих дней в месяце.
