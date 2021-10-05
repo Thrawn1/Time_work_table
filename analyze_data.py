@@ -49,13 +49,6 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
         else:
             pass
         pass
-    for id in list(missing_mark_dict):
-        name = name_list[id]
-        print('\n',"ПРЕДУПРЕЖДЕНИЕ! " + name + " имеет только одну отметку в рабочем дне!", file=sys.stderr,end='\n\n')
-        for date in missing_mark_dict[id]:
-            time = A[date][id][0]
-            print('Дата:',date,'Время имеющейся отметки:',time)
-        print('\n')
     return missing_mark_dict
 
 def search_for_missed_day(A:dict,all_day_month:list,requested_year:int,requested_month:int):

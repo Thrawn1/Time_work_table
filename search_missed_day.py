@@ -1,8 +1,8 @@
 from calendar import  calendar, month, monthrange, weekday
 from id_employer import id_employer
 
-def analyze_employer_work_date_new(data_dict:dict,id:int):
-    """Функция анализа всех рабочих дней, который отработал сотрудник"""
+def reading_employee_work_date(data_dict:dict,id:int):
+    """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
     data_employer_work = []
     for data_date in data_dict.keys():
         if id in data_dict[data_date].keys():
@@ -10,6 +10,7 @@ def analyze_employer_work_date_new(data_dict:dict,id:int):
     return data_employer_work
 
 def definition_of_working_day(date:str):
+    """Функция определяет, какого типа день - рабочий, выходной или праздничный. Принимает дату в строковом виде, использует списки исключений(праздников и перенесенных рабочих дней). Возвращает метку - день рабочий, выходной или праздничный """
     year = int(date[0:4])
     month = int(date[6:7])
     day = int(date[8:10])
@@ -75,7 +76,7 @@ def search_for_missed_day_new(data_dict:dict,id:int,requested_year:int,requested
     """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя, а так же списки рабочих выходных и праздников"""
     missed_days = []
     month_days_work = generation_of_lists_of_days(requested_year,requested_month)
-    emoyee_days_work = analyze_employer_work_date_new(data_dict,id)
+    emoyee_days_work = reading_employee_work_date(data_dict,id)
     if len(emoyee_days_work) != 0:
         for day in month_days_work[0]:
             if day not in emoyee_days_work:
@@ -83,8 +84,8 @@ def search_for_missed_day_new(data_dict:dict,id:int,requested_year:int,requested
             else:
                 pass
         if len(missed_days) != 0:
-            print(missed_days)
+            return missed_days
         else:
             pass
     else: 
-        print('Нет записей о рабочих днях. Возможно человек не работает')
+        return 0
