@@ -1,6 +1,4 @@
 from determination_period import*
-from datetime import datetime
-
 
 def read_file_data(file_name_data, requested_year, requested_month):
     """ Функция служит для прочтения файла данных, его информация переводится в вид словаря.

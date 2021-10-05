@@ -19,7 +19,7 @@ all_day_month = list(range(1,(int(monthrange(requested_year,requested_month)[1])
 search_for_missed_day(data_array,all_day_month,requested_year,requested_month)
 last_day_month = monthrange(requested_year,requested_month)[1]
 search_missing_mark(data_array,last_day_month,requested_year,requested_month)
-#analyze_employer_work_date(data_array)
+#analyze_employee_work_date(data_array)
 print('Готово!')
 # last_day_month = calendar.monthrange(requested_year,requested_month)[1]
 # list_days_of_month = list(range(1,last_day_month+1,1))

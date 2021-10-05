@@ -1,5 +1,9 @@
 from calendar import weekday
-def output_data_employer(data_dict:dict,id:int):
+from datetime import*
+from id_employee import*
+from analyze_data import *
+import sys
+def output_data_employee(data_dict:dict,id:int):
     """Функция анализа всех рабочих дней, которые отработали сотрудники"""
     id_data= []
     for data_date in data_dict.keys():
@@ -26,7 +30,7 @@ def editing_missing_mark(A:dict,last_day_month,requested_year:int,requested_mont
     """
     first_day_month = datetime(requested_year,requested_month,1)
     last_day_month_type = datetime(requested_year,requested_month,last_day_month)
-    name_list_tmp = id_employer(type_data = 2)
+    name_list_tmp = id_employee(type_data = 2)
     name_list = name_list_tmp[1]
     for day_month in daterange(first_day_month,last_day_month_type,inclusive = True):
         date_day = day_month.strftime("%Y-%m-%d")

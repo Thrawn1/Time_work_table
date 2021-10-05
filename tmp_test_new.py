@@ -2,7 +2,7 @@ from os import name
 from determination_period import*
 from build_data_array import*
 from read_file_data import*
-from id_employer import*
+from id_employee import*
 from search_missed_day import generation_of_lists_of_days,analyze_employer_work_date_new,definition_of_working_day,search_for_missed_day_new
 from additional_functions import*
 from analyze_data import *
@@ -17,11 +17,11 @@ data_array = build_data_array(list_data)
 # print(p)
 # print('Генерация завершена\n\n\n')
 # print('Список всех рабочих дней пользователей')
-# list_employer = id_employer()
-# for id in list_employer.keys():
-#     name = list_employer[id]
+# list_employee = id_employee()
+# for id in list_employee.keys():
+#     name = list_employee[id]
 #     print(name)
-#     id_list = analyze_employer_work_date_new(data_array,id)
+#     id_list = analyze_employee_work_date_new(data_array,id)
 #     for date in id_list:
 #         a = definition_of_working_day(date)
 #         if a[0] == 'work':
@@ -32,12 +32,12 @@ data_array = build_data_array(list_data)
 #             print(date,a[1],'Праздничный',sep = ' --- ')
 #         else:
 #             print('Ужасная ошибка. Ничего не работает!')
-#     output_data_employer(data_array,id)
-# print(analyze_employer_work_date_new(data_array,4))
+#     output_data_employee(data_array,id)
+# print(analyze_employee_work_date_new(data_array,4))
 
-# list_employer = id_employer(type_data = 2)[1]
-# for id in list_employer.keys():
-#     name = list_employer[id]
+# list_employee = id_employee(type_data = 2)[1]
+# for id in list_employee.keys():
+#     name = list_employee[id]
 #     print(name)
 #     search_for_missed_day_new(data_array,id,requested_year,requested_month)
 # print('ГОТОВО!')

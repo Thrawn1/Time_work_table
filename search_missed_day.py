@@ -1,5 +1,4 @@
-from calendar import  calendar, month, monthrange, weekday
-from id_employer import id_employer
+from calendar import  monthrange, weekday
 
 def reading_employee_work_date(data_dict:dict,id:int):
     """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
@@ -51,7 +50,7 @@ def definition_of_working_day(date:str):
         return ('holiday',str_weekday)
 
 def generation_of_lists_of_days(requested_year:int,requested_month:int):
-    """Функция принимает значения года и месяца. Функция возвращает Список, содержащий списки - рабочие будние дни, выходные дни и праздники """
+    """Функция принимает значения года и месяца. Функция возвращает список, содержащий списки  - рабочие дни месяца и выходные и праздничные дни месяца """
     last_day_request_month = monthrange(requested_year,requested_month)[1]
     list_day_month = [[],[]]
     for day in range(1,last_day_request_month+1, 1):

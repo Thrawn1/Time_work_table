@@ -1,8 +1,6 @@
-from calendar import  calendar, monthrange, weekday
+from calendar import  monthrange, weekday
 from datetime import datetime, timedelta, date
-from os import sep
-from id_employer import id_employer
-import sys
+from id_employee import id_employee
 
 def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
     """Функция-генератор 
@@ -27,7 +25,7 @@ def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month
     missing_mark_dict = {}
     first_day_month = datetime(requested_year,requested_month,1)
     last_day_month_type = datetime(requested_year,requested_month,last_day_month)
-    name_list_tmp = id_employer(type_data = 2)
+    name_list_tmp = id_employee(type_data = 2)
     name_list = name_list_tmp[1]
     for id in name_list:
         missing_mark_dict[id] = []
@@ -81,23 +79,23 @@ def search_for_missed_day(A:dict,all_day_month:list,requested_year:int,requested
 
     pass
 
-def analyze_employer_work_date(data_dict:dict):
+def analyze_employee_work_date(data_dict:dict):
     """Функция анализа всех рабочих дней, который отработал сотрудник"""
-    data_employer_work = {}
-    employer_list = id_employer()
-    for id in employer_list:
-        data_employer_work[id] = []
+    data_employee_work = {}
+    employee_list = id_employee()
+    for id in employee_list:
+        data_employee_work[id] = []
     for data_date in data_dict.keys():
         for id in data_dict[data_date].keys():
-            data_employer_work[id].append(data_date)
-    for id in data_employer_work.keys():
-        name = employer_list[id]
+            data_employee_work[id].append(data_date)
+    for id in data_employee_work.keys():
+        name = employee_list[id]
         print(name,":\n" )
-        for date in data_employer_work[id]:
+        for date in data_employee_work[id]:
             print(date)
-    print(data_employer_work)
-    print(employer_list)
-    return data_employer_work
+    print(data_employee_work)
+    print(employee_list)
+    return data_employee_work
 
 
 def analyze_data(A,requested_year:int,requested_month:int,):
