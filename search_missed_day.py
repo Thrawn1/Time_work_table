@@ -71,7 +71,7 @@ def generation_of_lists_of_days(requested_year:int,requested_month:int):
             list_day_month[1].append(date_str)
     return list_day_month
 
-def search_for_missed_day_new(data_dict:dict,id:int,requested_year:int,requested_month:int):
+def search_for_missed_day(data_dict:dict,id:int,requested_year:int,requested_month:int):
     """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя, а так же списки рабочих выходных и праздников"""
     missed_days = []
     month_days_work = generation_of_lists_of_days(requested_year,requested_month)

@@ -16,68 +16,34 @@ def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
     if inclusive and start == stop:
         yield start
 
-def search_missing_mark(A:dict,last_day_month,requested_year:int,requested_month:int):
-    """Функция поиска пропущенных отметок прихода или ухода в словаре
+def search_missing_mark_employee(A:dict,id:int,requested_year:int,requested_month:int):
+    """Функция поиска пропущенных отметок прихода или ухода за месяц.
        Принимает весь словарь целиком, в котором структурированы id работников, даты и временные отметки из файла данных.
-       Принимает значения рассматриваемого года и месяца
-       Фукнция ничего не возвращает
+       Принимает значения рассматриваемого года и месяца, а так же id сотрудника. 
+       Фукнция возвращает список,в котором пара значений - дата и время одиночной отмеки.
     """
-    missing_mark_dict = {}
+    missing_mark_list = []
+    jk = [[1,0],]
+    last_day_month = monthrange(requested_year,requested_month)[1]
     first_day_month = datetime(requested_year,requested_month,1)
     last_day_month_type = datetime(requested_year,requested_month,last_day_month)
-    name_list_tmp = id_employee(type_data = 2)
-    name_list = name_list_tmp[1]
-    for id in name_list:
-        missing_mark_dict[id] = []
     for day_month in daterange(first_day_month,last_day_month_type,inclusive = True):
         date_day = day_month.strftime("%Y-%m-%d")
         if date_day in A.keys():
-            for id in A[date_day].keys():
-                if id in name_list:
-                    if A[date_day][id][0] == A[date_day][id][1]:
-                        # name_employer = name_list[id]
-                        # print(name_employer)
-                        # print("ПРЕДУПРЕЖДЕНИЕ! " + name_employer + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
-                        # print('Дата и  время отметки, сохраненной в системе:',A[date_day][id][0],sep = ' ')
-                        missing_mark_dict[id].append(date_day)
-    for id in list(missing_mark_dict):
-        a = missing_mark_dict[id]
-        if len(a) == 0:
-            missing_mark_dict.pop(id)
-        else:
-            pass
-        pass
-    return missing_mark_dict
-
-def search_for_missed_day(A:dict,all_day_month:list,requested_year:int,requested_month:int):
-    """Функция поиска пропущенных рабочих дней в месяце.
-       Принимает весь структурированный словарь целиком.
-       Возвращет список рабочих дней, которые были пропущены
-    """
-    list_work_date = []
-    work_days_without_data = []
-    for work_date in A.keys():
-        # print(work_date)
-        # print(A[work_date])
-        list_work_date.append(work_date)
-    print('Рабочие дни месяца:')
-    print(list_work_date)
-    for day in list_work_date:
-        a = weekday(requested_year,requested_month,int(day[8:]))
-        week_day_dic = {0:'Понедельник',1:'Вторник',2:'Среда',3:'Четверг',4:'Пятница',5:'Суббота',6:'Воскресенье'}
-        b = week_day_dic.get(a)
-        #print(day,b, sep = '|||')
-    for day_month_number in all_day_month:
-        day_month_data = date(requested_year,requested_month,day_month_number)
-        day_month = day_month_data.strftime("%Y-%m-%d") + ' '
-        mark_day=list_work_date.count(day_month)
-        if mark_day == 0:
-            week_day_work = weekday(requested_year,requested_month,day_month_number)
-            if week_day_work != 5 and week_day_work != 6:
-                work_days_without_data.append(day_month)
-    print('Дней без отметок: \n',work_days_without_data)
-
-    pass
+            if id in A[date_day].keys():
+                if A[date_day][id][0] == A[date_day][id][1]:
+                    data_cell = [0,0]
+                    data_cell[0] = date_day
+                    data_cell[1] = A[date_day][id][1]
+                    missing_mark_list.append(data_cell)
+            else:
+                print('Нет данных за день')
+                return 0
+    if len(missing_mark_list) != 0:
+        return missing_mark_list
+    else:
+        print('Пропущенных отметок нет')
+        return 0
 
 def analyze_employee_work_date(data_dict:dict):
     """Функция анализа всех рабочих дней, который отработал сотрудник"""
