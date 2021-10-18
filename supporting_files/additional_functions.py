@@ -3,6 +3,7 @@ from datetime import*
 from id_employee import*
 from analyze_data import *
 import sys
+from id_employee import id_employee
 def output_data_employee(data_dict:dict,id:int):
     """Функция анализа всех рабочих дней, которые отработали сотрудники"""
     id_data= []
@@ -132,3 +133,21 @@ def search_missing_mark(A:dict,requested_year:int,requested_month:int):
 #     print('Дней без отметок: \n',work_days_without_data)
 
 #     pass
+
+def analyze_employee_work_date(data_dict:dict):
+    """Функция анализа всех рабочих дней, который отработал сотрудник"""
+    data_employee_work = {}
+    employee_list = id_employee()
+    for id in employee_list:
+        data_employee_work[id] = []
+    for data_date in data_dict.keys():
+        for id in data_dict[data_date].keys():
+            data_employee_work[id].append(data_date)
+    for id in data_employee_work.keys():
+        name = employee_list[id]
+        print(name,":\n" )
+        for date in data_employee_work[id]:
+            print(date)
+    print(data_employee_work)
+    print(employee_list)
+    return data_employee_work

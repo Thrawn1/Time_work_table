@@ -1,4 +1,5 @@
-from calendar import  monthrange, weekday
+from datetime import datetime, timedelta
+from calendar import  monthrange,weekday
 
 def reading_employee_work_date(data_dict:dict,id:int):
     """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
@@ -71,11 +72,26 @@ def generation_of_lists_of_days(requested_year:int,requested_month:int):
             list_day_month[1].append(date_str)
     return list_day_month
 
-def search_for_missed_day(data_dict:dict,id:int,requested_year:int,requested_month:int):
-    """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя, а так же списки рабочих выходных и праздников"""
+def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
+    """Функция-генератор 
+    """
+    if step.days > 0:
+        while start < stop:
+            yield start
+            start = start + step
+    elif step.days < 0:
+        while start > stop:
+            yield start
+            start = start + step
+    if inclusive and start == stop:
+        yield start
+
+def search_for_missed_working_days_employee(time_table:dict,id:int,year:int,month:int):
+    """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя, а так же списки рабочих выходных и праздников
+    """
     missed_days = []
-    month_days_work = generation_of_lists_of_days(requested_year,requested_month)
-    emoyee_days_work = reading_employee_work_date(data_dict,id)
+    month_days_work = generation_of_lists_of_days(year,month)
+    emoyee_days_work = reading_employee_work_date(time_table,id)
     if len(emoyee_days_work) != 0:
         for day in month_days_work[0]:
             if day not in emoyee_days_work:
@@ -85,6 +101,45 @@ def search_for_missed_day(data_dict:dict,id:int,requested_year:int,requested_mon
         if len(missed_days) != 0:
             return missed_days
         else:
-            pass
+            return 0
     else: 
         return 0
+
+def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,requested_month:int):
+    """Функция поиска пропущенных отметок прихода или ухода за месяц.
+       Принимает весь словарь целиком, в котором структурированы id работников, даты и временные отметки из файла данных.
+       Принимает значения рассматриваемого года и месяца, а так же id сотрудника. 
+       Фукнция возвращает список,в котором пара значений - дата и время одиночной отмеки.
+    """
+    missing_mark_list = []
+    last_day_month = monthrange(requested_year,requested_month)[1]
+    first_day_month = datetime(requested_year,requested_month,1)
+    last_day_month_type = datetime(requested_year,requested_month,last_day_month)
+    for day_month in daterange(first_day_month,last_day_month_type,inclusive = True):
+        date_day = day_month.strftime("%Y-%m-%d")
+        if date_day in time_table.keys():
+            if id in time_table[date_day].keys():
+                if time_table[date_day][id][0] == time_table[date_day][id][1]:
+                    data_cell = [0,0]
+                    data_cell[0] = date_day
+                    data_cell[1] = time_table[date_day][id][1]
+                    missing_mark_list.append(data_cell)
+            else:
+                print('Нет данных за день')
+                return 0
+    if len(missing_mark_list) != 0:
+        return missing_mark_list
+    else:
+        print('Пропущенных отметок нет')
+        return 0
+
+def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
+    """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
+        за какие дни нет даных, а затем выводит полученные данные на экран. 
+    """
+    list_marks = search_for_missed_marks_employee(time_table,id,year,month)
+    if list_marks != 0:
+        for marks in list_marks:
+            print(marks)
+    search_for_missed_working_days_employee(time_table,id,year,month)
+    pass
