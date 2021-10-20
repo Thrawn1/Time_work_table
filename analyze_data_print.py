@@ -4,6 +4,12 @@ import os
 
 from id_employee import id_employee
 
+def month_name_for_print(month_id):
+    """Функция возвращает название месяца на русском. Принимает номер месяца"""
+    months_names = {1:'Январь',2:'Февраль',3:'Март',4:'Апрель',5:'Май',6:'Июнь',7:'Июль',8:'Август',9:'Сентябрь',10:'Октябрь',11:'Ноябрь',12:'Декабрь'}
+    name_month = months_names[month_id]
+    return name_month
+
 def reading_employee_work_date(data_dict:dict,id:int):
     """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
     data_employer_work = []
@@ -140,14 +146,20 @@ def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
     """
     list_employee = id_employee()
     list_marks = search_for_missed_marks_employee(time_table,id,year,month)
-    name_employee = list_employee[id]
-    print('Фамилия работника: ',name_employee)
-    if list_marks != 0:
-        print('Есть только одна метка:')
-        for marks in list_marks:
-            print(marks)
     list_missed_day = search_for_missed_working_days_employee(time_table,id,year,month)
-    if list_missed_day !=0:
-        print('Даты рабочих дней, где нет отметок:')
-        for missed_day in list_missed_day:
-            print(missed_day)
+    name_employee = list_employee[id]
+    if list_marks !=0 or list_missed_day != 0:
+        print('\nФамилия работника:  ',name_employee)
+        if list_marks != 0:
+            print('\n\tЕсть только одна метка:\n')
+            for marks in list_marks:
+                i = marks[1]
+                i_o = i.time()
+                i_a = i.date()
+                print(i_o,i_a,type(i_o),type(i_a))
+                
+                print(marks[1])
+        if list_missed_day !=0:
+            print('\n\tДаты рабочих дней, где нет отметок:\n')
+            for missed_day in list_missed_day:
+                print(missed_day)
