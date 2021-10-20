@@ -1,5 +1,8 @@
 from datetime import datetime, timedelta
-from calendar import  monthrange,weekday
+from calendar import  month_name, monthrange,weekday
+import os
+
+from id_employee import id_employee
 
 def reading_employee_work_date(data_dict:dict,id:int):
     """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
@@ -14,8 +17,10 @@ def definition_of_working_day(date:str):
     year = int(date[0:4])
     month = int(date[6:7])
     day = int(date[8:10])
-    name_holiday_file = 'holidays.dat'
-    name_postponed_working_days = 'postponed_working_days.dat'
+    name_holiday_file_relative = 'holidays.dat'
+    name_postponed_working_days_relative = 'postponed_working_days.dat'
+    name_holiday_file = os.path.join("data",name_holiday_file_relative)
+    name_postponed_working_days = os.path.join("data",name_postponed_working_days_relative)
     file_holiday = open(name_holiday_file, 'r',encoding='utf-8')
     file_postponed_working_days = open(name_postponed_working_days,'r',encoding='utf-8')
     list_holiday = []
@@ -124,22 +129,25 @@ def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,r
                     data_cell[0] = date_day
                     data_cell[1] = time_table[date_day][id][1]
                     missing_mark_list.append(data_cell)
-            else:
-                print('Нет данных за день')
-                return 0
     if len(missing_mark_list) != 0:
         return missing_mark_list
     else:
-        print('Пропущенных отметок нет')
         return 0
 
 def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
     """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
         за какие дни нет даных, а затем выводит полученные данные на экран. 
     """
+    list_employee = id_employee()
     list_marks = search_for_missed_marks_employee(time_table,id,year,month)
+    name_employee = list_employee[id]
+    print('Фамилия работника: ',name_employee)
     if list_marks != 0:
+        print('Есть только одна метка:')
         for marks in list_marks:
             print(marks)
-    search_for_missed_working_days_employee(time_table,id,year,month)
-    pass
+    list_missed_day = search_for_missed_working_days_employee(time_table,id,year,month)
+    if list_missed_day !=0:
+        print('Даты рабочих дней, где нет отметок:')
+        for missed_day in list_missed_day:
+            print(missed_day)

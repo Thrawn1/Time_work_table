@@ -16,7 +16,7 @@ def determination_period(line, year, month):
     else:
         return False
 
-def read_file_data(file_name_data, requested_year, requested_month):
+def read_file_data(file_name_data_relative, requested_year, requested_month):
     """ Функция служит для прочтения файла данных, его информация переводится в вид словаря.
         Возвращается словарь, содержащий все записи из файла с данными, 
         относящимся к нужному периоду - определенный месяца определенного года
@@ -24,6 +24,7 @@ def read_file_data(file_name_data, requested_year, requested_month):
         Если словарь пуст - скорее всего данные запрашиваются за декабрь, вывести поздравление с НГ и рекомендацию
         ввести вручную дату и месяц
     """
+    file_name_data = os.path.join("data",file_name_data_relative)
     file_data = open(file_name_data, 'r')
     list_month = []
     for line in file_data:
