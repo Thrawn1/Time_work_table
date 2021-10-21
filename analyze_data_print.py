@@ -156,7 +156,11 @@ def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
                 i = marks[1]
                 i_o = i.time()
                 i_a = i.date()
-                print(i_o,i_a,type(i_o),type(i_a))
+                j_o = i_o.strftime("%H:%M:%S")
+                j_a = i_a.strftime("%d-%B-%A")
+                # print(i_o,i_a,type(i_o),type(i_a))
+                print(j_o,type(j_o), '!!!!')
+                print(j_a,type(j_a), 'jjjj')
                 
                 print(marks[1])
         if list_missed_day !=0:
