@@ -1,6 +1,7 @@
 from build_data_array import*
 from id_employee import*
 from analyze_data_print import*
+from analyze_data_edit import*
 
 file_name = '1_attlog.dat'
 requested_year = int(input('Введите год:'))
@@ -12,4 +13,9 @@ name_month_for_print = month_name_for_print(requested_month)
 print(name_month_for_print,' ',requested_year,' ','год')
 for id in id_list[1]:
     analyze_data_for_print(data_array,id,requested_year,requested_month)
-print('Готово!')
+    analyze_data_for_edit(data_array,id,requested_year,requested_month)
+
+for id in id_list[1]:
+    analyze_data_for_print(data_array,id,requested_year,requested_month)
+
+print('Готово!!!')
