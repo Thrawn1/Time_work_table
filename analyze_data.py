@@ -1,10 +1,27 @@
 from datetime import datetime, timedelta
 from calendar import  monthrange,weekday
+from id_employee import id_employee
 import os
 import sys
 
-from id_employee import id_employee
 
+def translation_into_russian_names(eng_name:str,type_name:str):
+    """Функция принимает имена месяца или дня недели на английском языке, а так же ключ, определяющий что именно передается. Возвращает имена на русском в строковом формате"""
+    if type_name == 'month':
+        months_names = {'January':'Января','February':'Февраля','March':'Марта','April':'Апреля','May':'Мая','June':'Июня','July':'Июля','August':'Августа','September':'Сентября','October':'Октября','November':'Ноября','December':'Декабря'}
+        name_month = months_names[eng_name]
+        return name_month
+    
+    elif type_name == 'weekday':
+        weekday_names = {'Monday':'Понедельник','Tuesday':'Вторник','Wednesday':'Среда','Thursday':'Четверг','Friday':'Пятница','Saturday':'Суббота','Sunday':'Воскресенье'}
+        name_weekday = weekday_names[eng_name]
+        return name_weekday
+
+def month_name_for_print(month_id):
+    """Функция возвращает название месяца на русском. Принимает номер месяца"""
+    months_names = {1:'Январь',2:'Февраль',3:'Март',4:'Апрель',5:'Май',6:'Июнь',7:'Июль',8:'Август',9:'Сентябрь',10:'Октябрь',11:'Ноябрь',12:'Декабрь'}
+    name_month = months_names[month_id]
+    return name_month
 
 def reading_employee_work_date(data_dict:dict,id:int):
     """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
@@ -135,6 +152,49 @@ def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,r
         return missing_mark_list
     else:
         return 0
+
+def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
+    """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
+        за какие дни нет даных, а затем выводит полученные данные на экран. 
+    """
+    list_employee = id_employee()
+    list_marks = search_for_missed_marks_employee(time_table,id,year,month)
+    list_missed_day = search_for_missed_working_days_employee(time_table,id,year,month)
+    name_employee = list_employee[id]
+    if list_marks !=0 or list_missed_day != 0:
+        print('--------------------------------------------------------------------------------------------------------------------------------------------')
+        print('\nФамилия работника:  ',name_employee)
+        if list_marks != 0:
+            print('\n\t\tЕсть только одна метка:\n')
+            print('\t\t\t--------------------')
+            for marks in list_marks:
+                mark_data = marks[1]
+                time_mark_data = mark_data.time()
+                date_mark_data = mark_data.date()
+                time_mark_str = time_mark_data.strftime("%H:%M:%S")
+                month_name_eng_str = date_mark_data.strftime("%B")
+                weekday_name_eng_str = date_mark_data.strftime("%A")
+                number_day_mark_str = date_mark_data.strftime("%d")
+                month_name_rus_str = translation_into_russian_names(month_name_eng_str,'month')
+                weekday_name_rus_str = translation_into_russian_names(weekday_name_eng_str,'weekday')
+                output_str = '\t\t\t' + number_day_mark_str + ' ' + month_name_rus_str + ' | ' + time_mark_str + ' | ' + weekday_name_rus_str
+                print(output_str)
+                print('\t\t\t---------------------')
+
+        if list_missed_day !=0:
+            print('\n\n\n\t\tДаты рабочих дней, где нет отметок:\n')
+            print('\t\t\t------------------')
+            for missed_day in list_missed_day:
+                datetime_unit = datetime.strptime(missed_day,"%Y-%m-%d")
+                month_name_eng_str = datetime_unit.strftime("%B")
+                weekday_name_eng_str = datetime_unit.strftime("%A")
+                number_day_mark_str = datetime_unit.strftime("%d")
+                
+                month_name_rus_str = translation_into_russian_names(month_name_eng_str,'month')
+                weekday_name_rus_str = translation_into_russian_names(weekday_name_eng_str,'weekday')
+                output_str ='\t\t\t' + number_day_mark_str + ' ' + month_name_rus_str + ' | ' + weekday_name_rus_str
+                print(output_str)
+                print('\t\t\t------------------')
 
 def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
     """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 

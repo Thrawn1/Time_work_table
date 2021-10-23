@@ -1,7 +1,6 @@
 from build_data_array import*
 from id_employee import*
-from analyze_data_print import*
-from analyze_data_edit import*
+from analyze_data import*
 
 file_name = '1_attlog.dat'
 requested_year = int(input('Введите год:'))
