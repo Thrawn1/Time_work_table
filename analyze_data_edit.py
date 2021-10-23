@@ -168,81 +168,27 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
         print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee + " не имеет данных за рабочий день!", file=sys.stderr)
         for missed_day in list_missed_day:
             print('Дата без отметок:',missed_day,sep = ' ')
-            print('eeee')
-            pass
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            
-            # date_key = cell[0]
-            # t1 = time_table[date_key][id][0]
-            # t2 = time_table[date_key][id][1]
-            # print(t1,'t1')
-            # print(t2,'t2')
-
-
-                        
-                        
-                        
-  
-
-
-    # if list_marks !=0 or list_missed_day != 0:  
-    #     print('--------------------------------------------------------------------------------------------------------------------------------------------')
-    #     print('\nФамилия работника:  ',name_employee)
-    #     if list_marks != 0:
-    #         print('\n\t\tЕсть только одна метка:\n')
-    #         print('\t\t\t--------------------')
-    #         for marks in list_marks:
-    #             mark_data = marks[1]
-    #             time_mark_data = mark_data.time()
-    #             date_mark_data = mark_data.date()
-    #             time_mark_str = time_mark_data.strftime("%H:%M:%S")
-    #             month_name_eng_str = date_mark_data.strftime("%B")
-    #             weekday_name_eng_str = date_mark_data.strftime("%A")
-    #             number_day_mark_str = date_mark_data.strftime("%d")
-    #             month_name_rus_str = translation_into_russian_names(month_name_eng_str,'month')
-    #             weekday_name_rus_str = translation_into_russian_names(weekday_name_eng_str,'weekday')
-    #             output_str = '\t\t\t' + number_day_mark_str + ' ' + month_name_rus_str + ' | ' + time_mark_str + ' | ' + weekday_name_rus_str
-    #             print(output_str)
-    #             print('\t\t\t---------------------')
-
-    #     if list_missed_day !=0:
-    #         print('\n\n\n\t\tДаты рабочих дней, где нет отметок:\n')
-    #         print('\t\t\t------------------')
-    #         for missed_day in list_missed_day:
-    #             datetime_unit = datetime.strptime(missed_day,"%Y-%m-%d")
-    #             month_name_eng_str = datetime_unit.strftime("%B")
-    #             weekday_name_eng_str = datetime_unit.strftime("%A")
-    #             number_day_mark_str = datetime_unit.strftime("%d")
-                
-    #             month_name_rus_str = translation_into_russian_names(month_name_eng_str,'month')
-    #             weekday_name_rus_str = translation_into_russian_names(weekday_name_eng_str,'weekday')
-    #             output_str ='\t\t\t' + number_day_mark_str + ' ' + month_name_rus_str + ' | ' + weekday_name_rus_str
-    #             print(output_str)
-    #             print('\t\t\t------------------')
+            print('Введите данные за день\n\n\t1.Рабочий день.Ввести отметку прихода и отметку ухода\n\t2.Отпускной день\n')
+            loop_variable = 0
+            while loop_variable != 1:
+                switch_variable = input('Введите пункт меню:')
+                if switch_variable == '1':
+                    loop_variable = 1
+                    print('Время прихода:\n')
+                    entered_time_begin = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
+                    data_to_write_begin = datetime.strptime(str(missed_day + ' ' + entered_time_begin),"%Y-%m-%d %H %M %S")
+                    print('Время ухода:\n')
+                    entered_time_end = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
+                    data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
+                    time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                    
+                elif switch_variable == '2':
+                    loop_variable =  1
+                    entered_time_begin = '00 00 01'
+                    entered_time_end = '00 00 02'
+                    data_to_write_begin = datetime.strptime(str(missed_day + ' ' + entered_time_begin),"%Y-%m-%d %H %M %S")
+                    data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
+                    time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                    time_table[missed_day][id].append('отпуск')
+                else:
+                    print('Введите правильный пункт меню!')
