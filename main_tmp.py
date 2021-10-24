@@ -20,6 +20,6 @@ for id in id_list[1]:
 for id in id_list[1]:
     analyze_data_for_print(data_array,id,requested_year,requested_month)
 
-calculation_of_working_hours(data_array)
-
+work_time_employees=calculation_of_working_hours(data_array)
+wages_of_employees = calculation_wages(work_time_employees)
 print('Готово!!!')
