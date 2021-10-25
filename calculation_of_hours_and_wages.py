@@ -1,7 +1,8 @@
 from id_employee import id_employee
-from datetime import datetime,timedelta
+from analyze_data import definition_of_working_day
+from datetime import timedelta
 
-def calculation_of_working_hours(time_table:dict):
+def calculation_of_excess_working_hours_per_day(time_table:dict):
     """Функция для рассчета отработанных часов и переработки. Функция принимает отредактированную структуру данных.
        Функция возвращает структуру данных, содержащих рабочие часы за дату, переработку или недоработку и метку переработка или недоработка"""
     list_employee = id_employee(type_data=2)
@@ -21,22 +22,32 @@ def calculation_of_working_hours(time_table:dict):
                 work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag)
     return work_time_employees
 
-    
-
-def calculation_wages(work_time_employees:dict):
-    """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
-       Функция возвращает"""
-    pass
+def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
+    """Функция для подсчета всех часов переработки в месяц, по каждому сотруднику. Функция принимает словарь,
+    в котором содержиться информация по рабочим дня и переработкам в конкретный день каждого сотрудника.
+    Функция возврващает словарь, в котром для каждого сотрудника содержиться кортеж с количеством обычных рабочих дней,
+    количество рабочих выходных, переработка в обычне рабочи дни и переработка в выходыне дни"""
     list_employees = id_employee(type_data=2)
     wages_of_employees = {}
     for cell_date in work_time_employees:
-        for cell_id in wages_of_employees[cell_date]:
+        for cell_id in work_time_employees[cell_date]:
             if not cell_id in wages_of_employees:
                 wages_of_employees[cell_id] = [] 
-                cell_time = (wages_of_employees[cell_date][cell_id][0],wages_of_employees[cell_date][cell_id][2])
+                cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
                 wages_of_employees[cell_id].append(cell_time)
             else:
-                for cell_id in wages_of_employees[cell_date]:
-                    cell_time = (wages_of_employees[cell_date][cell_id][0],wages_of_employees[cell_date][cell_id][2])
-                    wages_of_employees[cell_id].append(cell_time)
-    print(wages_of_employees)
+                cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
+                wages_of_employees[cell_id].append(cell_time)
+    for id_empl in wages_of_employees.keys():
+        overwork = timedelta(seconds=0)
+        for delta_time_day in wages_of_employees[id_empl]:
+            if delta_time_day[1] == 'переработка':
+                overwork += delta_time_day[0]
+            else:
+                overwork -= delta_time_day[0]
+        all_overwork_in_seconds =overwork.total_seconds() 
+
+
+def calculation_wages():
+    """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
+       Функция возвращает"""

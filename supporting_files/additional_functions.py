@@ -151,3 +151,41 @@ def analyze_employee_work_date(data_dict:dict):
     print(data_employee_work)
     print(employee_list)
     return data_employee_work
+
+
+
+def calculation_wages(work_time_employees:dict):
+    """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
+       Функция возвращает"""
+    list_employees = id_employee(type_data=2)
+    wages_of_employees = {}
+    for cell_date in work_time_employees:
+        for cell_id in work_time_employees[cell_date]:
+            if not cell_id in wages_of_employees:
+                wages_of_employees[cell_id] = [] 
+                cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
+                wages_of_employees[cell_id].append(cell_time)
+            else:
+                cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
+                wages_of_employees[cell_id].append(cell_time)
+    #print(wages_of_employees)
+
+    for id_empl in wages_of_employees.keys():
+        overwork = timedelta(seconds=0)
+        for delta_time_day in wages_of_employees[id_empl]:
+            if delta_time_day[1] == 'переработка':
+                overwork += delta_time_day[0]
+            else:
+                overwork -= delta_time_day[0]
+        name_employee = list_employees[1][id_empl]
+        print(name_employee)
+        print('Переработка общая за месяц:')
+        all_overwork_in_seconds =overwork.total_seconds() 
+        overwork_hours = all_overwork_in_seconds//3600
+        overwork_minutes = (all_overwork_in_seconds - overwork_hours*3600)//60
+        overwork_seconds = all_overwork_in_seconds - overwork_hours*3600 - overwork_minutes*60
+        hr_str = str(int(overwork_hours))
+        mr_str = str(int(overwork_minutes))
+        sr_str = str(int(overwork_seconds))
+        all_srt = hr_str+':'+mr_str+':'+sr_str
+        print(all_srt)
