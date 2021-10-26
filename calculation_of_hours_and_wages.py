@@ -30,6 +30,8 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
     list_employees = id_employee(type_data=2)
     wages_of_employees = {}
     for cell_date in work_time_employees:
+        aaaaa=definition_of_working_day(cell_date)
+        print(aaaaa)
         for cell_id in work_time_employees[cell_date]:
             if not cell_id in wages_of_employees:
                 wages_of_employees[cell_id] = [] 
@@ -38,6 +40,7 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
             else:
                 cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
                 wages_of_employees[cell_id].append(cell_time)
+    uuu = {}
     for id_empl in wages_of_employees.keys():
         overwork = timedelta(seconds=0)
         for delta_time_day in wages_of_employees[id_empl]:
@@ -45,7 +48,10 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
                 overwork += delta_time_day[0]
             else:
                 overwork -= delta_time_day[0]
-        all_overwork_in_seconds =overwork.total_seconds() 
+        all_overwork_in_seconds =overwork.total_seconds()
+        uuu[id_empl] = all_overwork_in_seconds
+
+    return uuu
 
 
 def calculation_wages():
