@@ -75,4 +75,4 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
         zarplata = zarplata_budni + zarplata_vihi
         
         print(id)
-        print(zarplata)
+        print(round(zarplata,2))
