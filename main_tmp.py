@@ -21,6 +21,6 @@ for id in id_list[1]:
     analyze_data_for_print(data_array,id,requested_year,requested_month)
 
 work_time_employees=calculation_of_excess_working_hours_per_day(data_array)
-wages_of_employees = calculation_of_exceeding_working_hours_per_month(work_time_employees)
-#print(wages_of_employees)
+work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_month(work_time_employees)
+z=calculation_wages(work_time_employees_restructuring)
 print('Готово!!!')
