@@ -1,3 +1,4 @@
+import os
 from id_employee import id_employee
 from analyze_data import definition_of_working_day
 from datetime import timedelta
@@ -65,14 +66,28 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
 def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
     """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
        Функция возвращает"""
-    pass
+    wege_rates_name_file = 'wage_rates.dat'
+    wege_rates_file = os.path.join("data",wege_rates_name_file)
+    file_wage_rates = open(wege_rates_file, 'r',encoding='utf-8')
+    
+    money_rate_all_employes = {}
+    for line in file_wage_rates:
+        new_line = line.rstrip('\n')
+        data = new_line.split(' ')
+        secret_key = 3.14
+        raw_data = data[1].lstrip('[').rstrip(']')
+        raw_data_rate_encrypted = raw_data.split('.')
+        raw_data_rate_temporarily = raw_data_rate_encrypted[1] + '.' + raw_data_rate_encrypted[0]
+        rate = round(float(raw_data_rate_temporarily)*secret_key)
+        money_rate_all_employes[int(data[0])] = rate
     for id in working_hours_of_workers_sum_of_all_data.keys():
         working_hours_of_workers_sum_of_all_data[id]
-        money_stavka = 1000
-        mv_sec = money_stavka/(8*60)
-        zarplata_budni = money_stavka*working_hours_of_workers_sum_of_all_data[id][0][0] + mv_sec * working_hours_of_workers_sum_of_all_data[id][0][1].total_seconds()
-        zarplata_vihi = money_stavka*working_hours_of_workers_sum_of_all_data[id][1][0] + mv_sec * working_hours_of_workers_sum_of_all_data[id][1][1].total_seconds()
-        zarplata = zarplata_budni + zarplata_vihi
+        money_rate_employee = money_rate_all_employes[id]
+        work_shift_time_in_seconds = 8*3600
+        rate_per_second= money_rate_employee/work_shift_time_in_seconds
+        salary_for_weekdays =money_rate_employee*working_hours_of_workers_sum_of_all_data[id][0][0] + rate_per_second * working_hours_of_workers_sum_of_all_data[id][0][1].total_seconds()
+        salary_for_weekends = money_rate_employee*working_hours_of_workers_sum_of_all_data[id][1][0] + rate_per_second * working_hours_of_workers_sum_of_all_data[id][1][1].total_seconds()
+        total_salary = salary_for_weekdays + salary_for_weekends
         
         print(id)
-        print(round(zarplata,2))
+        print(round(total_salary,2))
