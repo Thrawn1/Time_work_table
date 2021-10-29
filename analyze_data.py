@@ -245,10 +245,16 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                 elif switch_variable == '2':
                     loop_variable =  1
                     entered_time_begin = '00 00 01'
-                    entered_time_end = '00 00 02'
+                    entered_time_end = '00 00 01'
                     data_to_write_begin = datetime.strptime(str(missed_day + ' ' + entered_time_begin),"%Y-%m-%d %H %M %S")
                     data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
-                    time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
-                    time_table[missed_day][id].append('отпуск')
+                    print(missed_day,type(missed_day))
+                    try:
+                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id].append('отпуск')
+                    except KeyError:
+                        time_table[missed_day] = {}
+                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id].append('отпуск')
                 else:
                     print('Введите правильный пункт меню!')

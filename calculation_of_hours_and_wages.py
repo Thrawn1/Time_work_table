@@ -12,15 +12,24 @@ def calculation_of_excess_working_hours_per_day(time_table:dict):
         work_time_employees[cell_date] = {}
         for cell_id in time_table[cell_date]:
             if cell_id in list_employee[1]:
-                hours_worked = time_table[cell_date][cell_id][0] - time_table[cell_date][cell_id][1]
-                working_day_duration = timedelta(hours = 8)
-                delta_time = hours_worked - working_day_duration
-                abs_delta_time = abs(delta_time)
-                if delta_time > timedelta(seconds = 0):
-                    tag = 'переработка'
+                if len(time_table[cell_date][cell_id]) != 3:
+                    hours_worked = time_table[cell_date][cell_id][0] - time_table[cell_date][cell_id][1]
+                    working_day_duration = timedelta(hours = 8)
+                    delta_time = hours_worked - working_day_duration
+                    abs_delta_time = abs(delta_time)
+                    print(cell_date)
+                    print(cell_id)
+                    print(delta_time)
+                    if delta_time > timedelta(seconds = 0):
+                        tag = 'переработка'
+                    else:
+                        tag = 'недоработка'
+                    work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag)
                 else:
-                    tag = 'недоработка'
-                work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag)
+                    time_plug = timedelta(seconds = 0)
+                    tag = 'отпуск'
+                    work_time_employees[cell_date][cell_id] = (time_plug,time_plug,tag)
+    print(work_time_employees)
     return work_time_employees
 
 def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
@@ -61,6 +70,7 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
                 overwork_holiday += delta_time_day[0]
         cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday))
         working_hours_of_workers_sum_of_all_data[id] = cell_work_data
+    print(working_hours_of_workers_sum_of_all_data)
     return working_hours_of_workers_sum_of_all_data
         
 def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
@@ -69,7 +79,6 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
     wege_rates_name_file = 'wage_rates.dat'
     wege_rates_file = os.path.join("data",wege_rates_name_file)
     file_wage_rates = open(wege_rates_file, 'r',encoding='utf-8')
-    
     money_rate_all_employes = {}
     for line in file_wage_rates:
         new_line = line.rstrip('\n')
@@ -81,7 +90,6 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
         rate = round(float(raw_data_rate_temporarily)*secret_key)
         money_rate_all_employes[int(data[0])] = rate
     for id in working_hours_of_workers_sum_of_all_data.keys():
-        working_hours_of_workers_sum_of_all_data[id]
         money_rate_employee = money_rate_all_employes[id]
         work_shift_time_in_seconds = 8*3600
         rate_per_second= money_rate_employee/work_shift_time_in_seconds
