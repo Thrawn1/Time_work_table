@@ -144,9 +144,9 @@ def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,r
         if date_day in time_table.keys():
             if id in time_table[date_day].keys():
                 if time_table[date_day][id][0] == time_table[date_day][id][1]:
-                    data_cell = [0,0]
-                    data_cell[0] = date_day
-                    data_cell[1] = time_table[date_day][id][1]
+                    data_cell = []
+                    data_cell.append(date_day) 
+                    data_cell.append(time_table[date_day][id][1])
                     missing_mark_list.append(data_cell)
     if len(missing_mark_list) != 0:
         return missing_mark_list
@@ -251,10 +251,10 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                     print(missed_day,type(missed_day))
                     try:
                         time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
-                        time_table[missed_day][id].append('отпуск')
+                        time_table[missed_day][id].append('vacation')
                     except KeyError:
                         time_table[missed_day] = {}
                         time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
-                        time_table[missed_day][id].append('отпуск')
+                        time_table[missed_day][id].append('vacation')
                 else:
                     print('Введите правильный пункт меню!')

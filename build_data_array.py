@@ -1,6 +1,6 @@
 from id_employee import*
 from datetime import datetime
-
+from analyze_data import definition_of_working_day
 
 def determination_period(line, year, month):
     """Функция будет определять, какие записи относятся к определенному периоду
@@ -60,5 +60,6 @@ def build_data_array(list_month: list):
             if time_table[key_data][id_employee_data][1] > date_and_time:
                 time_table[key_data][id_employee_data][1] = date_and_time
         else:
-            time_table[key_data][id_employee_data] = [date_and_time, date_and_time]
+            tag = definition_of_working_day(key_data)[0]
+            time_table[key_data][id_employee_data] = [date_and_time, date_and_time,tag]
     return time_table
