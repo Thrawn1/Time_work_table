@@ -60,6 +60,6 @@ def build_data_array(list_month: list):
             if time_table[key_data][id_employee_data][1] > date_and_time:
                 time_table[key_data][id_employee_data][1] = date_and_time
         else:
-            tag = definition_of_working_day(key_data)[0]
-            time_table[key_data][id_employee_data] = [date_and_time, date_and_time,tag]
+            tag_day = definition_of_working_day(key_data)[0]
+            time_table[key_data][id_employee_data] = [date_and_time, date_and_time,tag_day]
     return time_table

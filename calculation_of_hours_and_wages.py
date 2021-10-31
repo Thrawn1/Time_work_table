@@ -12,24 +12,17 @@ def calculation_of_excess_working_hours_per_day(time_table:dict):
         work_time_employees[cell_date] = {}
         for cell_id in time_table[cell_date]:
             if cell_id in list_employee[1]:
-                if len(time_table[cell_date][cell_id]) != 3:
-                    hours_worked = time_table[cell_date][cell_id][0] - time_table[cell_date][cell_id][1]
-                    working_day_duration = timedelta(hours = 8)
-                    delta_time = hours_worked - working_day_duration
-                    abs_delta_time = abs(delta_time)
-                    print(cell_date)
-                    print(cell_id)
-                    print(delta_time)
-                    if delta_time > timedelta(seconds = 0):
-                        tag = 'переработка'
-                    else:
-                        tag = 'недоработка'
-                    work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag)
+                hours_worked = time_table[cell_date][cell_id][0] - time_table[cell_date][cell_id][1]
+                working_day_duration = timedelta(hours = 8)
+                delta_time = hours_worked - working_day_duration
+                abs_delta_time = abs(delta_time)
+                if delta_time > timedelta(seconds = 0):
+                    tag_time = 'переработка'
                 else:
-                    time_plug = timedelta(seconds = 0)
-                    tag = 'отпуск'
-                    work_time_employees[cell_date][cell_id] = (time_plug,time_plug,tag)
-    print(work_time_employees)
+                    tag_time = 'недоработка'
+                tag_day = time_table[cell_date][cell_id][2]
+                work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag_time,tag_day)
+    print('!!!!',work_time_employees)
     return work_time_employees
 
 def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
@@ -40,25 +33,22 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
     list_employees = id_employee(type_data=2)
     work_time_employees_restructuring = {}
     for cell_date in work_time_employees:
-        tag_day=definition_of_working_day(cell_date)
         for cell_id in work_time_employees[cell_date]:
             cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
-            if tag_day[0] == 'work':
-                if not cell_id in work_time_employees_restructuring:
-                    work_time_employees_restructuring[cell_id] = [[],[]] 
-                    work_time_employees_restructuring[cell_id][0].append(cell_time)
-                else:
-                    work_time_employees_restructuring[cell_id][0].append(cell_time)
-            else:
-                if not cell_id in work_time_employees_restructuring:
-                    work_time_employees_restructuring[cell_id] = [[],[]] 
-                    work_time_employees_restructuring[cell_id][1].append(cell_time)
-                else:
-                    work_time_employees_restructuring[cell_id][1].append(cell_time)
+            if not cell_id in work_time_employees_restructuring:
+                work_time_employees_restructuring[cell_id] = [[],[],[]]
+            tag_day = work_time_employees[cell_date][cell_id][3]
+            if tag_day == 'work':
+                work_time_employees_restructuring[cell_id][0].append(cell_time)
+            elif tag_day == 'weekand':
+                work_time_employees_restructuring[cell_id][1].append(cell_time)
+            elif tag_day == 'vacation':
+                work_time_employees_restructuring[cell_id][2].append(cell_time)      
     working_hours_of_workers_sum_of_all_data = {}
     for id in work_time_employees_restructuring.keys():
         total_work_days = len(work_time_employees_restructuring[id][0])
         total_holiday_days = len(work_time_employees_restructuring[id][1])
+        total_vacation_days = len(work_time_employees_restructuring[id][2])
         overwork = timedelta(seconds=0)
         for delta_time_day in work_time_employees_restructuring[id][0]:
             if delta_time_day[1] == 'переработка':
@@ -68,7 +58,7 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
         overwork_holiday = timedelta(seconds = 0)
         for delta_time_day in work_time_employees_restructuring[id][1]:
                 overwork_holiday += delta_time_day[0]
-        cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday))
+        cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday),total_vacation_days)
         working_hours_of_workers_sum_of_all_data[id] = cell_work_data
     print(working_hours_of_workers_sum_of_all_data)
     return working_hours_of_workers_sum_of_all_data
@@ -95,7 +85,9 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
         rate_per_second= money_rate_employee/work_shift_time_in_seconds
         salary_for_weekdays =money_rate_employee*working_hours_of_workers_sum_of_all_data[id][0][0] + rate_per_second * working_hours_of_workers_sum_of_all_data[id][0][1].total_seconds()
         salary_for_weekends = money_rate_employee*working_hours_of_workers_sum_of_all_data[id][1][0] + rate_per_second * working_hours_of_workers_sum_of_all_data[id][1][1].total_seconds()
-        total_salary = salary_for_weekdays + salary_for_weekends
+        salary_for_vacation = money_rate_employee*working_hours_of_workers_sum_of_all_data[id][2]
+        total_salary = salary_for_weekdays + salary_for_weekends + salary_for_vacation
         
         print(id)
         print(round(total_salary,2))
+        print(salary_for_vacation)

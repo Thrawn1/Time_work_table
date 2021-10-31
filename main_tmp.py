@@ -4,7 +4,7 @@ from analyze_data import*
 from calculation_of_hours_and_wages import*
 
 #file_name = '3-2021.dat'
-file_name = '3-2021-v3.dat'
+file_name = '3-2021-v2.dat'
 #requested_year = int(input('Введите год:'))
 #requested_month = int(input('Введите месяц:'))
 requested_year = 2021
@@ -25,5 +25,5 @@ work_time_employees=calculation_of_excess_working_hours_per_day(data_array)
 #print(data_array)
 work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_month(work_time_employees)
 z=calculation_wages(work_time_employees_restructuring)
-print(data_array)
+#print(data_array)
 print('Готово!!!')
