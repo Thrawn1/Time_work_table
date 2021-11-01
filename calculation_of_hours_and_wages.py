@@ -22,7 +22,6 @@ def calculation_of_excess_working_hours_per_day(time_table:dict):
                     tag_time = 'недоработка'
                 tag_day = time_table[cell_date][cell_id][2]
                 work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag_time,tag_day)
-    print('!!!!',work_time_employees)
     return work_time_employees
 
 def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
@@ -60,8 +59,7 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
                 overwork_holiday += delta_time_day[0]
         cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday),total_vacation_days)
         working_hours_of_workers_sum_of_all_data[id] = cell_work_data
-    print(working_hours_of_workers_sum_of_all_data)
-    return working_hours_of_workers_sum_of_all_data
+    return (working_hours_of_workers_sum_of_all_data,work_time_employees_restructuring)
         
 def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
     """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
@@ -70,6 +68,7 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
     wege_rates_file = os.path.join("data",wege_rates_name_file)
     file_wage_rates = open(wege_rates_file, 'r',encoding='utf-8')
     money_rate_all_employes = {}
+    total_salary_id = {}
     for line in file_wage_rates:
         new_line = line.rstrip('\n')
         data = new_line.split(' ')
@@ -87,7 +86,7 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
         salary_for_weekends = money_rate_employee*working_hours_of_workers_sum_of_all_data[id][1][0] + rate_per_second * working_hours_of_workers_sum_of_all_data[id][1][1].total_seconds()
         salary_for_vacation = money_rate_employee*working_hours_of_workers_sum_of_all_data[id][2]
         total_salary = salary_for_weekdays + salary_for_weekends + salary_for_vacation
-        
-        print(id)
-        print(round(total_salary,2))
-        print(salary_for_vacation)
+        total_salary_id[id] = round(total_salary,2)
+        #print(id)
+        #print(round(total_salary,2))
+    return total_salary_id

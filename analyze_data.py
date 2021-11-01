@@ -34,7 +34,7 @@ def reading_employee_work_date(data_dict:dict,id:int):
 def definition_of_working_day(date:str):
     """Функция определяет, какого типа день - рабочий, выходной или праздничный. Принимает дату в строковом виде, использует списки исключений(праздников и перенесенных рабочих дней). Возвращает метку - день рабочий, выходной или праздничный """
     year = int(date[0:4])
-    month = int(date[6:7])
+    month = int(date[5:7])
     day = int(date[8:10])
     name_holiday_file_relative = 'holidays.dat'
     name_postponed_working_days_relative = 'postponed_working_days.dat'
@@ -58,8 +58,6 @@ def definition_of_working_day(date:str):
         month_postponed_working_days = line_data[1]
         postponed_working_days = str(year) + '-' + month_postponed_working_days + '-' + day_postponed_working_days
         list_postponed_working_days.append(postponed_working_days)
-    month = int(date[6:7])
-    day = int(date[8:10])
     number_day = weekday(year,month,day)
     week_day_dic = {0:'Понедельник',1:'Вторник',2:'Среда',3:'Четверг',4:'Пятница',5:'Суббота',6:'Воскресенье'}
     str_weekday = week_day_dic[number_day]
@@ -241,6 +239,7 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                     entered_time_end = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
                     data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
                     time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                    time_table[missed_day][id].append('work')
                     
                 elif switch_variable == '2':
                     loop_variable =  1
