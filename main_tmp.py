@@ -11,6 +11,7 @@ file_name = '1_attlog.dat'
 requested_year = 2021
 requested_month = 10
 list_data = read_file_data(file_name,requested_year,requested_month)
+print(list_data)
 data_array = build_data_array(list_data)
 id_list = id_employee(type_data=2)
 name_month_for_print = month_name_for_print(requested_month)

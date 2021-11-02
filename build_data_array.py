@@ -25,7 +25,11 @@ def read_file_data(file_name_data_relative, requested_year, requested_month):
         ввести вручную дату и месяц
     """
     file_name_data = os.path.join("data",file_name_data_relative)
-    file_data = open(file_name_data, 'r')
+    try:
+        file_data = open(file_name_data, 'r')
+    except FileNotFoundError:
+        print('В каталоге программы нет указанного файла с данными! Пожалуйста укажите корретный файл')
+        return None
     list_month = []
     for line in file_data:
         arbiter = determination_period(line, requested_year, requested_month)
