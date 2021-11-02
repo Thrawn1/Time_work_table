@@ -68,7 +68,7 @@ def definition_of_working_day(date:str):
             else:
                 return ('weekend',str_weekday)
         else:
-            return ('weekend',str_weekday)
+            return ('work',str_weekday)
     else:
         return ('holiday',str_weekday)
 
@@ -109,7 +109,7 @@ def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
         yield start
 
 def search_for_missed_working_days_employee(time_table:dict,id:int,year:int,month:int):
-    """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя, а так же списки рабочих выходных и праздников
+    """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя
     """
     missed_days = []
     month_days_work = generation_of_lists_of_days(year,month)
