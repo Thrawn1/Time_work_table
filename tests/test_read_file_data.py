@@ -1,5 +1,4 @@
 import sys
-import os
 sys.path.append('..')
 from build_data_array import read_file_data
 
