@@ -38,8 +38,8 @@ def definition_of_working_day(date:str):
     day = int(date[8:10])
     name_holiday_file_relative = 'holidays.dat'
     name_postponed_working_days_relative = 'postponed_working_days.dat'
-    name_holiday_file = os.path.join("data",name_holiday_file_relative)
-    name_postponed_working_days = os.path.join("data",name_postponed_working_days_relative)
+    name_holiday_file = os.path.join('data','lists_data_app',name_holiday_file_relative)
+    name_postponed_working_days = os.path.join('data','lists_data_app',name_postponed_working_days_relative)
     file_holiday = open(name_holiday_file, 'r',encoding='utf-8')
     file_postponed_working_days = open(name_postponed_working_days,'r',encoding='utf-8')
     list_holiday = []
@@ -238,8 +238,13 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                     print('Время ухода:\n')
                     entered_time_end = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
                     data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
-                    time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
-                    time_table[missed_day][id].append('work')
+                    try:
+                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id].append('work')
+                    except KeyError:
+                        time_table[missed_day] = {}
+                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id].append('work')
                     
                 elif switch_variable == '2':
                     loop_variable =  1
@@ -247,7 +252,6 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                     entered_time_end = '00 00 01'
                     data_to_write_begin = datetime.strptime(str(missed_day + ' ' + entered_time_begin),"%Y-%m-%d %H %M %S")
                     data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
-                    print(missed_day,type(missed_day))
                     try:
                         time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
                         time_table[missed_day][id].append('vacation')

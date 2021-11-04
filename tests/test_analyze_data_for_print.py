@@ -12,7 +12,7 @@ def test_analyze_data_for_print_good(capsys):
     analyze_data_for_print(request_dict,request_id,request_year,request_month)
     calc,err = capsys.readouterr()
     file_name_whith_reference_result = 'reference_result_analyze_data_for_print_one_employee_loss_data'
-    path_file_with_reference_result = os.path.join("tests","data_for_tests",file_name_whith_reference_result)
+    path_file_with_reference_result = os.path.join('data','data_for_tests','reference_for_tests',file_name_whith_reference_result)
     file_ecpected_result = open(path_file_with_reference_result, 'r',encoding='utf-8')
     expected_result = ''
     for line in file_ecpected_result:

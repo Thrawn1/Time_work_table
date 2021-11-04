@@ -4,7 +4,7 @@ sys.path.append('..')
 import build_data_array 
 
 
-name_file_for_test = 'test_file_data_part_1.dat'
+name_file_for_test = 'test_read_file.dat'
 def test_bloc_buil_data_array_all():
     requested_year = 2021 
     requested_month = 3
