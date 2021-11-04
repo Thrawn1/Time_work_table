@@ -5,6 +5,7 @@ from build_data_array import read_file_data,build_data_array
 from id_employee import id_employee
 from analyze_data import analyze_data_for_print,analyze_data_for_edit
 from calculation_of_hours_and_wages import calculation_wages
+from supporting_files.data_in_json import data_structure_conversion_for_json
 
 
 file_name = 'test_file_data_part_2_1.dat'
@@ -13,7 +14,7 @@ requested_month = 3
 request_id = 3
 list_data = read_file_data(file_name,requested_year,requested_month)
 data_array = build_data_array(list_data)
-
+data_array_str = data_structure_conversion_for_json(data_array)
 
 
 with open('test_jsons', "w", encoding="utf-8") as fh:
