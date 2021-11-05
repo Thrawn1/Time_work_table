@@ -26,11 +26,12 @@ def json_structure_conversion_for_data(data_structure_json:dict):
     for date_id in data_structure_json.keys():
         data_array[date_id] = {}
         for id in data_structure_json[date_id]:
-            data_array[date_id][id] = []
+            id_int = int(id)
+            data_array[date_id][id_int] = []
             cell_0_str = datetime.datetime.fromisoformat(data_structure_json[date_id][id][0]) 
             cell_1_str = datetime.datetime.fromisoformat(data_structure_json[date_id][id][1])
-            data_array[date_id][id].append(cell_0_str)
-            data_array[date_id][id].append(cell_1_str)
-            data_array[date_id][id].append(data_structure_json[date_id][id][2])
+            data_array[date_id][id_int].append(cell_0_str)
+            data_array[date_id][id_int].append(cell_1_str)
+            data_array[date_id][id_int].append(data_structure_json[date_id][id][2])
     return data_array
 
