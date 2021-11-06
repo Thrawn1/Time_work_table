@@ -3,8 +3,8 @@ from id_employee import*
 from analyze_data import*
 from calculation_of_hours_and_wages import*
 
-#file_name = '1_attlog.dat'
-file_name = 'test_file_data_temp.dat'
+file_name = '1_attlog.dat'
+#file_name = 'test_file_data_temp.dat'
 #requested_year = int(input('Введите год:'))
 #requested_month = int(input('Введите месяц:'))
 requested_year = 2021

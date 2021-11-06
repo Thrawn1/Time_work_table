@@ -1,4 +1,4 @@
-import os
+from os import path
 from id_employee import id_employee
 from analyze_data import definition_of_working_day
 from datetime import timedelta
@@ -65,7 +65,7 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
     """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
        Функция возвращает"""
     wege_rates_name_file = 'wage_rates.dat'
-    wege_rates_file = os.path.join('data','lists_data_app',wege_rates_name_file)
+    wege_rates_file = path.join('data','variable_data_for_app',wege_rates_name_file)
     file_wage_rates = open(wege_rates_file, 'r',encoding='utf-8')
     money_rate_all_employes = {}
     total_salary_id = {}

@@ -1,4 +1,4 @@
-import os
+from os import path
 
 def id_employee(name_id_file_relative = 'id_employee.dat',name_roles_file_relative = 'roles_employee.dat', type_data = 1):
     """ Функция создания структуры данных(список списков, состящих из словарей id-фамилия)
@@ -6,8 +6,8 @@ def id_employee(name_id_file_relative = 'id_employee.dat',name_roles_file_relati
         используется ролевая модель. Функция принимает имена файлов - список работников, их роль и id и файл описвающий роли и id - роли.
         Так же принимает параметр, который определяет, что функция возвращает - простой список, или структуру по ролям.
     """
-    name_id_file = os.path.join('data','lists_data_app',name_id_file_relative)
-    name_roles_file = os.path.join('data','lists_data_app',name_roles_file_relative)
+    name_id_file = path.join('data','variable_data_for_app',name_id_file_relative)
+    name_roles_file = path.join('data','variable_data_for_app',name_roles_file_relative)
     if type_data == 1:
         file_id_name = open(name_id_file, 'r',encoding='utf-8')
         id_employee_list = {}

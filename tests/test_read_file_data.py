@@ -11,7 +11,7 @@ def test_read_file_data_good():
     file_name_for_test_data = 'test_read_file.dat'
     calculated_data = read_file_data(file_name_for_test_data,request_year,request_month)
     object_file_name = 'reference_read_file_data_good'
-    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    path_object_file = gen_path.join('data','test_data','reference_result',object_file_name)
     with open(path_object_file,encoding="utf-8") as file:
         expected_result = loads(file.read())
     assert calculated_data == expected_result

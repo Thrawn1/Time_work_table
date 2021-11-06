@@ -4,7 +4,7 @@ from analyze_data import analyze_data_for_print
 from supporting_files.data_in_json import json_structure_conversion_for_data
 
 object_file_name = 'test_analyze_data_for_print_version_4'
-path_object_file = os.path.join('data','data_for_tests',object_file_name)
+path_object_file = os.path.join('data','test_data',object_file_name)
 with open(path_object_file, encoding="utf-8") as file:
     json_struct = json.loads(file.read())
 request_dict = json_structure_conversion_for_data(json_struct)

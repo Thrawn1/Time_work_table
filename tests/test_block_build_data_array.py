@@ -14,7 +14,7 @@ def test_bloc_buil_data_array_all():
     list_data = read_file_data(name_file_for_test,requested_year,requested_month)
     calculated_data = build_data_array(list_data)
     object_file_name = 'reference_block_build_data_array'
-    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    path_object_file = gen_path.join('data','test_data','reference_result',object_file_name)
     with open(path_object_file, encoding="utf-8") as file:
         json_struct = loads(file.read())
     expected_result = json_structure_conversion_for_data(json_struct)

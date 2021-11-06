@@ -1,4 +1,5 @@
-from id_employee import*
+from os import path
+from id_employee import id_employee
 from datetime import datetime
 from analyze_data import definition_of_working_day
 
@@ -24,7 +25,7 @@ def read_file_data(file_name_data_relative, requested_year, requested_month):
         Если словарь пуст - скорее всего данные запрашиваются за декабрь, вывести поздравление с НГ и рекомендацию
         ввести вручную дату и месяц
     """
-    file_name_data = os.path.join("data",file_name_data_relative)
+    file_name_data = path.join("data",file_name_data_relative)
     try:
         file_data = open(file_name_data, 'r')
     except FileNotFoundError:

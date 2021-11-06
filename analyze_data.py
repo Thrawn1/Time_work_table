@@ -1,8 +1,8 @@
+from os import path
+from sys import stderr
 from datetime import datetime, timedelta
 from calendar import  monthrange,weekday
 from id_employee import id_employee
-import os
-import sys
 
 
 def translation_into_russian_names(eng_name:str,type_name:str):
@@ -38,8 +38,8 @@ def definition_of_working_day(date:str):
     day = int(date[8:10])
     name_holiday_file_relative = 'holidays.dat'
     name_postponed_working_days_relative = 'postponed_working_days.dat'
-    name_holiday_file = os.path.join('data','lists_data_app',name_holiday_file_relative)
-    name_postponed_working_days = os.path.join('data','lists_data_app',name_postponed_working_days_relative)
+    name_holiday_file = path.join('data','variable_data_for_app',name_holiday_file_relative)
+    name_postponed_working_days = path.join('data','variable_data_for_app',name_postponed_working_days_relative)
     file_holiday = open(name_holiday_file, 'r',encoding='utf-8')
     file_postponed_working_days = open(name_postponed_working_days,'r',encoding='utf-8')
     list_holiday = []
@@ -204,7 +204,7 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
     list_marks = search_for_missed_marks_employee(time_table,id,year,month)
     list_missed_day = search_for_missed_working_days_employee(time_table,id,year,month)
     if list_marks != 0:
-        print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee + " имеет только одну отметку в рабочем дне!", file=sys.stderr)
+        print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee + " имеет только одну отметку в рабочем дне!", file=stderr)
         for cell in list_marks:
             date_key_for_edit =cell[0]
             print('Дата и  время отметки, сохраненной в системе:',time_table[date_key_for_edit][id][0],sep = ' ')
@@ -223,7 +223,7 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
             print('Ввод данных об отметки подвержден!')
     
     if list_missed_day != 0:
-        print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee + " не имеет данных за рабочий день!", file=sys.stderr)
+        print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee + " не имеет данных за рабочий день!", file=stderr)
         for missed_day in list_missed_day:
             print('Дата без отметок:',missed_day,sep = ' ')
             print('Введите данные за день\n\n\t1.Рабочий день.Ввести отметку прихода и отметку ухода\n\t2.Отпускной день\n')

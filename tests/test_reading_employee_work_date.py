@@ -15,7 +15,7 @@ def test_reading_employee_work_date_null():
 
 def test_reading_employee_work_date_good():
     test_data_file_name = 'test_data_reading_employee_work_date_good'
-    path_object_file = gen_path.join('data','data_for_tests',test_data_file_name)
+    path_object_file = gen_path.join('data','test_data',test_data_file_name)
     with open(path_object_file, encoding="utf-8") as file:
         json_struct = loads(file.read())
     request_dict = json_structure_conversion_for_data(json_struct)
