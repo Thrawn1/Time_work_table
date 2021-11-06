@@ -1,6 +1,8 @@
-import sys
-import datetime
-sys.path.append('..')
+from sys import path
+from os import path as gen_path 
+from json import loads
+path.append('..')
+from supporting_files.data_in_json import json_structure_conversion_for_data
 from analyze_data import reading_employee_work_date
 
 
@@ -12,7 +14,11 @@ def test_reading_employee_work_date_null():
     assert calculated_data == expected_result
 
 def test_reading_employee_work_date_good():
-    request_dict = {'2021-03-01': {8: [datetime.datetime(2021, 3, 1, 5, 55), datetime.datetime(2021, 3, 1, 5, 55), 'work'], 4: [datetime.datetime(2021, 3, 1, 17, 0), datetime.datetime(2021, 3, 1, 6, 30), 'work'], 5: [datetime.datetime(2021, 3, 1, 14, 0), datetime.datetime(2021, 3, 1, 6, 45, 15), 'work'], 6: [datetime.datetime(2021, 3, 1, 15, 0), datetime.datetime(2021, 3, 1, 7, 0), 'work'], 9: [datetime.datetime(2021, 3, 1, 16, 0), datetime.datetime(2021, 3, 1, 7, 30, 10), 'work'], 3: [datetime.datetime(2021, 3, 1, 18, 0), datetime.datetime(2021, 3, 1, 8, 0), 'work']}}
+    object_file_name = 'reference_reading_employee_work_date_good'
+    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    with open(path_object_file, encoding="utf-8") as file:
+        json_struct = loads(file.read())
+    request_dict = json_structure_conversion_for_data(json_struct)
     request_id_list = [4,5,6,9,3]
     for request_id in request_id_list:
         calculated_data = reading_employee_work_date(request_dict,request_id)

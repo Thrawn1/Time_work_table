@@ -1,5 +1,7 @@
-import sys
-sys.path.append('..')
+from sys import path
+from os import path as gen_path 
+from json import loads
+path.append('..')
 from build_data_array import read_file_data
 
 
@@ -8,7 +10,10 @@ def test_read_file_data_good():
     request_month = 3
     file_name_for_test_data = 'test_read_file.dat'
     calculated_data = read_file_data(file_name_for_test_data,request_year,request_month)
-    expected_result = ['        8	2021-03-01 05:55:00	1	255	1	0\n','        4	2021-03-01 06:30:00	1	255	1	0\n','        5	2021-03-01 06:45:15	1	255	1	0\n','        6	2021-03-01 07:00:00	1	255	1	0\n','        9	2021-03-01 07:30:10	1	255	1	0\n','        3	2021-03-01 08:00:00	1	255	1	0\n','        5	2021-03-01 14:00:00	1	255	1	0\n','        6	2021-03-01 15:00:00	1	255	1	0\n','        9	2021-03-01 16:00:00	1	255	1	0\n','        4	2021-03-01 17:00:00	1	255	1	0\n','        3	2021-03-01 18:00:00	1	255	1	0\n']
+    object_file_name = 'reference_read_file_data_good'
+    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    with open(path_object_file,encoding="utf-8") as file:
+        expected_result = loads(file.read())
     assert calculated_data == expected_result
 
 def test_read_file_data_null():
