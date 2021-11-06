@@ -14,8 +14,8 @@ def test_reading_employee_work_date_null():
     assert calculated_data == expected_result
 
 def test_reading_employee_work_date_good():
-    object_file_name = 'reference_reading_employee_work_date_good'
-    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    test_data_file_name = 'test_data_reading_employee_work_date_good'
+    path_object_file = gen_path.join('data','data_for_tests',test_data_file_name)
     with open(path_object_file, encoding="utf-8") as file:
         json_struct = loads(file.read())
     request_dict = json_structure_conversion_for_data(json_struct)

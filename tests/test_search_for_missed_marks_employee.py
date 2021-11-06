@@ -6,8 +6,8 @@ from supporting_files.data_in_json import json_structure_conversion_for_data,jso
 from analyze_data import search_for_missed_marks_employee
 
 def test_search_for_missed_marks_employee_id_no_data():
-    object_file_name = 'reference_search_for_missed_marks_employee_one_id_all_marks'
-    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    data_test_file_name = 'test_data_search_for_missed_marks_employee_one_id_all_marks'
+    path_object_file = gen_path.join('data','data_for_tests',data_test_file_name)
     with open(path_object_file, encoding="utf-8") as file:
         json_struct = loads(file.read())
     request_dict = json_structure_conversion_for_data(json_struct)
@@ -19,8 +19,8 @@ def test_search_for_missed_marks_employee_id_no_data():
     assert calculated_data == expected_result
 
 def test_search_for_missed_marks_employee_id_all_marks():
-    object_file_name = 'reference_search_for_missed_marks_employee_one_id_all_marks'
-    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    data_test_file_name = 'test_data_search_for_missed_marks_employee_one_id_all_marks'
+    path_object_file = gen_path.join('data','data_for_tests',data_test_file_name)
     with open(path_object_file, encoding="utf-8") as file:
         json_struct = loads(file.read())
     request_dict = json_structure_conversion_for_data(json_struct)
@@ -32,8 +32,8 @@ def test_search_for_missed_marks_employee_id_all_marks():
     assert calculated_data == expected_result
 
 def test_search_for_missed_marks_employee_id_loss_marks():
-    object_file_name = 'reference_search_for_missed_marks_employee_one_id_missed_marks'
-    path_object_file = gen_path.join('data','data_for_tests','reference_for_tests',object_file_name)
+    data_test_file_name = 'test_data_search_for_missed_marks_employee_one_id_missed_marks'
+    path_object_file = gen_path.join('data','data_for_tests',data_test_file_name)
     with open(path_object_file, encoding="utf-8") as file:
         json_struct = loads(file.read())
     request_dict = json_structure_conversion_for_data(json_struct)

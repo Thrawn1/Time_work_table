@@ -1,5 +1,5 @@
-import sys
-sys.path.append('..')
+from sys import path
+path.append('..')
 from build_data_array import determination_period
 
 

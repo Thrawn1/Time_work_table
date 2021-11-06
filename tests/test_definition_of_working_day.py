@@ -1,5 +1,5 @@
-import sys
-sys.path.append('..')
+from sys import path
+path.append('..')
 from analyze_data import definition_of_working_day
 
 

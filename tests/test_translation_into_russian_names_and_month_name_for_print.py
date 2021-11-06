@@ -1,7 +1,6 @@
-import sys
-sys.path.append('..')
-from analyze_data import translation_into_russian_names
-from analyze_data import month_name_for_print
+from sys import path
+path.append('..')
+from analyze_data import translation_into_russian_names,month_name_for_print
 
 
 def test_translation_into_russian_names_month_good():
