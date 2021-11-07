@@ -76,7 +76,8 @@ def generation_line(file_for_data):
 
 def generation_file_all_id(file_for_data):
     #list_id = [1,2,3,4,5,6,7,8,9,10,27]
-    list_id = [3,4,5,6,9]
+    #list_id = [3,4,5,6,9]
+    list_id = [3]
     year = 2021
     month = 3
     tmp_1 = 1

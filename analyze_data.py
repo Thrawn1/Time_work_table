@@ -217,9 +217,9 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                     entered_time = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
                     data_to_write = datetime.strptime(str(date_key_for_edit + ' ' + entered_time),"%Y-%m-%d %H %M %S")
                     if user_choice == '1':
-                        time_table[date_key_for_edit][id][0] = data_to_write
-                    else:
                         time_table[date_key_for_edit][id][1] = data_to_write
+                    else:
+                        time_table[date_key_for_edit][id][0] = data_to_write
             print('Ввод данных об отметки подвержден!')
     
     if list_missed_day != 0:
@@ -239,11 +239,11 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                     entered_time_end = input('Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
                     data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
                     try:
-                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id] = [data_to_write_end,data_to_write_begin]
                         time_table[missed_day][id].append('work')
                     except KeyError:
                         time_table[missed_day] = {}
-                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id] = [data_to_write_end,data_to_write_begin]
                         time_table[missed_day][id].append('work')
                     
                 elif switch_variable == '2':
