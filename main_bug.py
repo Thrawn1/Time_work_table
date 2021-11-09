@@ -38,4 +38,16 @@ z = calculation_wages(work_time_employees_restructuring[0])
 
 print(z)
 
-build_file_excel(data_array,work_time_employees,work_time_employees_restructuring,z)
+
+print(data_array)
+print('\n\n\n')
+print(work_time_employees)
+print('\n\n\n')
+print(work_time_employees_restructuring[1])
+print('\n\n\n')
+print(work_time_employees_restructuring[0])
+print('\n\n\n')
+print(z)
+
+
+build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[1],work_time_employees_restructuring[0],z)
