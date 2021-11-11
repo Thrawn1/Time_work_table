@@ -226,7 +226,7 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
         print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee + " не имеет данных за рабочий день!", file=stderr)
         for missed_day in list_missed_day:
             print('Дата без отметок:',missed_day,sep = ' ')
-            print('Введите данные за день\n\n\t1.Рабочий день.Ввести отметку прихода и отметку ухода\n\t2.Отпускной день\n')
+            print('Введите данные за день\n\n\t1.Рабочий день.Ввести отметку прихода и отметку ухода\n\t2.Отпускной день\n\t3.Прогул\n')
             loop_variable = 0
             while loop_variable != 1:
                 switch_variable = input('Введите пункт меню:')
@@ -259,5 +259,19 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                         time_table[missed_day] = {}
                         time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
                         time_table[missed_day][id].append('vacation')
+                
+                elif switch_variable == '3':
+                    loop_variable =  1
+                    entered_time_begin = '23 59 58'
+                    entered_time_end = '23 59 59'
+                    data_to_write_begin = datetime.strptime(str(missed_day + ' ' + entered_time_begin),"%Y-%m-%d %H %M %S")
+                    data_to_write_end = datetime.strptime(str(missed_day + ' ' + entered_time_end),"%Y-%m-%d %H %M %S")
+                    try:
+                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id].append('truancy')
+                    except KeyError:
+                        time_table[missed_day] = {}
+                        time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
+                        time_table[missed_day][id].append('truancy')
                 else:
                     print('Введите правильный пункт меню!')

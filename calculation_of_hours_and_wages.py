@@ -1,7 +1,7 @@
 from os import path
 from id_employee import id_employee
-from analyze_data import definition_of_working_day
 from datetime import timedelta
+
 
 def calculation_of_excess_working_hours_per_day(time_table:dict):
     """Функция для рассчета отработанных часов и переработки. Функция принимает отредактированную структуру данных.
@@ -24,30 +24,33 @@ def calculation_of_excess_working_hours_per_day(time_table:dict):
                 work_time_employees[cell_date][cell_id] = (abs_delta_time,hours_worked,tag_time,tag_day)
     return work_time_employees
 
+
 def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
     """Функция для подсчета всех часов переработки в месяц, по каждому сотруднику. Функция принимает словарь,
     в котором содержиться информация по рабочим дня и переработкам в конкретный день каждого сотрудника.
     Функция возврващает словарь, в котром для каждого сотрудника содержиться кортеж с количеством обычных рабочих дней,
     количество рабочих выходных, переработка в обычне рабочи дни и переработка в выходные дни"""
-    list_employees = id_employee(type_data=2)
     work_time_employees_restructuring = {}
     for cell_date in work_time_employees:
         for cell_id in work_time_employees[cell_date]:
             cell_time = (work_time_employees[cell_date][cell_id][0],work_time_employees[cell_date][cell_id][2],cell_date)
             if not cell_id in work_time_employees_restructuring:
-                work_time_employees_restructuring[cell_id] = [[],[],[]]
+                work_time_employees_restructuring[cell_id] = [[],[],[],[]]
             tag_day = work_time_employees[cell_date][cell_id][3]
             if tag_day == 'work':
                 work_time_employees_restructuring[cell_id][0].append(cell_time)
             elif tag_day == 'weekand':
                 work_time_employees_restructuring[cell_id][1].append(cell_time)
             elif tag_day == 'vacation':
-                work_time_employees_restructuring[cell_id][2].append(cell_time)      
+                work_time_employees_restructuring[cell_id][2].append(cell_time)
+            elif tag_day == 'truancy':
+                work_time_employees_restructuring[cell_id][3].append(cell_time)      
     working_hours_of_workers_sum_of_all_data = {}
     for id in work_time_employees_restructuring.keys():
         total_work_days = len(work_time_employees_restructuring[id][0])
         total_holiday_days = len(work_time_employees_restructuring[id][1])
         total_vacation_days = len(work_time_employees_restructuring[id][2])
+        total_truancy_days = len(work_time_employees_restructuring[id][3])
         overwork = timedelta(seconds=0)
         for delta_time_day in work_time_employees_restructuring[id][0]:
             if delta_time_day[1] == 'переработка':
@@ -57,11 +60,12 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
         overwork_holiday = timedelta(seconds = 0)
         for delta_time_day in work_time_employees_restructuring[id][1]:
                 overwork_holiday += delta_time_day[0]
-        cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday),total_vacation_days)
+        cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday),total_vacation_days,total_truancy_days)
         working_hours_of_workers_sum_of_all_data[id] = cell_work_data
     return (working_hours_of_workers_sum_of_all_data,work_time_employees_restructuring)
-        
-def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
+
+
+def calculation_wages(working_hours_of_workers_sum_of_all_data:dict,secret_key_raw:int):
     """Функция для рассчета заработной платы. Функция принимает структуру данных, содержаших данные по рабочим часам и переработке.
        Функция возвращает"""
     wege_rates_name_file = 'wage_rates.dat'
@@ -72,7 +76,7 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
     for line in file_wage_rates:
         new_line = line.rstrip('\n')
         data = new_line.split(' ')
-        secret_key = 3.14
+        secret_key = secret_key_raw/100
         raw_data = data[1].lstrip('[').rstrip(']')
         raw_data_rate_encrypted = raw_data.split('.')
         raw_data_rate_temporarily = raw_data_rate_encrypted[1] + '.' + raw_data_rate_encrypted[0]
@@ -87,6 +91,4 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data:dict):
         salary_for_vacation = money_rate_employee*working_hours_of_workers_sum_of_all_data[id][2]
         total_salary = salary_for_weekdays + salary_for_weekends + salary_for_vacation
         total_salary_id[id] = round(total_salary,2)
-        #print(id)
-        #print(round(total_salary,2))
     return total_salary_id
