@@ -1,4 +1,5 @@
 import openpyxl
+from openpyxl.styles import Border, Side
 from id_employee import id_employee
 
 
@@ -16,7 +17,6 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.column_dimensions['E'].width = 14.3
     ws.column_dimensions['F'].width = 12.26
     ws.column_dimensions['G'].width = 13.23
-
     ws.column_dimensions['H'].width = 16.44
     ws.column_dimensions['I'].width = 23.21
     ws.column_dimensions['J'].width = 12.46
@@ -24,11 +24,18 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.column_dimensions['L'].width = 21.96
     ws.column_dimensions['M'].width = 28.09
     ws.column_dimensions['N'].width = 10.27 
-
+    border_style='thick'
+    color='FF000000'
+    top = Side(border_style,color)
+    right = Side(border_style,color)
+    bottom = Side(border_style,color)
+    left = Side(border_style,color)
+    #ws.cell(1,1).border = Border(left,right,top,bottom)
     topicsList=['Фамилия', 'Дата', 'Отметка входа', 'Отметка выхода', 'Общее время работы', 'Переработка', 'Метка']
     topicCounter=1
     for topic in topicsList:
         ws.cell(column = topicCounter, row = 1, value = topic)
+        ws.cell(1,topicCounter).border = Border(left,right,top,bottom)
         topicCounter+=1
     count = 2
     list_date = []
@@ -37,19 +44,29 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     list_date.sort()
     for date in list_date:
         ws.cell(column = 2, row = count, value = date)
+        ws.cell(count,2).border = Border(left,right,top,bottom)
         for id in time_table[date]:
             ws.cell(column = 1,row = count, value=list_employee[1][id])
+            ws.cell(count,1).border = Border(left,right,top,bottom)
             if time_table[date][id][2] != 'vacation':
                 ws.cell(column = 3,row = count, value=time_table[date][id][1].time())
+                ws.cell(count,3).border = Border(left,right,top,bottom)
                 ws.cell(column = 4,row = count, value=time_table[date][id][0].time())
+                ws.cell(count,4).border = Border(left,right,top,bottom)
                 ws.cell(column = 5,row = count, value=work_time_employees[date][id][1])
+                ws.cell(count,5).border = Border(left,right,top,bottom)
                 ws.cell(column = 6,row = count, value=work_time_employees[date][id][0])
+                ws.cell(count,6).border = Border(left,right,top,bottom)
                 if work_time_employees[date][id][2] == 'недоработка':
                     ws.cell(column = 7,row = count, value=work_time_employees[date][id][2])
+                    ws.cell(count,7).border = Border(left,right,top,bottom)
                 else:
                     ws.cell(column = 7,row = count, value=work_time_employees[date][id][2])
+                    ws.cell(count,7).border = Border(left,right,top,bottom)
             else:
                 ws.cell(column = 3,row = count, value='Отпуск')
+                for cell in range(3,8):
+                    ws.cell(count,cell).border = Border(left,right,top,bottom)
         count += 1
     count += 3
     topicsList=['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных','Переработка выходных', 'Количество дней дней отпуска', 'Зарплата']
@@ -71,6 +88,5 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         ws.cell(column = 13,row = count, value=working_hours_of_workers_sum_of_all_data[id][2])
         ws.cell(column = 14,row = count, value=total_salary_id[id])
         count += 1
-
     wb.save("TEST_0000.xlsx")
     print('Файл сформирован')
