@@ -43,4 +43,4 @@ work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_m
 z = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
 
 build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],z)
-#generation_pdf_file(0,'test')
+generation_pdf_file(0,'test')
