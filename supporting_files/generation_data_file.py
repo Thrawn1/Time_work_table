@@ -107,12 +107,50 @@ def generation_file_all_id(file_for_data):
     print('Сгенерирован файл!')
 
 
+def generation_file_id_all_data(file_for_data):
+    #list_id = [1,2,3,4,5,6,7,8,9,10,27]
+    #list_id = [3,4,5,6,9]
+    list_id = [3]
+    year = 2021
+    month = 3
+    tmp_1 = 1
+    tmp_2 = 255
+    tmp_3 = 0
+    id = str(3)
+    year_str = str(year)
+    month_str = str_format(str(month))
+    for num_day in range(1,32):
+        for id_int in list_id:
+            id = str(id_int)
+            end_line = '	' + str(tmp_1) + '	' + str(tmp_2) + '	' + str(tmp_1) + '	' + str(tmp_3)
+            day_str = str_format(str(num_day))
+            data = year_str + '-' + month_str + '-' + day_str
+            str_hour_start = '10'
+            str_minute = '00'
+            str_seconds =  '00'
+            time = str_hour_start + ':' + str_minute + ':' + str_seconds
+            line = '        '+ id + '	' + data + ' ' + time  + end_line +'\n'
+            file_for_data.write(line)
+            str_hour_end = str_format(str(random.randint(18,19)))
+            str_minute = '00'
+            str_seconds =  '00'
+            time = str_hour_end + ':' + str_minute + ':' + str_seconds
+            line = '        '+ id + '	' + data + ' ' + time  + end_line +'\n'
+            file_for_data.write(line)
+    print('Сгенерирован файл!')
 
 
+
+
+tmp_file = open('tmp_data_one_id.dat','w',encoding='utf-8')
 file_for_data.write(strict_data)
 random_line(file_for_data)
 file_for_data.close()
 file_for_data_gen = open(name_file_for_data_gen,'w',encoding='utf-8')
 generation_file_all_id(file_for_data_gen)
 file_for_data_gen.close()
+generation_file_id_all_data(tmp_file)
+tmp_file.close()
+
+
 print('ALL!')

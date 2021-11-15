@@ -39,26 +39,31 @@ def calculation_of_exceeding_working_hours_per_month(work_time_employees:dict):
             tag_day = work_time_employees[cell_date][cell_id][3]
             if tag_day == 'work':
                 work_time_employees_restructuring[cell_id][0].append(cell_time)
-            elif tag_day == 'weekand':
+            elif tag_day == 'weekend':
                 work_time_employees_restructuring[cell_id][1].append(cell_time)
             elif tag_day == 'vacation':
                 work_time_employees_restructuring[cell_id][2].append(cell_time)
             elif tag_day == 'truancy':
-                work_time_employees_restructuring[cell_id][3].append(cell_time)      
+                work_time_employees_restructuring[cell_id][3].append(cell_time)   
     working_hours_of_workers_sum_of_all_data = {}
     for id in work_time_employees_restructuring.keys():
-        total_work_days = len(work_time_employees_restructuring[id][0])
-        total_holiday_days = len(work_time_employees_restructuring[id][1])
-        total_vacation_days = len(work_time_employees_restructuring[id][2])
-        total_truancy_days = len(work_time_employees_restructuring[id][3])
+        work_days = work_time_employees_restructuring[id][0]
+        holiday_days = work_time_employees_restructuring[id][1]
+        vacation_days = work_time_employees_restructuring[id][2]
+        truancy_days = work_time_employees_restructuring[id][3]
+        total_work_days = len(work_days)
+        total_holiday_days = len(holiday_days)
+        total_vacation_days = len(vacation_days)
+        total_truancy_days = len(truancy_days)
         overwork = timedelta(seconds=0)
-        for delta_time_day in work_time_employees_restructuring[id][0]:
+        for delta_time_day in work_days:
             if delta_time_day[1] == 'переработка':
                 overwork += delta_time_day[0]
             else:
                 overwork -= delta_time_day[0]
         overwork_holiday = timedelta(seconds = 0)
-        for delta_time_day in work_time_employees_restructuring[id][1]:
+        for delta_time_day in holiday_days:
+            if delta_time_day[1] == 'переработка':
                 overwork_holiday += delta_time_day[0]
         cell_work_data = ((total_work_days,overwork),(total_holiday_days,overwork_holiday),total_vacation_days,total_truancy_days)
         working_hours_of_workers_sum_of_all_data[id] = cell_work_data

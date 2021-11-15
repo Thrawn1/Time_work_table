@@ -1,3 +1,4 @@
+import locale
 from os import path
 from sys import stderr
 from datetime import datetime, timedelta
@@ -145,7 +146,8 @@ def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,r
                     data_cell = []
                     data_cell.append(date_day) 
                     data_cell.append(time_table[date_day][id][1])
-                    missing_mark_list.append(data_cell)
+                    if time_table[date_day][id][2] == 'work' or time_table[date_day][id][2] == 'weekend':
+                        missing_mark_list.append(data_cell)
     if len(missing_mark_list) != 0:
         return missing_mark_list
     else:
@@ -155,6 +157,7 @@ def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
     """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
         за какие дни нет даных, а затем выводит полученные данные на экран. 
     """
+    locale.setlocale(locale.LC_ALL,'en_US')
     list_employee = id_employee()
     list_marks = search_for_missed_marks_employee(time_table,id,year,month)
     list_missed_day = search_for_missed_working_days_employee(time_table,id,year,month)
@@ -187,7 +190,6 @@ def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
                 month_name_eng_str = datetime_unit.strftime("%B")
                 weekday_name_eng_str = datetime_unit.strftime("%A")
                 number_day_mark_str = datetime_unit.strftime("%d")
-                
                 month_name_rus_str = translation_into_russian_names(month_name_eng_str,'month')
                 weekday_name_rus_str = translation_into_russian_names(weekday_name_eng_str,'weekday')
                 output_str ='\t\t\t' + number_day_mark_str + ' ' + month_name_rus_str + ' | ' + weekday_name_rus_str

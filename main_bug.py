@@ -3,8 +3,9 @@ from id_employee import*
 from analyze_data import*
 from calculation_of_hours_and_wages import*
 from build_file_table_excel import build_file_excel
+from generation_pdf_file import generation_pdf_file
 
-file_name = 'test_file_data_part_LOSS.dat'
+file_name = 'tmp_data_one_id.dat'
 print('Если вы хотите сформировать файл с зарплатой - введите секретный ключ. Если нужен файл без зарплаты - введите t')
 key = input('Секретный ключ: ')
 if key == 't':
@@ -42,3 +43,4 @@ work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_m
 z = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
 
 build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],z)
+#generation_pdf_file(0,'test')
