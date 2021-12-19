@@ -50,36 +50,37 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         ws.cell(column = 2, row = count, value = date)
         ws.cell(count,2).border = Border(left,right,top,bottom)
         for id in time_table[date]:
-            ws.cell(column = 1,row = count, value=list_employee[1][id])
-            ws.cell(count,1).border = Border(left,right,top,bottom)
-            if time_table[date][id][2] == 'work' or time_table[date][id][2] == 'weekend':
-                ws.cell(column = 3,row = count, value=time_table[date][id][1].time())
-                ws.cell(count,3).border = Border(left,right,top,bottom)
-                ws.cell(column = 4,row = count, value=time_table[date][id][0].time())
-                ws.cell(count,4).border = Border(left,right,top,bottom)
-                ws.cell(column = 5,row = count, value=work_time_employees[date][id][1])
-                ws.cell(count,5).border = Border(left,right,top,bottom)
-                ws.cell(column = 7,row = count, value=work_time_employees[date][id][0])
-                ws.cell(count,7).border = Border(left,right,top,bottom)
-                if work_time_employees[date][id][2] == 'недоработка':
-                    ws.cell(column = 6,row = count, value=work_time_employees[date][id][2])
-                    ws.cell(count,6).border = Border(left,right,top,bottom)
+            if id != 8 and id !=7:
+                ws.cell(column = 1,row = count, value=list_employee[1][id])
+                ws.cell(count,1).border = Border(left,right,top,bottom)
+                if time_table[date][id][2] == 'work' or time_table[date][id][2] == 'weekend':
+                    ws.cell(column = 3,row = count, value=time_table[date][id][1].time())
+                    ws.cell(count,3).border = Border(left,right,top,bottom)
+                    ws.cell(column = 4,row = count, value=time_table[date][id][0].time())
+                    ws.cell(count,4).border = Border(left,right,top,bottom)
+                    ws.cell(column = 5,row = count, value=work_time_employees[date][id][1])
+                    ws.cell(count,5).border = Border(left,right,top,bottom)
+                    ws.cell(column = 7,row = count, value=work_time_employees[date][id][0])
+                    ws.cell(count,7).border = Border(left,right,top,bottom)
+                    if work_time_employees[date][id][2] == 'недоработка':
+                        ws.cell(column = 6,row = count, value=work_time_employees[date][id][2])
+                        ws.cell(count,6).border = Border(left,right,top,bottom)
+                    else:
+                        ws.cell(column = 6,row = count, value=work_time_employees[date][id][2])
+                        ws.cell(count,6).border = Border(left,right,top,bottom)
+                elif time_table[date][id][2] == 'vacation':
+                    ws.cell(count,3).border = Border(left,right,top,bottom) # Сначала границы, потом объединение. Иначе граница будет не верной
+                    ws.merge_cells(start_row=count,start_column=3,end_row=count,end_column=7)
+                    ws.cell(column = 3,row = count, value='Отпуск')
+                    ws.cell(column = 3,row = count).alignment = Alignment(horizontal='center')
+                elif time_table[date][id][2] == 'truancy':
+                    ws.cell(count,3).border = Border(left,right,top,bottom)
+                    ws.merge_cells(start_row=count,start_column=3,end_row=count,end_column=7)
+                    ws.cell(column = 3,row = count, value='Прогул')
+                    ws.cell(column = 3,row = count).alignment = Alignment(horizontal='center')
                 else:
-                    ws.cell(column = 6,row = count, value=work_time_employees[date][id][2])
-                    ws.cell(count,6).border = Border(left,right,top,bottom)
-            elif time_table[date][id][2] == 'vacation':
-                ws.cell(count,3).border = Border(left,right,top,bottom) # Сначала границы, потом объединение. Иначе граница будет не верной
-                ws.merge_cells(start_row=count,start_column=3,end_row=count,end_column=7)
-                ws.cell(column = 3,row = count, value='Отпуск')
-                ws.cell(column = 3,row = count).alignment = Alignment(horizontal='center')
-            elif time_table[date][id][2] == 'truancy':
-                ws.cell(count,3).border = Border(left,right,top,bottom)
-                ws.merge_cells(start_row=count,start_column=3,end_row=count,end_column=7)
-                ws.cell(column = 3,row = count, value='Прогул')
-                ws.cell(column = 3,row = count).alignment = Alignment(horizontal='center')
-            else:
-                pass
-        count += 1
+                    pass
+            count += 1
     count += 3
     topicsList=['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных','Переработка выходных', 'Количество дней дней отпуска', 'Зарплата']
     topicCounter=8
@@ -114,5 +115,5 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.auto_filter.ref = 'A1:G24'
     #ws.auto_filter.add_sort_condition('A1:25')
     #ws.auto_filter.add_filter_column(0,['1', '25'])
-    wb.save("TEST_0000.xlsx")
+    wb.save("TEST_1111.xlsx")
     print('Файл сформирован')

@@ -6,6 +6,7 @@ from build_file_table_excel import build_file_excel
 from generation_pdf_file import generation_pdf_file
 
 file_name = 'tmp_data_one_id.dat'
+#file_name = 'n_1_attlog.dat'
 print('Если вы хотите сформировать файл с зарплатой - введите секретный ключ. Если нужен файл без зарплаты - введите t')
 key = input('Секретный ключ: ')
 if key == 't':
@@ -29,6 +30,11 @@ data_array = build_data_array(list_data)
 id_list = id_employee(type_data=2)
 name_month_for_print = month_name_for_print(requested_month)
 print(name_month_for_print,' ',requested_year,' ','год')
+
+
+for id in id_list[1]:
+    analyze_data_for_print(data_array,id,requested_year,requested_month)
+
 for id in id_list[1]:
     analyze_data_for_print(data_array,id,requested_year,requested_month)
     analyze_data_for_edit(data_array,id,requested_year,requested_month)
@@ -43,4 +49,4 @@ work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_m
 z = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
 
 build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],z)
-generation_pdf_file(0,'test')
+#generation_pdf_file(0,'test')
