@@ -27,7 +27,9 @@ def gen_html_file_body(name,time_1,time_2,timedl,tag_time,over_time,request_year
     """Функция генерирует html файл, содержаший информацию по одному конктреному работнику. Даты, когда он был, время, когда была отметка, переработка
     Так же есть сводная таблица, где указано, сколько дней отработал человек, сколько у него всего часов переработки и зарплата. """
     
-    topicsList=['Фамилия', 'Дата', 'Отметка входа', 'Отметка выхода', 'Общее время работы', 'Переработка']
+    
+    all_data_html = []
+    topicsList=('Фамилия', 'Дата', 'Отметка входа', 'Отметка выхода', 'Общее время работы', 'Переработка')
     space = '  '
     new_line = '\n'
     file_name = request_year + '_'+ request_month  + '_' + name + '.html'
@@ -48,16 +50,16 @@ def gen_html_file_body(name,time_1,time_2,timedl,tag_time,over_time,request_year
     td_tag_end = '</td>'
 
     line = html_tag_start + new_line
-    file.write(line)
+    all_data_html.append(line)
     line = 3*space + table_tag_start + new_line
-    file.write(line)
+    all_data_html.append(line)
     line = 4*space + thead_tag_start + new_line
-    file.write(line)
+    all_data_html.append(line)
     line = 6*space + tr_tag_start + new_line
-    file.write(line)
+    all_data_html.append(line)
     for topic in topicsList:
         line = 8*space + th_tag_start + topic + th_tag_end + new_line
-        file.write(line)
+        all_data_html.append(line)
     line = 6*space + tr_tag_end + new_line
     file.write(line)
     line = 4*space + thead_tag_end + new_line
