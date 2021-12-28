@@ -5,7 +5,8 @@ from calculation_of_hours_and_wages import*
 from build_file_table_excel import build_file_excel
 from generation_pdf_file import generation_pdf_file
 
-file_name = 'tmp_data_one_id.dat'
+#file_name = 'tmp_data_one_id.dat'
+file_name = '2_attlog.dat'
 #file_name = 'n_1_attlog.dat'
 print('Если вы хотите сформировать файл с зарплатой - введите секретный ключ. Если нужен файл без зарплаты - введите t')
 key = input('Секретный ключ: ')
@@ -24,7 +25,7 @@ else:
 #requested_year = int(input('Введите год:'))
 #requested_month = int(input('Введите месяц:'))
 requested_year = 2021
-requested_month = 3
+requested_month = 12
 list_data = read_file_data(file_name,requested_year,requested_month)
 data_array = build_data_array(list_data)
 id_list = id_employee(type_data=2)

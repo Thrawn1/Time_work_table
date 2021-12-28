@@ -47,12 +47,12 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         list_date.append(date)
     list_date.sort()
     for date in list_date:
-        ws.cell(column = 2, row = count, value = date)
-        ws.cell(count,2).border = Border(left,right,top,bottom)
         for id in time_table[date]:
             if id != 8 and id !=7:
                 ws.cell(column = 1,row = count, value=list_employee[1][id])
                 ws.cell(count,1).border = Border(left,right,top,bottom)
+                ws.cell(column = 2, row = count, value = date)
+                ws.cell(count,2).border = Border(left,right,top,bottom)
                 if time_table[date][id][2] == 'work' or time_table[date][id][2] == 'weekend':
                     ws.cell(column = 3,row = count, value=time_table[date][id][1].time())
                     ws.cell(count,3).border = Border(left,right,top,bottom)
@@ -115,5 +115,5 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.auto_filter.ref = 'A1:G24'
     #ws.auto_filter.add_sort_condition('A1:25')
     #ws.auto_filter.add_filter_column(0,['1', '25'])
-    wb.save("TEST_1111.xlsx")
+    wb.save("Декабрь_2021.xlsx")
     print('Файл сформирован')
