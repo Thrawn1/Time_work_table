@@ -4,9 +4,10 @@ from analyze_data import*
 from calculation_of_hours_and_wages import*
 from build_file_table_excel import build_file_excel
 from generation_pdf_file import generation_pdf_file
+from gen_html import build_html
 
-#file_name = 'tmp_data_one_id.dat'
-file_name = '2_attlog.dat'
+file_name = 'tmp_data_one_id.dat'
+#file_name = '2_attlog.dat'
 #file_name = 'n_1_attlog.dat'
 print('Если вы хотите сформировать файл с зарплатой - введите секретный ключ. Если нужен файл без зарплаты - введите t')
 key = input('Секретный ключ: ')
@@ -25,7 +26,7 @@ else:
 #requested_year = int(input('Введите год:'))
 #requested_month = int(input('Введите месяц:'))
 requested_year = 2021
-requested_month = 12
+requested_month = 3
 list_data = read_file_data(file_name,requested_year,requested_month)
 data_array = build_data_array(list_data)
 id_list = id_employee(type_data=2)
@@ -43,11 +44,10 @@ for id in id_list[1]:
 for id in id_list[1]:
     analyze_data_for_print(data_array,id,requested_year,requested_month)
 
+#print(data_array)
 work_time_employees=calculation_of_excess_working_hours_per_day(data_array)
-
 work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_month(work_time_employees)
-
 z = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
-
+build_html(data_array,work_time_employees)
 build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],z)
 #generation_pdf_file(0,'test')
