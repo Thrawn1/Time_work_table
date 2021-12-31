@@ -187,6 +187,24 @@ def build_html(time_table:dict,work_time_employees:dict):
             all_data_employee = (file_name,month_data_employee_for_html)
             return all_data_employee
 
-def build_data_per_month():
+def build_data_per_month(data_employee_total_for_month:dict):
+    """Функция создает структуру данных, которые можно передать в функцию построения html файлов. Принимает словарь, с данными за месяц для одного работника.
+    Возвращает словарь, с нужной для функции построения html-файла"""
+    
+    pass
+
+
+
+
+def html_builder():
+    """Функция .."""
+    pass
+
+def build_data_days_per_month_for_month():
+    """Функция .."""
+    pass
+
+def build_data_total_for_month_for_employee():
     """Функция ..."""
     pass
+
