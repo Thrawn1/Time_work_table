@@ -1,8 +1,7 @@
 import openpyxl
 from openpyxl.styles import Border, Side,Alignment,Font
 from id_employee import id_employee
-
-
+from analyze_data import month_name_for_print
 
 
 def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_workers_sum_of_all_data:dict,total_salary_id:dict):
@@ -113,7 +112,9 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         ws.cell(count,14).border = Border(left,right,top,bottom)
         count += 1
     ws.auto_filter.ref = 'A1:G24'
-    #ws.auto_filter.add_sort_condition('A1:25')
-    #ws.auto_filter.add_filter_column(0,['1', '25'])
-    wb.save("Декабрь_2021.xlsx")
-    print('Файл сформирован')
+    list_date =list(time_table.keys())
+    number_month = int(list_date[0][5:7])
+    str_year = list_date[0][:4]
+    name_file_excel = month_name_for_print(number_month)+ '_' + str_year + '.xlsx'
+    wb.save(name_file_excel)
+    print(f"Файл {name_file_excel} c общей таблицей сформирован")

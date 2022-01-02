@@ -1,5 +1,6 @@
 import locale
 from os import path
+from pickle import dump
 from sys import stderr
 from datetime import datetime, timedelta
 from calendar import  monthrange,weekday
@@ -222,6 +223,8 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                         time_table[date_key_for_edit][id][1] = data_to_write
                     else:
                         time_table[date_key_for_edit][id][0] = data_to_write
+                    with open('temporary.pickle', 'wb') as tmp_file:
+                        dump(time_table,tmp_file)
             print('Ввод данных об отметки подвержден!')
     
     if list_missed_day != 0:
@@ -247,6 +250,8 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                         time_table[missed_day] = {}
                         time_table[missed_day][id] = [data_to_write_end,data_to_write_begin]
                         time_table[missed_day][id].append('work')
+                    with open('temporary.pickle', 'wb') as tmp_file:
+                        dump(time_table,tmp_file)
                     
                 elif switch_variable == '2':
                     loop_variable =  1
@@ -261,6 +266,8 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                         time_table[missed_day] = {}
                         time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
                         time_table[missed_day][id].append('vacation')
+                    with open('temporary.pickle', 'wb') as tmp_file:
+                        dump(time_table,tmp_file)
                 
                 elif switch_variable == '3':
                     loop_variable =  1
@@ -275,5 +282,7 @@ def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
                         time_table[missed_day] = {}
                         time_table[missed_day][id] = [data_to_write_begin,data_to_write_end]
                         time_table[missed_day][id].append('truancy')
+                    with open('temporary.pickle', 'wb') as tmp_file:
+                        dump(time_table,tmp_file)
                 else:
                     print('Введите правильный пункт меню!')

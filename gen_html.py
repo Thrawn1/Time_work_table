@@ -1,4 +1,5 @@
 from id_employee import id_employee
+from datetime import timedelta
 
 
 def html_builder(id:int,all_data_dates_and_marks:dict,data_work_time_all_employees:dict,all_data_per_month_employees:dict,total_salary_employees:dict):
@@ -33,7 +34,7 @@ def build_data_days_per_month_for_month(id:int,all_data_dates_and_marks:dict,dat
     list_date.sort()
     all_data_per_month_for_marks_employee_for_html = []
     for date in list_date:
-        if id in list_id[1]:
+        if id in list_id[1] and id in all_data_dates_and_marks[date]:
             cell_data_dict = {}
             cell_data_dict['family'] = list_id[1][id]
             cell_data_dict['date'] = date
@@ -42,7 +43,12 @@ def build_data_days_per_month_for_month(id:int,all_data_dates_and_marks:dict,dat
             cell_data_dict['delta_time'] = str(data_work_time_all_employees[date][id][1])
             cell_data_dict['tag_overtime'] = data_work_time_all_employees[date][id][2]
             cell_data_dict['overtime'] = str(data_work_time_all_employees[date][id][0])
-            cell_data_dict['tag_day'] = data_work_time_all_employees[date][id][3]
+            if data_work_time_all_employees[date][id][3] == 'vacation':
+                cell_data_dict['tag_day'] = 'Отпуск'
+            elif data_work_time_all_employees[date][id][3] == 'truancy':
+                cell_data_dict['tag_day'] = 'Прогул'
+            else:
+                cell_data_dict['tag_day'] = data_work_time_all_employees[date][id][3]
             all_data_per_month_for_marks_employee_for_html.append(cell_data_dict)
     return all_data_per_month_for_marks_employee_for_html
 
@@ -59,9 +65,9 @@ def build_data_total_for_month_for_employee(id:int,all_data_per_month_employees:
     data_per_month_employee = all_data_per_month_employees[id]
     total_data_for_employee_month['family'] = list_id[1][id]
     total_data_for_employee_month['all_work_weekdays'] = data_per_month_employee[0][0]
-    total_data_for_employee_month['weekdays_overtime'] = str(data_per_month_employee[0][1])
+    total_data_for_employee_month['weekdays_overtime'] = str_time_overwork(data_per_month_employee[0][1])
     total_data_for_employee_month['work_weekend'] = data_per_month_employee[1][0]
-    total_data_for_employee_month['overtime_weekend'] = str(data_per_month_employee[1][1])
+    total_data_for_employee_month['overtime_weekend'] = str_time_overwork(data_per_month_employee[1][1])
     total_data_for_employee_month['vacation'] = data_per_month_employee[2]
     total_data_for_employee_month['salary'] = total_salary_employees[id]
     return total_data_for_employee_month
@@ -128,7 +134,6 @@ def gen_html_file(data_employee:tuple):
     for line in all_line_html:
         file.write(line)
     file.close()
-    print('Готово')
     
 
 def gen_block_topic_table(type_table:int):
@@ -146,17 +151,22 @@ def gen_block_topic_table(type_table:int):
     new_line = '\n'
     space = '  '
     if type_table == 1:
+        th_tag_merge_cell = '<th colspan="2" align="center">'
         topicsList=('Фамилия', 'Дата', 'Отметка входа', 'Отметка выхода', 'Общее время работы', 'Переработка')
     else:
-        topicsList = ('Фамилия', 'Отработано будних дней', 'Перерабокта', 'Рабочих выходных', 'Переработка в выходные дни', 'Количество дней отпуска','Зарплата')
+        topicsList = ('Фамилия', 'Отработано будних дней', 'Переработка в будние дни', 'Рабочих выходных', 'Переработка в выходные дни', 'Количество дней отпуска','Зарплата')
     lines_block = []
     line = 4*space + thead_tag_start + new_line
     lines_block.append(line)
     line = 6*space + tr_tag_start + new_line
     lines_block.append(line)
     for topic in topicsList:
-        line = 8*space + th_tag_start + topic + th_tag_end + new_line
-        lines_block.append(line)
+        if topic != 'Переработка':
+            line = 8*space + th_tag_start + topic + th_tag_end + new_line
+            lines_block.append(line)
+        else:
+            line = 8*space + th_tag_merge_cell + topic + th_tag_end + new_line
+            lines_block.append(line)
     line = 6*space + tr_tag_end + new_line
     lines_block.append(line)
     line = 4*space + thead_tag_end + new_line
@@ -180,6 +190,14 @@ def gen_block_data_day(data_day:dict):
     line_2 = 8*space + td_tag_start + data_day['family']  + td_tag_end + new_line
     line_3 = 8*space + td_tag_start + data_day['date']  + td_tag_end + new_line
     if data_day['tag_day'] == 'work':
+        line_4 = 8*space + td_tag_start + data_day['time_begin'] + td_tag_end + new_line
+        line_5 = 8*space + td_tag_start + data_day['time_end'] + td_tag_end + new_line
+        line_6 = 8*space + td_tag_start + data_day['delta_time'] + td_tag_end + new_line
+        line_7 = 8*space + td_tag_start + data_day['tag_overtime'] + td_tag_end + new_line
+        line_8 = 8*space + td_tag_start + data_day['overtime'] + td_tag_end + new_line
+        line_9 = 6*space + tr_tag_end + new_line
+        return (line_1,line_2,line_3,line_4,line_5,line_6,line_7,line_8,line_9)
+    elif data_day['tag_day'] == 'weekend':
         line_4 = 8*space + td_tag_start + data_day['time_begin'] + td_tag_end + new_line
         line_5 = 8*space + td_tag_start + data_day['time_end'] + td_tag_end + new_line
         line_6 = 8*space + td_tag_start + data_day['delta_time'] + td_tag_end + new_line
@@ -217,3 +235,27 @@ def gen_block_data_month_employee(data_month_dict:dict):
     line_9 = 6*space + tr_tag_end + new_line
     return (line_1,line_2,line_3,line_4,line_5,line_6,line_7,line_8,line_9)
 
+
+def str_time_overwork(time:timedelta):
+    """Функция преобразует общее время переработки в строковый стиль вида часы:минуты:секунды. 
+    Функция принимает объект типа timedetla. Возвращает строку"""
+    
+    
+    time_in_seconds = time.total_seconds()
+    hours = int(time_in_seconds//3600)
+    minutes = int((time_in_seconds - hours*3600)//60)
+    seconds = int(time_in_seconds - hours*3600 - minutes*60)
+    if len(str(hours)) == 1:
+        str_hours = '0' + str(hours)
+    else:
+        str_hours = str(hours)
+    if len(str(minutes)) == 1:
+        str_minutes = '0' + str(minutes)
+    else:
+        str_minutes = str(minutes)
+    if len(str(seconds)) == 1:
+        str_seconds = '0' + str(seconds)
+    else:
+        str_seconds = str(seconds)
+    str_time_overwork = str_hours + ':' + str_minutes + ':' + str_seconds
+    return str_time_overwork

@@ -42,3 +42,17 @@ def id_employee(name_id_file_relative = 'id_employee.dat',name_roles_file_relati
                     employee_dict_role = id_employee_list[i]
                     employee_dict_role[id] = name
         return id_employee_list
+
+
+def detection_id_employee_in_data_array(data_array:dict):
+    """Функция определяет, какие сотрудники работали в течении месяца. Принимает структуру данных, в которой есть данные о всех пользователях за месяц, их отметках прихода и ухода
+    Функция возвращает список, содержащий id """
+    pass
+    employees_who_worked_for_month = []
+    dict_all_employees = (id_employee(type_data=2))[1]
+    list_all_employees_manufactory = list(dict_all_employees.keys())
+    for  cell in data_array:
+        for id in data_array[cell]:
+            if id in list_all_employees_manufactory and id not in employees_who_worked_for_month:
+                employees_who_worked_for_month.append(id)
+    return employees_who_worked_for_month
