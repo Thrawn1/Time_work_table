@@ -1,5 +1,72 @@
 from id_employee import id_employee
 
+
+def html_builder(id:int,all_data_dates_and_marks:dict,data_work_time_all_employees:dict,all_data_per_month_employees:dict,total_salary_employees:dict):
+    """Функция вызывает функции, которые формируют структуры необходимые для построения html, а так же функцию построения html файла 
+    Принимает id работника, всю структуру данных, в которой есть данные о всех пользователях за месяц, их отметках прихода и ухода. Кроме того, функция принимает структуру данных,
+    которая содержит информацию об отработанных часах всех сотрудников. Кроме того, структуру данных, содержащую информацию о зарплатах всех сотрудников(при условии ввода корректного секретного ключа).
+    Функция выводит сообщение, о том, что файл с данными сформирован. """
+    
+
+    list_id = id_employee(type_data=2)
+    family = list_id[1][id]
+    all_data_per_month_for_marks_employee_for_html = build_data_days_per_month_for_month(id,all_data_dates_and_marks,data_work_time_all_employees)
+    total_data_for_employee_month = build_data_total_for_month_for_employee(id,all_data_per_month_employees,total_salary_employees)
+    str_month = all_data_per_month_for_marks_employee_for_html[0]['date'][5:7]
+    str_year = all_data_per_month_for_marks_employee_for_html[0]['date'][:4]
+    name_html_file = family + '_' + str_month + '_' + str_year + '.html'
+    data_employee = (name_html_file,all_data_per_month_for_marks_employee_for_html,total_data_for_employee_month)
+    gen_html_file(data_employee)
+    print('Файл готов:', name_html_file)
+
+
+def build_data_days_per_month_for_month(id:int,all_data_dates_and_marks:dict,data_work_time_all_employees:dict):
+    """Функция создает структуру данных, содержащую информацию о дате, отметки прихода и отметки ухода сотрудника. Функция принимает id сотрудника,
+    структуру данных, которая содержит информацию о датах и отметках всех пользователей. Функция возвращает список, состоящий из словарей и информацией
+    о каждом рабочем дне конктретного работника. """
+
+
+    list_id = id_employee(type_data=2)
+    list_date = []
+    for date in all_data_dates_and_marks.keys():
+        list_date.append(date)
+    list_date.sort()
+    all_data_per_month_for_marks_employee_for_html = []
+    for date in list_date:
+        if id in list_id[1]:
+            cell_data_dict = {}
+            cell_data_dict['family'] = list_id[1][id]
+            cell_data_dict['date'] = date
+            cell_data_dict['time_begin'] = all_data_dates_and_marks[date][id][1].time().isoformat(timespec = 'auto')
+            cell_data_dict['time_end'] = all_data_dates_and_marks[date][id][0].time().isoformat(timespec = 'auto')
+            cell_data_dict['delta_time'] = str(data_work_time_all_employees[date][id][1])
+            cell_data_dict['tag_overtime'] = data_work_time_all_employees[date][id][2]
+            cell_data_dict['overtime'] = str(data_work_time_all_employees[date][id][0])
+            cell_data_dict['tag_day'] = data_work_time_all_employees[date][id][3]
+            all_data_per_month_for_marks_employee_for_html.append(cell_data_dict)
+    return all_data_per_month_for_marks_employee_for_html
+
+
+def build_data_total_for_month_for_employee(id:int,all_data_per_month_employees:dict,total_salary_employees:dict):
+    """Функция создает структуру данных, содержащий суммарную информацию за месяц для одного работника. Функция принимает id  работника,
+    структуру, содержащую суммарную информацию за месяц для каждого работника, а так же структуру, содержащую информацию о зарплатах всех 
+    сотрудников(при условии ввода корректного секретного ключа).Функция возвращает словарь, содержаший всю суммарную информацию для конктреного работника,
+    который нужен для построения html файла"""
+
+
+    total_data_for_employee_month = {}
+    list_id = id_employee(type_data=2)
+    data_per_month_employee = all_data_per_month_employees[id]
+    total_data_for_employee_month['family'] = list_id[1][id]
+    total_data_for_employee_month['all_work_weekdays'] = data_per_month_employee[0][0]
+    total_data_for_employee_month['weekdays_overtime'] = str(data_per_month_employee[0][1])
+    total_data_for_employee_month['work_weekend'] = data_per_month_employee[1][0]
+    total_data_for_employee_month['overtime_weekend'] = str(data_per_month_employee[1][1])
+    total_data_for_employee_month['vacation'] = data_per_month_employee[2]
+    total_data_for_employee_month['salary'] = total_salary_employees[id]
+    return total_data_for_employee_month
+
+
 def gen_html_file(data_employee:tuple):
     """Функция создает начальные тэги html файла. Создает список, в который
     добавляются все строки. После генерации всех строк они из списка записываются разом в файл
@@ -149,62 +216,4 @@ def gen_block_data_month_employee(data_month_dict:dict):
     line_8 = 8*space + th_tag_start + str(data_month_dict['salary']) + th_tag_end + new_line
     line_9 = 6*space + tr_tag_end + new_line
     return (line_1,line_2,line_3,line_4,line_5,line_6,line_7,line_8,line_9)
-
-
-def build_html(time_table:dict,work_time_employees:dict):
-    """Функция принимает структуру данных за месяц для всех работников. Она преобразует структуру в кортежи с данными
-    для построения по кортежам html файлов для каждого из работников. Функция не возвраещет ничего, только выводит сообщение на экран """
-
-    list_id = id_employee(type_data=2)
-    list_date = []
-    for date in time_table.keys():
-        list_date.append(date)
-    list_date.sort()
-    for date in list_date:
-        for id in time_table[date]:
-            family = list_id[1][id]
-            month_data_employee_for_html = []
-            file_name = family + '_' + date[5:7] + '_' + date[:4] + '.html'
-            print(file_name)
-            if id in list_id[1]:
-                cell_data_dict = {}
-                date_str = date 
-                time_begin = time_table[date][id][1].time().isoformat(timespec = 'auto')
-                time_end = time_table[date][id][0].time().isoformat(timespec = 'auto')
-                delta_time = str(work_time_employees[date][id][1])
-                tag_overtime = work_time_employees[date][id][2]
-                overtime = str(work_time_employees[date][id][0])
-                tag_day = work_time_employees[date][id][3]
-                cell_data_dict['family'] = family
-                cell_data_dict['date'] = date_str
-                cell_data_dict['time_begin'] = time_begin
-                cell_data_dict['time_end'] = time_end
-                cell_data_dict['delta_time'] = delta_time
-                cell_data_dict['tag_overtime'] = tag_overtime
-                cell_data_dict['overtime'] = overtime
-                cell_data_dict['tag_day'] = tag_day
-                month_data_employee_for_html.append(cell_data_dict)
-            all_data_employee = (file_name,month_data_employee_for_html)
-            return all_data_employee
-
-def build_data_per_month(data_employee_total_for_month:dict):
-    """Функция создает структуру данных, которые можно передать в функцию построения html файлов. Принимает словарь, с данными за месяц для одного работника.
-    Возвращает словарь, с нужной для функции построения html-файла"""
-    
-    pass
-
-
-
-
-def html_builder():
-    """Функция .."""
-    pass
-
-def build_data_days_per_month_for_month():
-    """Функция .."""
-    pass
-
-def build_data_total_for_month_for_employee():
-    """Функция ..."""
-    pass
 

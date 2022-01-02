@@ -3,8 +3,8 @@ from id_employee import*
 from analyze_data import*
 from calculation_of_hours_and_wages import*
 from build_file_table_excel import build_file_excel
-from generation_pdf_file import generation_pdf_file
-from gen_html import build_html
+#from generation_pdf_file import generation_pdf_file
+from gen_html import html_builder
 
 file_name = 'tmp_data_one_id.dat'
 #file_name = '2_attlog.dat'
@@ -48,7 +48,14 @@ for id in id_list[1]:
 work_time_employees=calculation_of_excess_working_hours_per_day(data_array)
 work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_month(work_time_employees)
 z = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
-print(work_time_employees_restructuring[0])
+#print(z)
+#print('Test_1:')
+#print(work_time_employees_restructuring[0])
+#print('Test_2:')
+#print(work_time_employees_restructuring[1])
 #build_html(data_array,work_time_employees)
 build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],z)
 #generation_pdf_file(0,'test')
+list_for_test = [3,4,5]
+for id in list_for_test:
+    html_builder(id,all_data_dates_and_marks=data_array,data_work_time_all_employees=work_time_employees,all_data_per_month_employees=work_time_employees_restructuring[0],total_salary_employees=z)
