@@ -42,20 +42,23 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.cell(column = 6,row = 1).alignment = Alignment(horizontal='center')
     count = 2
     list_date = []
-    for date in time_table.keys():
+    tmp_data = build_data_for_excel_file(time_table)
+    for date in tmp_data.keys():
         list_date.append(date)
+    # for date in tmp_data.keys():
+    #     list_date.append(date)
     list_date.sort()
     for date in list_date:
-        for id in time_table[date]:
+        for id in tmp_data[date]:
             if id != 8 and id !=7:
                 ws.cell(column = 1,row = count, value=list_employee[1][id])
                 ws.cell(count,1).border = Border(left,right,top,bottom)
                 ws.cell(column = 2, row = count, value = date)
                 ws.cell(count,2).border = Border(left,right,top,bottom)
-                if time_table[date][id][2] == 'work' or time_table[date][id][2] == 'weekend':
-                    ws.cell(column = 3,row = count, value=time_table[date][id][1].time())
+                if tmp_data[date][id][2] == 'work' or tmp_data[date][id][2] == 'weekend':
+                    ws.cell(column = 3,row = count, value=tmp_data[date][id][1].time())
                     ws.cell(count,3).border = Border(left,right,top,bottom)
-                    ws.cell(column = 4,row = count, value=time_table[date][id][0].time())
+                    ws.cell(column = 4,row = count, value=tmp_data[date][id][0].time())
                     ws.cell(count,4).border = Border(left,right,top,bottom)
                     ws.cell(column = 5,row = count, value=work_time_employees[date][id][1])
                     ws.cell(count,5).border = Border(left,right,top,bottom)
@@ -67,12 +70,12 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
                     else:
                         ws.cell(column = 6,row = count, value=work_time_employees[date][id][2])
                         ws.cell(count,6).border = Border(left,right,top,bottom)
-                elif time_table[date][id][2] == 'vacation':
+                elif tmp_data[date][id][2] == 'vacation':
                     ws.cell(count,3).border = Border(left,right,top,bottom) # Сначала границы, потом объединение. Иначе граница будет не верной
                     ws.merge_cells(start_row=count,start_column=3,end_row=count,end_column=7)
                     ws.cell(column = 3,row = count, value='Отпуск')
                     ws.cell(column = 3,row = count).alignment = Alignment(horizontal='center')
-                elif time_table[date][id][2] == 'truancy':
+                elif tmp_data[date][id][2] == 'truancy':
                     ws.cell(count,3).border = Border(left,right,top,bottom)
                     ws.merge_cells(start_row=count,start_column=3,end_row=count,end_column=7)
                     ws.cell(column = 3,row = count, value='Прогул')
@@ -112,9 +115,21 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         ws.cell(count,14).border = Border(left,right,top,bottom)
         count += 1
     ws.auto_filter.ref = 'A1:G24'
-    list_date =list(time_table.keys())
+    list_date =list(tmp_data.keys())
     number_month = int(list_date[0][5:7])
     str_year = list_date[0][:4]
     name_file_excel = month_name_for_print(number_month)+ '_' + str_year + '.xlsx'
     wb.save(name_file_excel)
     print(f"Файл {name_file_excel} c общей таблицей сформирован")
+
+
+def build_data_for_excel_file(data_array:dict):
+    """Функция создает структуру данных, по которой строится таблица в Excel файла"""
+    list_employes = id_employee(type_data=2)[1]
+    data_for_excel_table = {}
+    for date in data_array:
+        for id in data_array[date]:
+            if id in list_employes:
+                data_for_excel_table[date] = {}
+                data_for_excel_table[date][id] = data_array[date][id]
+    return data_for_excel_table
