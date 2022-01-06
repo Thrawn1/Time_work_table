@@ -5,7 +5,14 @@ from analyze_data import month_name_for_print
 
 
 def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_workers_sum_of_all_data:dict,total_salary_id:dict):
-    """"""
+    """Функция строит таблицу в excel файле. В функцию передаются: структура данных, содержащих данные об отметках и всех работниках за месяц,
+    структуру данных, содержащих информацию о переработках в каждом дне месяца, для каждого работника, структуру данных, содержащую информацию
+    за месяц для каждого работника, структуру, содержащую информацию про зарплату(если введен секретный ключ)
+    Создает файл, внутрь внего записываются данные из структур и создаются границы. После этого файл сохраняется с именем, указывающим на месяц и год
+    за кторый взяты данные. Имя созданного файла выводиться на экран, если файл создан.
+    """
+
+    
     wb = Workbook()
     list_employee = id_employee(type_data=2)
     ws = wb.active
@@ -116,7 +123,7 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         ws.cell(column = 16,row = count, value=total_salary_id[id][2])
         ws.cell(count,16).border = Border(left,right,top,bottom)
         count += 1
-    ws.auto_filter.ref = 'A1:G24'
+    ws.auto_filter.ref = 'A1:G24' # Создает фильтр внутри excel таблицы
     list_date =list(time_table.keys())
     number_month = int(list_date[0][5:7])
     str_year = list_date[0][:4]

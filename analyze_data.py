@@ -8,7 +8,10 @@ from id_employee import id_employee
 
 
 def translation_into_russian_names(eng_name:str,type_name:str):
-    """Функция принимает имена месяца или дня недели на английском языке, а так же ключ, определяющий что именно передается. Возвращает имена на русском в строковом формате"""
+    """Функция принимает имена месяца или дня недели на английском языке, а так же ключ, определяющий что именно передается. Возвращает имена на русском в строковом формате
+    """
+
+
     if type_name == 'month':
         months_names = {'January':'Января','February':'Февраля','March':'Марта','April':'Апреля','May':'Мая','June':'Июня','July':'Июля','August':'Августа','September':'Сентября','October':'Октября','November':'Ноября','December':'Декабря'}
         name_month = months_names[eng_name]
@@ -19,22 +22,32 @@ def translation_into_russian_names(eng_name:str,type_name:str):
         name_weekday = weekday_names[eng_name]
         return name_weekday
 
-def month_name_for_print(month_id):
-    """Функция возвращает название месяца на русском. Принимает номер месяца"""
+
+def month_name_for_print(month_id:int):
+    """Функция возвращает название месяца на русском. Принимает номер месяца
+    """
+
+
     months_names = {1:'Январь',2:'Февраль',3:'Март',4:'Апрель',5:'Май',6:'Июнь',7:'Июль',8:'Август',9:'Сентябрь',10:'Октябрь',11:'Ноябрь',12:'Декабрь'}
     name_month = months_names[month_id]
     return name_month
 
+
 def reading_employee_work_date(data_dict:dict,id:int):
-    """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка"""
+    """Функция получения всех рабочих дней сотрудника по которым есть хотя бы одна метка
+    """
     data_employer_work = []
     for data_date in data_dict.keys():
         if id in data_dict[data_date].keys():
             data_employer_work.append(data_date)
     return data_employer_work
 
+
 def definition_of_working_day(date:str):
-    """Функция определяет, какого типа день - рабочий, выходной или праздничный. Принимает дату в строковом виде, использует списки исключений(праздников и перенесенных рабочих дней). Возвращает метку - день рабочий, выходной или праздничный """
+    """Функция определяет, какого типа день - рабочий, выходной или праздничный. Принимает дату в строковом виде, использует списки исключений(праздников и перенесенных рабочих дней). Возвращает метку - день рабочий, выходной или праздничный
+    """
+
+    
     year = int(date[0:4])
     month = int(date[5:7])
     day = int(date[8:10])
@@ -74,8 +87,12 @@ def definition_of_working_day(date:str):
     else:
         return ('holiday',str_weekday)
 
+
 def generation_of_lists_of_days(requested_year:int,requested_month:int):
-    """Функция принимает значения года и месяца. Функция возвращает список, содержащий списки  - рабочие дни месяца и выходные и праздничные дни месяца """
+    """Функция принимает значения года и месяца. Функция возвращает список, содержащий списки  - рабочие дни месяца и выходные и праздничные дни месяца
+    """
+    
+    
     last_day_request_month = monthrange(requested_year,requested_month)[1]
     list_day_month = [[],[]]
     for day in range(1,last_day_request_month+1, 1):
@@ -96,9 +113,12 @@ def generation_of_lists_of_days(requested_year:int,requested_month:int):
             list_day_month[1].append(date_str)
     return list_day_month
 
+
 def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
-    """Функция-генератор 
+    """Функция-генератор
     """
+    
+    
     if step.days > 0:
         while start < stop:
             yield start
@@ -110,9 +130,12 @@ def daterange(start,stop,step=timedelta(days = 1),inclusive = False):
     if inclusive and start == stop:
         yield start
 
+
 def search_for_missed_working_days_employee(time_table:dict,id:int,year:int,month:int):
-    """Данная функция анализирует все записи работников за выбранный месяц и возвращает списки дат без отметок для каждого пользователя
+    """Данная функция анализирует все записи работников за выбранный месяц и возвращает список дат, где нет отметок для каждого пользователя
     """
+
+
     missed_days = []
     month_days_work = generation_of_lists_of_days(year,month)
     emoyee_days_work = reading_employee_work_date(time_table,id)
@@ -129,12 +152,15 @@ def search_for_missed_working_days_employee(time_table:dict,id:int,year:int,mont
     else: 
         return 0
 
+
 def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,requested_month:int):
     """Функция поиска пропущенных отметок прихода или ухода за месяц.
-       Принимает весь словарь целиком, в котором структурированы id работников, даты и временные отметки из файла данных.
+       Принимает всю структуру целиком, в которой содержиться id работников, даты и временные отметки из файла данных.
        Принимает значения рассматриваемого года и месяца, а так же id сотрудника. 
-       Фукнция возвращает список,в котором пара значений - дата и время одиночной отмеки.
+       Фукнция возвращает список,в котором пара значений - дата в которой одиночная метка и время этой метки
     """
+
+
     missing_mark_list = []
     last_day_month = monthrange(requested_year,requested_month)[1]
     first_day_month = datetime(requested_year,requested_month,1)
@@ -154,11 +180,15 @@ def search_for_missed_marks_employee(time_table:dict,id:int,requested_year:int,r
     else:
         return 0
 
+
 def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
-    """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
-        за какие дни нет даных, а затем выводит полученные данные на экран. 
+    """ Функция анализирует сформированную по файлу структуру, ищет, у кого не хватает отметок ухода или прихода, 
+        за какие дни нет даных, а затем выводит полученные данные на экран. Функция принимает структуру данных по файлу, id работника, 
+        год и месяц, по которым построеная структура
     """
-    locale.setlocale(locale.LC_ALL,'en_US')
+
+    
+    locale.setlocale(locale.LC_ALL,'en_US') #Указание локали необходимо для корректного вывода в терминал сообщений на русском 
     list_employee = id_employee()
     list_marks = search_for_missed_marks_employee(time_table,id,year,month)
     list_missed_day = search_for_missed_working_days_employee(time_table,id,year,month)
@@ -197,10 +227,15 @@ def analyze_data_for_print(time_table:dict,id:int,year:int,month:int):
                 print(output_str)
                 print('\t\t\t------------------')
 
+
 def analyze_data_for_edit(time_table:dict,id:int,year:int,month:int):
-    """ Функция анализирует сформированный по файлу данных словарь, ищет, у кого не хватает отметок ухода или прихода, 
-        за какие дни нет даных, а затем выводит полученные данные на экран. 
+    """ Функция анализирует сформированную по файлу структуру, ищет, у кого не хватает отметок ухода или прихода, 
+        за какие дни нет даных, а затем выводит на экран предложение, как может быть обработаны найденные недочеты. После выбора варианта и ввода
+        необходимой информации - функция изменяет структуру в памяти, и записывается дамп этой структуры в pickle-файл. Функция принимает структуру 
+        данных по файлу, id работника, год и месяц, по которым построеная структура 
     """
+
+    
     name_list_tmp = id_employee(type_data = 2)
     name_list = name_list_tmp[1]
     name_employee = name_list[id]

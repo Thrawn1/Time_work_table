@@ -10,7 +10,10 @@ from html_files_generation import html_builder,build_data_total_for_month_for_em
 
 
 def main():
-    """Главня функция"""
+    """Главня функция
+    """
+    
+    
     file_name = '2021_12_attlog_for_test.dat'
     print('\n\t\tСистема расчета заработной платы и учета рабочего времени работников\n\n')
     print('Если вы хотите сформировать файл с зарплатой - введите секретный ключ. Если нужен файл без зарплаты - введите t\n\n\n')
