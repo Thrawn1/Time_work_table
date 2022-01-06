@@ -1,12 +1,12 @@
-import openpyxl
+from openpyxl import Workbook
 from openpyxl.styles import Border, Side,Alignment,Font
 from id_employee import id_employee
 from analyze_data import month_name_for_print
 
 
 def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_workers_sum_of_all_data:dict,total_salary_id:dict):
-
-    wb = openpyxl.Workbook()
+    """"""
+    wb = Workbook()
     list_employee = id_employee(type_data=2)
     ws = wb.active
     ws.column_dimensions['A'].width = 16.44 #Ширина столбцов в условных единицах табличного процессора(1 единица - 19,58 мм)
@@ -31,7 +31,6 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     bottom = Side(border_style,color)
     left = Side(border_style,color)
     font_text_headline = Font(name='Calibri',size=11,bold=True)
-    #ws.cell(1,1).border = Border(left,right,top,bottom)
     topicsList=['Фамилия', 'Дата', 'Отметка входа', 'Отметка выхода', 'Общее время работы', 'Переработка']
     topicCounter=1
     for topic in topicsList:
@@ -43,11 +42,8 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.cell(column = 6,row = 1).alignment = Alignment(horizontal='center')
     count = 2
     list_date = []
-    #tmp_time = build_data_for_excel_file(time_table)
     for date in time_table.keys():
         list_date.append(date)
-    # for date in time_table.keys():
-    #     list_date.append(date)
     list_date.sort()
     for date in list_date:
         for id in time_table[date]:
