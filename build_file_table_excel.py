@@ -22,7 +22,8 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
     ws.column_dimensions['K'].width = 17.93
     ws.column_dimensions['L'].width = 21.96
     ws.column_dimensions['M'].width = 28.09
-    ws.column_dimensions['N'].width = 10.27 
+    ws.column_dimensions['N'].width = 10.27
+    ws.column_dimensions['P'].width = 10.3  
     border_style='thin'
     color='FF000000'
     top = Side(border_style,color)
@@ -85,7 +86,7 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
             if id != 8 and id != 7:
                 count += 1
     count += 3
-    topicsList=['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных','Переработка выходных', 'Количество дней дней отпуска', 'Зарплата']
+    topicsList=['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных','Переработка выходных', 'Количество дней дней отпуска', 'Оклад','Молоко','Зарплата']
     topicCounter=8
     for topic in topicsList:
         ws.cell(column = topicCounter, row = count, value = topic)
@@ -112,8 +113,12 @@ def build_file_excel(time_table:dict,work_time_employees:dict,working_hours_of_w
         ws.cell(column = 13,row = count, value=working_hours_of_workers_sum_of_all_data[id][2])
         ws.cell(count,13).border = Border(left,right,top,bottom)
         ws.cell(column = 13,row = count).alignment = Alignment(horizontal='center')
-        ws.cell(column = 14,row = count, value=total_salary_id[id])
+        ws.cell(column = 14,row = count, value=total_salary_id[id][0])
         ws.cell(count,14).border = Border(left,right,top,bottom)
+        ws.cell(column = 15,row = count, value=total_salary_id[id][1])
+        ws.cell(count,15).border = Border(left,right,top,bottom)
+        ws.cell(column = 16,row = count, value=total_salary_id[id][2])
+        ws.cell(count,16).border = Border(left,right,top,bottom)
         count += 1
     ws.auto_filter.ref = 'A1:G24'
     list_date =list(time_table.keys())

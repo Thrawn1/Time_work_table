@@ -69,7 +69,9 @@ def build_data_total_for_month_for_employee(id:int,all_data_per_month_employees:
     total_data_for_employee_month['work_weekend'] = data_per_month_employee[1][0]
     total_data_for_employee_month['overtime_weekend'] = str_time_overwork(data_per_month_employee[1][1])
     total_data_for_employee_month['vacation'] = data_per_month_employee[2]
-    total_data_for_employee_month['salary'] = total_salary_employees[id]
+    total_data_for_employee_month['salary'] = total_salary_employees[id][0]
+    total_data_for_employee_month['milk'] = total_salary_employees[id][1]
+    total_data_for_employee_month['salary_whith_milk'] = total_salary_employees[id][2]
     return total_data_for_employee_month
 
 
@@ -146,7 +148,7 @@ def gen_block_topic_table(type_table:int):
     th_tag_end =  '</th>'
     thead_tag_start = '<thead>'
     thead_tag_end = '</thead>'
-    tr_tag_start = '<tr style="text-align: right;">'
+    tr_tag_start = '<tr style="text-align: center;">'
     tr_tag_end = '</tr>'
     new_line = '\n'
     space = '  '
@@ -154,7 +156,7 @@ def gen_block_topic_table(type_table:int):
         th_tag_merge_cell = '<th colspan="2" align="center">'
         topicsList=('Фамилия', 'Дата', 'Отметка входа', 'Отметка выхода', 'Общее время работы', 'Переработка')
     else:
-        topicsList = ('Фамилия', 'Отработано будних дней', 'Переработка в будние дни', 'Рабочих выходных', 'Переработка в выходные дни', 'Количество дней отпуска','Зарплата')
+        topicsList = ('Фамилия', 'Отработано будних дней', 'Переработка в будние дни', 'Рабочих выходных', 'Переработка в выходные дни', 'Количество дней отпуска','Оклад','Молоко','Зарплата')
     lines_block = []
     line = 4*space + thead_tag_start + new_line
     lines_block.append(line)
@@ -232,8 +234,10 @@ def gen_block_data_month_employee(data_month_dict:dict):
     line_6 = 8*space + th_tag_start + data_month_dict['overtime_weekend'] + th_tag_end + new_line
     line_7 = 8*space + th_tag_start + str(data_month_dict['vacation']) + th_tag_end + new_line
     line_8 = 8*space + th_tag_start + str(data_month_dict['salary']) + th_tag_end + new_line
-    line_9 = 6*space + tr_tag_end + new_line
-    return (line_1,line_2,line_3,line_4,line_5,line_6,line_7,line_8,line_9)
+    line_9 = 8*space + th_tag_start + str(data_month_dict['milk']) + th_tag_end + new_line
+    line_10 = 8*space + th_tag_start + str(data_month_dict['salary_whith_milk']) + th_tag_end + new_line
+    line_11 = 6*space + tr_tag_end + new_line
+    return (line_1,line_2,line_3,line_4,line_5,line_6,line_7,line_8,line_9,line_10,line_11)
 
 
 def str_time_overwork(time:timedelta):

@@ -9,7 +9,7 @@ from build_file_table_excel import build_file_excel
 from gen_html import html_builder
 
 
-file_name = '2021_12_attlog.dat'
+file_name = '2021_12_attlog_for_test.dat'
 #file_name = 'tmp_data_one_id.dat'
 print('Если вы хотите сформировать файл с зарплатой - введите секретный ключ. Если нужен файл без зарплаты - введите t')
 key = input('Секретный ключ: ')
@@ -53,13 +53,13 @@ for id in id_list[1]:
 
 work_time_employees=calculation_of_excess_working_hours_per_day(data_array)
 work_time_employees_restructuring = calculation_of_exceeding_working_hours_per_month(work_time_employees)
-z = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
-build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],z)
+total_salary = calculation_wages(work_time_employees_restructuring[0],secret_key_raw)
+build_file_excel(data_array,work_time_employees,work_time_employees_restructuring[0],total_salary)
 
 employees_who_worked_for_month = detection_id_employee_in_data_array(data_array)
 
 for id in employees_who_worked_for_month:
-    html_builder(id,all_data_dates_and_marks=data_array,data_work_time_all_employees=work_time_employees,all_data_per_month_employees=work_time_employees_restructuring[0],total_salary_employees=z)
+    html_builder(id,all_data_dates_and_marks=data_array,data_work_time_all_employees=work_time_employees,all_data_per_month_employees=work_time_employees_restructuring[0],total_salary_employees=total_salary)
 try:
     remove('temporary.pickle')
 except:
