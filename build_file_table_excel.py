@@ -55,7 +55,7 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
     list_date.sort()
     for date in list_date:
         for id in time_table[date]:
-            if id != 8 and id != 7:
+            if id != 8 and id != 7 and id != 27:
                 ws.cell(column=1, row=count, value=list_employee[1][id])
                 ws.cell(count, 1).border = Border(left, right, top, bottom)
                 ws.cell(column=2, row=count, value=date)
@@ -100,7 +100,7 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
                         horizontal='center')
                 else:
                     pass
-            if id != 8 and id != 7:
+            if id != 8 and id != 7 and id != 27:
                 count += 1
     count += 3
     topicsList = ['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных',
