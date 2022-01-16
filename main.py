@@ -41,13 +41,14 @@ def main():
         data_array = build_data_array(list_data)
         name_month_for_print = month_name_for_print(requested_month)
         print(name_month_for_print, ' ', requested_year, ' ', 'год')
-    id_list = id_employee(type_data=2)
-    for id in id_list[1]:
+    id_list = id_employee(type_data=1)
+    print(id_list)
+    for id in id_list:
         analyze_data_for_print(data_array, id, requested_year, requested_month)
-    for id in id_list[1]:
+    for id in id_list:
         analyze_data_for_print(data_array, id, requested_year, requested_month)
         analyze_data_for_edit(data_array, id, requested_year, requested_month)
-    for id in id_list[1]:
+    for id in id_list:
         analyze_data_for_print(data_array, id, requested_year, requested_month)
     work_time_employees = calculation_of_excess_working_hours_per_day(
         data_array)

@@ -192,9 +192,23 @@ def analyze_data_for_print(time_table: dict, id: int, year: int, month: int):
     # Указание локали необходимо для корректного вывода в терминал сообщений на русском
     locale.setlocale(locale.LC_ALL, 'en_US')
     list_employee = id_employee()
-    list_marks = search_for_missed_marks_employee(time_table, id, year, month)
-    list_missed_day = search_for_missed_working_days_employee(
-        time_table, id, year, month)
+    all_employee_by_role = id_employee(type_data=2) # Список, разделенный по ролям
+    match id: #Использование этой конструкции заменяет ветвление if-elif-else. Проверяется тип данных для перменной id
+        #Затем с помощью guard(защитника) проверяется вхождение в словарь.
+        case int() if id in all_employee_by_role[1]:
+            list_missed_day = search_for_missed_working_days_employee(
+                time_table, id, year, month)
+            list_marks = search_for_missed_marks_employee(
+                time_table, id, year, month)
+        case int() if id in all_employee_by_role[3]:
+            list_missed_day = search_for_missed_working_days_employee(
+                time_table, id, year, month)
+            list_marks = 0
+        case _: #Для ролей кладовщик и руководство используется метод wildcard, который создает переменные с нулем
+            #Это необходимо для дальнейшего корректного завершения кода
+            list_marks = 0
+            list_missed_day = 0
+    
     name_employee = list_employee[id]
     if list_marks != 0 or list_missed_day != 0:
         print('--------------------------------------------------------------------------------------------------------------------------------------------')
@@ -244,12 +258,19 @@ def analyze_data_for_edit(time_table: dict, id: int, year: int, month: int):
         данных по файлу, id работника, год и месяц, по которым построеная структура 
     """
 
-    name_list_tmp = id_employee(type_data=2)
-    name_list = name_list_tmp[1]
-    name_employee = name_list[id]
-    list_marks = search_for_missed_marks_employee(time_table, id, year, month)
-    list_missed_day = search_for_missed_working_days_employee(
-        time_table, id, year, month)
+    all_employee_by_role = id_employee(type_data=2)
+    
+    name_employee = id_employee()[id]
+    match id:
+        case int() if id in all_employee_by_role[1]:
+            list_marks = search_for_missed_marks_employee(time_table, id, year, month)
+            list_missed_day = search_for_missed_working_days_employee(time_table, id, year, month)
+        case int() if id in all_employee_by_role[3]:
+            list_missed_day = search_for_missed_working_days_employee(time_table, id, year, month)
+            list_marks = 0
+        case _:
+            list_marks = 0
+            list_missed_day = 0
     if list_marks != 0:
         print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee +
               " имеет только одну отметку в рабочем дне!", file=stderr)
