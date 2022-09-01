@@ -1,6 +1,6 @@
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, Alignment, Font
-from id_employee import id_employee
+from id_employee import id_employee,get_name_employee
 from analyze_data import month_name_for_print
 
 
@@ -55,8 +55,8 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
     list_date.sort()
     for date in list_date:
         for id in time_table[date]:
-            if id != 8 and id != 7 and id != 27:
-                ws.cell(column=1, row=count, value=list_employee[1][id])
+            if id != 7 and id != 27:
+                ws.cell(column=1, row=count, value=get_name_employee(id))
                 ws.cell(count, 1).border = Border(left, right, top, bottom)
                 ws.cell(column=2, row=count, value=date)
                 ws.cell(count, 2).border = Border(left, right, top, bottom)
@@ -100,7 +100,7 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
                         horizontal='center')
                 else:
                     pass
-            if id != 8 and id != 7 and id != 27:
+            if id != 7 and id != 27:
                 count += 1
     count += 3
     topicsList = ['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных',
@@ -112,7 +112,7 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
         topicCounter += 1
     count += 1
     for id in working_hours_of_workers_sum_of_all_data.keys():
-        ws.cell(column=8, row=count, value=list_employee[1][id])
+        ws.cell(column=8, row=count, value=get_name_employee(id))
         ws.cell(count, 8).border = Border(left, right, top, bottom)
         number_worked_day = working_hours_of_workers_sum_of_all_data[id][0][0]
         ws.cell(column=9, row=count, value=number_worked_day)

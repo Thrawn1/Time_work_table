@@ -26,6 +26,13 @@ def calculation_of_excess_working_hours_per_day(time_table: dict):
                 tag_day = time_table[cell_date][cell_id][2]
                 work_time_employees[cell_date][cell_id] = (
                     abs_delta_time, hours_worked, tag_time, tag_day)
+            elif cell_id in list_employee[3]:
+                tag_day = 'work'
+                tag_time = ''
+                abs_delta_time = timedelta(seconds=0)
+                hours_worked = timedelta(hours=8)
+                work_time_employees[cell_date][cell_id] = (
+                    abs_delta_time, hours_worked, tag_time, tag_day)
     return work_time_employees
 
 
@@ -84,6 +91,7 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data: dict, secret_key
     сумма за молоко, и общаяя зарплата(оклад + молоко, но без премий). 
     """
 
+    id_list = id_employee(type_data=2)
     wege_rates_name_file = 'wage_rates.dat'
     wege_rates_file = path.join(
         'data', 'variable_data_for_app', wege_rates_name_file)
@@ -101,22 +109,30 @@ def calculation_wages(working_hours_of_workers_sum_of_all_data: dict, secret_key
         rate = round(float(raw_data_rate_temporarily)*secret_key)
         money_rate_all_employes[int(data[0])] = rate
     for id in working_hours_of_workers_sum_of_all_data.keys():
-        money_rate_employee = money_rate_all_employes[id]
-        work_shift_time_in_seconds = 8*3600
-        rate_per_second = money_rate_employee/work_shift_time_in_seconds
-        money_for_milk = (
-            working_hours_of_workers_sum_of_all_data[id][0][0] + working_hours_of_workers_sum_of_all_data[id][1][0])*30
-        salary_for_weekdays = money_rate_employee * \
-            working_hours_of_workers_sum_of_all_data[id][0][0] + 1.5 * rate_per_second * \
-            working_hours_of_workers_sum_of_all_data[id][0][1].total_seconds()
-        salary_for_weekends = 1.5 * money_rate_employee * \
-            working_hours_of_workers_sum_of_all_data[id][1][0] + 1.5 * 1.5 * rate_per_second * \
-            working_hours_of_workers_sum_of_all_data[id][1][1].total_seconds()
-        salary_for_vacation = money_rate_employee * \
-            working_hours_of_workers_sum_of_all_data[id][2]
-        total_salary = salary_for_weekdays + salary_for_weekends + salary_for_vacation
-        total_salary = round(total_salary, 2)
-        total_salary_with_money_for_milk = total_salary + money_for_milk
-        total_salary_id[id] = (total_salary, money_for_milk,
-                               total_salary_with_money_for_milk)
+        if id in id_list[1]:
+            money_rate_employee = money_rate_all_employes[id]
+            work_shift_time_in_seconds = 8*3600
+            rate_per_second = money_rate_employee/work_shift_time_in_seconds
+            money_for_milk = (
+                working_hours_of_workers_sum_of_all_data[id][0][0] + working_hours_of_workers_sum_of_all_data[id][1][0])*40
+            salary_for_weekdays = money_rate_employee * \
+                working_hours_of_workers_sum_of_all_data[id][0][0] + 1.5 * rate_per_second * \
+                working_hours_of_workers_sum_of_all_data[id][0][1].total_seconds()
+            salary_for_weekends = 1.5 * money_rate_employee * \
+                working_hours_of_workers_sum_of_all_data[id][1][0] + 1.5 * 1.5 * rate_per_second * \
+                working_hours_of_workers_sum_of_all_data[id][1][1].total_seconds()
+            salary_for_vacation = money_rate_employee * \
+                working_hours_of_workers_sum_of_all_data[id][2]
+            total_salary = salary_for_weekdays + salary_for_weekends + salary_for_vacation
+            total_salary = round(total_salary, 2)
+            total_salary_with_money_for_milk = total_salary + money_for_milk
+            total_salary_id[id] = (total_salary, money_for_milk,
+                                total_salary_with_money_for_milk)
+        elif id in id_list[3]:
+            money_rate_employee = money_rate_all_employes[id]
+            total_salary = (working_hours_of_workers_sum_of_all_data[id][0][0] + working_hours_of_workers_sum_of_all_data[id][1][0])*money_rate_employee
+            money_for_milk = 0
+            total_salary_with_money_for_milk = total_salary + money_for_milk
+            total_salary_id[id] = (total_salary, money_for_milk,
+                                total_salary_with_money_for_milk)
     return total_salary_id
