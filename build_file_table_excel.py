@@ -1,6 +1,6 @@
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, Alignment, Font
-from id_employee import id_employee,get_name_employee
+from id_employee import get_name_employee,verification_of_identity_for_permission_to_calculate
 from analyze_data import month_name_for_print
 
 
@@ -13,7 +13,6 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
     """
 
     wb = Workbook()
-    list_employee = id_employee(type_data=2)
     ws = wb.active
     # Ширина столбцов в условных единицах табличного процессора(1 единица - 19,58 мм)
     ws.column_dimensions['A'].width = 16.44
@@ -55,7 +54,7 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
     list_date.sort()
     for date in list_date:
         for id in time_table[date]:
-            if id != 7 and id != 27:
+            if verification_of_identity_for_permission_to_calculate(id) == True:
                 ws.cell(column=1, row=count, value=get_name_employee(id))
                 ws.cell(count, 1).border = Border(left, right, top, bottom)
                 ws.cell(column=2, row=count, value=date)
@@ -100,7 +99,7 @@ def build_file_excel(time_table: dict, work_time_employees: dict, working_hours_
                         horizontal='center')
                 else:
                     pass
-            if id != 7 and id != 27:
+            if verification_of_identity_for_permission_to_calculate(id) == True:
                 count += 1
     count += 3
     topicsList = ['Фамилия', 'Отработано будних день', 'Переработка', 'Рабочих выходных',
