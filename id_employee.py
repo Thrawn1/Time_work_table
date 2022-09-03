@@ -1,3 +1,4 @@
+from logging import exception
 from os import path
 
 
@@ -53,10 +54,28 @@ def detection_id_employee_in_data_array(data_array: dict):
     пользователях за месяц, их отметках прихода и ухода. Функция возвращает список, содержащий id """
 
     employees_who_worked_for_month = []
-    dict_all_employees = (id_employee(type_data=2))[1]
+    dict_all_employees = id_employee()
     list_all_employees_manufactory = list(dict_all_employees.keys())
     for cell in data_array:
         for id in data_array[cell]:
             if id in list_all_employees_manufactory and id not in employees_who_worked_for_month:
                 employees_who_worked_for_month.append(id)
     return employees_who_worked_for_month
+
+def get_name_employee(id):
+    """Функция возвращает имя сотрудника по его id"""
+    id_employee_list = id_employee()
+    return id_employee_list[id]
+
+def verification_of_identity_for_permission_to_calculate(id:int):
+    """Функция возвращает True если id работника предназначен для расчетов, иначе False"""
+    file_name = path.join('data', 'variable_data_for_app', 'settlement_exceptions.dat')
+    file = open(file_name, 'r', encoding='utf-8')
+    exception_list_id = []
+    for line in file:
+        id_exeption = int(line.rstrip('/n'))
+        exception_list_id.append(id_exeption)
+    if id in exception_list_id:
+        return False
+    else:
+        return True

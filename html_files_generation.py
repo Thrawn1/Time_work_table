@@ -1,4 +1,4 @@
-from id_employee import id_employee
+from id_employee import id_employee,get_name_employee
 from datetime import timedelta
 
 
@@ -10,8 +10,7 @@ def html_builder(id: int, all_data_dates_and_marks: dict, data_work_time_all_emp
     выводит сообщение, о том, что файл с данными сформирован и его имя
     """
 
-    list_id = id_employee(type_data=2)
-    family = list_id[1][id]
+    family = get_name_employee(id)
     all_data_per_month_for_marks_employee_for_html = build_data_days_per_month_for_month(
         id, all_data_dates_and_marks, data_work_time_all_employees)
     total_data_for_employee_month = build_data_total_for_month_for_employee(
@@ -31,16 +30,16 @@ def build_data_days_per_month_for_month(id: int, all_data_dates_and_marks: dict,
     Функция возвращает список, состоящий из словарей и информацией о каждом рабочем дне конктретного работника
     """
 
-    list_id = id_employee(type_data=2)
+    list_id = id_employee()
     list_date = []
     for date in all_data_dates_and_marks.keys():
         list_date.append(date)
     list_date.sort()
     all_data_per_month_for_marks_employee_for_html = []
     for date in list_date:
-        if id in list_id[1] and id in all_data_dates_and_marks[date]:
+        if id in list_id and id in all_data_dates_and_marks[date]:
             cell_data_dict = {}
-            cell_data_dict['family'] = list_id[1][id]
+            cell_data_dict['family'] = list_id[id]
             cell_data_dict['date'] = date
             cell_data_dict['time_begin'] = all_data_dates_and_marks[date][id][1].time(
             ).isoformat(timespec='auto')
@@ -70,9 +69,9 @@ def build_data_total_for_month_for_employee(id: int, all_data_per_month_employee
     """
 
     total_data_for_employee_month = {}
-    list_id = id_employee(type_data=2)
+    list_id = id_employee()
     data_per_month_employee = all_data_per_month_employees[id]
-    total_data_for_employee_month['family'] = list_id[1][id]
+    total_data_for_employee_month['family'] = list_id[id]
     total_data_for_employee_month['all_work_weekdays'] = data_per_month_employee[0][0]
     total_data_for_employee_month['weekdays_overtime'] = str_time_overwork(
         data_per_month_employee[0][1])

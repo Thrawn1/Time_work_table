@@ -2,7 +2,7 @@ from build_data_array import build_data_array, read_file_data
 from os import remove
 from os.path import exists
 from pickle import load
-from id_employee import id_employee, detection_id_employee_in_data_array
+from id_employee import id_employee, detection_id_employee_in_data_array,verification_of_identity_for_permission_to_calculate
 from analyze_data import analyze_data_for_print, analyze_data_for_edit, month_name_for_print
 from calculation_of_hours_and_wages import calculation_of_exceeding_working_hours_per_month, calculation_of_excess_working_hours_per_day, calculation_wages
 from build_file_table_excel import build_file_excel
@@ -41,13 +41,13 @@ def main():
         data_array = build_data_array(list_data)
         name_month_for_print = month_name_for_print(requested_month)
         print(name_month_for_print, ' ', requested_year, ' ', 'год')
-    id_list = id_employee(type_data=2)
-    for id in id_list[1]:
+    id_list = id_employee()
+    for id in id_list:
         analyze_data_for_print(data_array, id, requested_year, requested_month)
-    for id in id_list[1]:
+    for id in id_list:
         analyze_data_for_print(data_array, id, requested_year, requested_month)
         analyze_data_for_edit(data_array, id, requested_year, requested_month)
-    for id in id_list[1]:
+    for id in id_list:
         analyze_data_for_print(data_array, id, requested_year, requested_month)
     work_time_employees = calculation_of_excess_working_hours_per_day(
         data_array)
@@ -60,31 +60,33 @@ def main():
     employees_who_worked_for_month = detection_id_employee_in_data_array(
         data_array)
     for id in employees_who_worked_for_month:
-        html_builder(id, all_data_dates_and_marks=data_array, data_work_time_all_employees=work_time_employees,
-                     all_data_per_month_employees=work_time_employees_restructuring[0], total_salary_employees=total_salary)
+        if verification_of_identity_for_permission_to_calculate(id) == True:
+            html_builder(id, all_data_dates_and_marks=data_array, data_work_time_all_employees=work_time_employees,
+                        all_data_per_month_employees=work_time_employees_restructuring[0], total_salary_employees=total_salary)
     for id in employees_who_worked_for_month:
-        data_id = build_data_total_for_month_for_employee(
-            id=id, all_data_per_month_employees=work_time_employees_restructuring[0], total_salary_employees=total_salary)
-        print('--------------------------------------------------------------------------------------------------------------------------------------------')
-        print('\nФамилия работника:  ', data_id['family'])
-        print('\n\n\t\t ВСЕГО ЗА МЕСЯЦ:')
-        print('\n\n\t')
-        print('\n\t\tБудние рабочие дни за месяц:',
-              data_id['all_work_weekdays'])
-        print('\t\t\t--------------------------')
-        print('\n\t\tПереработки за будние рабочие дни в месяце:',
-              data_id['weekdays_overtime'])
-        print('\t\t\t--------------------------')
-        print('\n\t\tРабочие выходные дни за месяц:', data_id['work_weekend'])
-        print('\t\t\t--------------------------')
-        print('\n\t\tПереработки за рабочие выходные дни в месяце:',
-              data_id['overtime_weekend'])
-        print('\t\t\t--------------------------')
-        print('\n\t\tКоличество дней отпуска:', data_id['vacation'])
-        print('\t\t\t--------------------------')
-        print('\n\t\tЗарплата(учитвая молоко, но без премий):',
-              data_id['salary_whith_milk'])
-        print('\t\t\t--------------------------')
+        if verification_of_identity_for_permission_to_calculate(id) == True:
+            data_id = build_data_total_for_month_for_employee(
+                id=id, all_data_per_month_employees=work_time_employees_restructuring[0], total_salary_employees=total_salary)
+            print('--------------------------------------------------------------------------------------------------------------------------------------------')
+            print('\nФамилия работника:  ', data_id['family'])
+            print('\n\n\t\t ВСЕГО ЗА МЕСЯЦ:')
+            print('\n\n\t')
+            print('\n\t\tБудние рабочие дни за месяц:',
+                data_id['all_work_weekdays'])
+            print('\t\t\t--------------------------')
+            print('\n\t\tПереработки за будние рабочие дни в месяце:',
+                data_id['weekdays_overtime'])
+            print('\t\t\t--------------------------')
+            print('\n\t\tРабочие выходные дни за месяц:', data_id['work_weekend'])
+            print('\t\t\t--------------------------')
+            print('\n\t\tПереработки за рабочие выходные дни в месяце:',
+                data_id['overtime_weekend'])
+            print('\t\t\t--------------------------')
+            print('\n\t\tКоличество дней отпуска:', data_id['vacation'])
+            print('\t\t\t--------------------------')
+            print('\n\t\tЗарплата(учитвая молоко, но без премий):',
+                data_id['salary_whith_milk'])
+            print('\t\t\t--------------------------')
     try:
         remove('temporary.pickle')
     except:
