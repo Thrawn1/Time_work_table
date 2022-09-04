@@ -5,6 +5,7 @@ from sys import stderr
 from datetime import datetime, timedelta
 from calendar import monthrange, weekday
 from id_employee import id_employee
+from randomazer_time_value import time_data_generation
 
 
 def translation_into_russian_names(eng_name: str, type_name: str):
@@ -285,8 +286,9 @@ def analyze_data_for_edit(time_table: dict, id: int, year: int, month: int):
                 user_choice = input('Выберете пункт меню:')
                 if user_choice == '1' or user_choice == '2':
                     white_veribal = 1
-                    entered_time = input(
+                    entered_time_row = input(
                         'Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
+                    entered_time = time_data_generation(entered_time_row)
                     data_to_write = datetime.strptime(
                         str(date_key_for_edit + ' ' + entered_time), "%Y-%m-%d %H %M %S")
                     if user_choice == '1':
@@ -295,7 +297,7 @@ def analyze_data_for_edit(time_table: dict, id: int, year: int, month: int):
                         time_table[date_key_for_edit][id][0] = data_to_write
                     with open('temporary.pickle', 'wb') as tmp_file:
                         dump(time_table, tmp_file)
-            print('Ввод данных об отметки подвержден!')
+            print('Ввод данных об отметки подвержден!',data_to_write)
 
     if list_missed_day != 0:
         print("ПРЕДУПРЕЖДЕНИЕ! " + name_employee +
@@ -309,15 +311,20 @@ def analyze_data_for_edit(time_table: dict, id: int, year: int, month: int):
                 if switch_variable == '1':
                     loop_variable = 1
                     print('Время прихода:\n')
-                    entered_time_begin = input(
+                    entered_time_begin_row = input(
                         'Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
+                    entered_time_begin = time_data_generation(entered_time_begin_row)
                     data_to_write_begin = datetime.strptime(
                         str(missed_day + ' ' + entered_time_begin), "%Y-%m-%d %H %M %S")
                     print('Время ухода:\n')
-                    entered_time_end = input(
+                    entered_time_end_row = input(
                         'Введите время в формате час*ПРОБЕЛ*минуты*ПРОБЕЛ*секунды(если есть) --- 00 00 00:  ')
+                    entered_time_end = time_data_generation(entered_time_end_row)
                     data_to_write_end = datetime.strptime(
                         str(missed_day + ' ' + entered_time_end), "%Y-%m-%d %H %M %S")
+                    print('\nДанные за день введены\n')
+                    print('Время прихода:', data_to_write_begin,'\n', sep=' ')
+                    print('Время ухода:', data_to_write_end,'\n', sep=' ')
                     try:
                         time_table[missed_day][id] = [
                             data_to_write_end, data_to_write_begin]
