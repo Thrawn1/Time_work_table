@@ -61,6 +61,9 @@ class lable():
     def get_time(self):
         """Данный метод возвращает значение времени"""
         return self.time
+    def get_day(self):
+        """Данный метод возвращает значение дня"""
+        return self.date.day
    
     def random_time_set(self,hour_second_label:int,flag_second_label:int):
         if flag_second_label == 0:
@@ -146,29 +149,58 @@ class work_day():
      
 
 class work_month():
-    """Данный класс хранит информацию за месяц. Атрибутами являются год,месяц, название месяца в строковом виде, словарь работников, ключи словаря - это if работников, значенеие
-    - это список с объектами класса employee, словарь с данными за месяц, где ключом является id работника, а значением объект с данными за день"""
-    def __init__(self, year, month, month_name, employees, month_data):
+    """Данный класс хранит информацию за месяц. 
+    Атрибутами являются год,месяц, название месяца в строковом виде, словарь работников, 
+    ключи словаря - это id работников, значенеие - это список с объектами класса employee, 
+    словарь с данными за месяц, где ключом является id работника, а значением объект с данными за день"""
+    def __init__(self, year:int, month:int,month_data:list):
+        months_name = ('Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь')
         self.year = year
         self.month = month
-        self.month_name = month_name
-        self.employees = employees
-        self.month_data = month_data
+        self.month_name = months_name[month - 1]
+        self.work_employees = {}
+        self.month_data_raw = month_data
+        self.month_data = {}
+    
+    def build_day_object(self):
+        """Данный метод создает объекты класса day"""
+        for line in self.month_data_raw:
+            id_row = int(line[7:10])
+            if id_row not in self.work_employees:
+                self.work_employees[id_row] = employee(id_row)
+            obj_lable = lable(line)
+            flag_chek_day = self.check_day_in_list_month(id_row, obj_lable.get_day())
+            if flag_chek_day == False:
+                obj_day = work_day(obj_lable)
+                self.month_data[id_row] = obj_day
+            else:
+                self.month_data[id_row].
+                pass    
     def get_year(self):
         """Данный метод возвращает год"""
         return self.year
+    
     def get_month(self):
         """Данный метод возвращает месяц"""
         return self.month
+    
     def get_month_name(self):
         """Данный метод возвращает название месяца"""
         return self.month_name
+    
     def get_employees(self):
         """Данный метод возвращает словарь работников"""
         return self.employees
+    
     def get_month_data(self):
         """Данный метод возвращает словарь с данными за месяц"""
         return self.month_data
+    def check_day_in_list_month(self,id:int,day:int):
+        """Данный метод проверяет, есть ли день в списке дней месяца"""
+        if day in self.month_data[id]:
+            return True
+        else:
+            return False
 
 class employee():
     """Данный класс хранит информацию о работнике. Атрибутами являются id работника, фамилия, имя,
