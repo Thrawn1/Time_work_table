@@ -93,6 +93,7 @@ class lable():
 class work_day():
     """Данный класс хранит информацию за день. Атрибутами являются год,месяц,день в числовом виде, а так же день недели, название месяца в строковом виде
      метка прихода, метка ухода """
+
     year = None
     month = None
     day = None
@@ -109,8 +110,8 @@ class work_day():
         self.month_name = months_name[int(lable_first.get_date().month) - 1]
         self.day = lable_first.get_date().day
         self.day_of_week = names_weekdays[lable_first.get_date().weekday()]
-        self.come = lable_first
-        self.go = lable_first
+        self.lable_come = lable_first
+        self.lable_go = lable_first
     
     def get_year(self):
         """Данный метод возвращает год"""
@@ -134,15 +135,15 @@ class work_day():
     
     def get_come(self):
         """Данный метод возвращает метку прихода"""
-        return self.come
+        return self.lable_come
     
     def get_go(self):
         """Данный метод возвращает метку ухода"""
-        return self.go
+        return self.lable_go
 
     def define_loss_lable(self):
         """Данный метод определяет, есть ли потерянная метка"""
-        if self.come.get_flag() == self.go.get_flag():
+        if self.lable_come.get_flag() == self.lable_go.get_flag():
             return True
         else:
             return False
@@ -153,6 +154,7 @@ class work_month():
     Атрибутами являются год,месяц, название месяца в строковом виде, словарь работников, 
     ключи словаря - это id работников, значенеие - это список с объектами класса employee, 
     словарь с данными за месяц, где ключом является id работника, а значением объект с данными за день"""
+
     def __init__(self, year:int, month:int,month_data:list):
         months_name = ('Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь')
         self.year = year
@@ -172,10 +174,11 @@ class work_month():
             flag_chek_day = self.check_day_in_list_month(id_row, obj_lable.get_day())
             if flag_chek_day == False:
                 obj_day = work_day(obj_lable)
-                self.month_data[id_row] = obj_day
+                self.month_data[id_row] = []
+                self.month_data[id_row].append(obj_day)
             else:
-                self.month_data[id_row].
-                pass    
+                self.month_data[id_row].append(obj_day)
+
     def get_year(self):
         """Данный метод возвращает год"""
         return self.year
@@ -196,22 +199,58 @@ class work_month():
         """Данный метод возвращает словарь с данными за месяц"""
         return self.month_data
     def check_day_in_list_month(self,id:int,day:int):
-        """Данный метод проверяет, есть ли день в списке дней месяца"""
-        if day in self.month_data[id]:
-            return True
+        """Данный метод проверяет, есть ли день в списке рабочих  дней месяца для пользователя"""
+        days_int_list = []
+        if id in self.month_data.keys():
+            for day_obj in self.month_data[id]:
+                days_int_list.append(day_obj.get_day())
+            if day in self.month_data[id]:
+                return True
+            else:
+                return False
         else:
             return False
 
 class employee():
     """Данный класс хранит информацию о работнике. Атрибутами являются id работника, фамилия, имя,
     зарплатная ставка,роль, общее рабочее время за месяц"""
-    def __init__(self, id, surname, name, rate, role, total_work_time):
-        self.id = id
-        self.surname = surname
-        self.name = name
-        self.rate = rate
-        self.role = role
-        self.total_work_time = total_work_time
+
+    id = None
+    family = ''
+    name = ''
+    rate = 0
+    role = ''
+
+    def __init__(self, id):
+        directory_name_1 = 'data'
+        directory_name_2 = 'variable_data_for_app'
+        str_name_file = 'id_employee.dat'
+        str_rate_file = 'wage_rates.dat'
+        str_role_file = 'roles_employee.dat'
+        with open(path.join(directory_name_1,directory_name_2,str_name_file),'r',encoding='utf-8') as file:
+            for line in file:
+                line = line.rstrip('\n')
+                line_data = line.split(' ')
+                if int(line_data[0]) == id:
+                    self.id = id
+                    self.role = int(line_data[1].lstrip('[').rstrip(']'))
+                    self.family = line_data[2]
+                    self.name = line_data[3]
+        with open(path.join(directory_name_1,directory_name_2,str_role_file), 'r',encoding='utf-8') as file:
+            for line in file:
+                line = line.rstrip('\n')
+                line_data = line.split(' ')
+                role_id = int(line_data[0].lstrip('[').rstrip(']'))
+                if role_id == self.role:
+                    self.role_name = line_data[1]
+        with open(path.join(directory_name_1,directory_name_2,str_rate_file), 'r',encoding='utf-8') as file:
+            for line in file:
+                line = line.rstrip('\n')
+                line_data = line.split(' ')
+                data_rate = line_data[1].lstrip('[').rstrip(']')
+                if int(line_data[0]) == self.id:
+                    self.rate = data_rate
+        self.total_work_time = 0
     def get_id(self):
         """Данный метод возвращает id работника"""
         return self.id
