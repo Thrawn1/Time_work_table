@@ -177,7 +177,11 @@ class work_month():
                 self.month_data[id_row] = []
                 self.month_data[id_row].append(obj_day)
             else:
+                for day in self.month_data[id_row]:
+                    if day.get_day() == obj_lable.get_day():
+                        day.lable_come 
                 self.month_data[id_row].append(obj_day)
+                #Вот тут надо написать логику добавления метки в уже существующий день
 
     def get_year(self):
         """Данный метод возвращает год"""
