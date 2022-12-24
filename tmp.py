@@ -30,3 +30,7 @@ for id in test_month.month_data:
     print('ID: ',id)
     print('Метка прихода: ',test_month.month_data[id][0].get_come())
     print('Метка ухода: ',test_month.month_data[id][0].get_go())
+    print('Тестовая_метка_прихода:', type(test_month.month_data[id][0].get_come()))
+    print('Тестовая_метка_ухода:',type(test_month.month_data[id][0].get_go()))
+    print('Тестовая_метка_прихода:',test_month.month_data[id][0].get_come().time)
+    print('Тестовая_метка_ухода:',test_month.month_data[id][0].get_go().time)
