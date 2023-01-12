@@ -34,3 +34,11 @@ for id in test_month.month_data:
     print('Тестовая_метка_ухода:',type(test_month.month_data[id][0].get_go()))
     print('Тестовая_метка_прихода:',test_month.month_data[id][0].get_come().time)
     print('Тестовая_метка_ухода:',test_month.month_data[id][0].get_go().time)
+
+tmp_dict = {1:'Ааа',2:'Ббб',3:'Ввв'}
+tmp_list = [1,2,7]
+for i in tmp_list:
+    if i in tmp_dict:
+        print(tmp_dict[i])
+    else:
+        print('Нет такого ключа',i)
