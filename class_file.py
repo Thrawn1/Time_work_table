@@ -44,7 +44,7 @@ class lable():
         self.row_data = row_data
         self.date = date.fromisoformat(row_data[10:20]) #Берем срез строки, в котооых хранится дата, создаем объект класса date
         self.time =  time.fromisoformat(row_data[21:29]) #Берем срез строки, в котором хранится время, создаем объект класса time
-        self.flag = 3 
+        self.flag = 0 
    
     def set_flag(self, value):
         """Данный метод устанавливает значение флага"""
@@ -154,7 +154,6 @@ class work_month():
     Атрибутами являются год,месяц, название месяца в строковом виде, словарь работников, 
     ключи словаря - это id работников, значенеие - это список с объектами класса employee, 
     словарь с данными за месяц, где ключом является id работника, а значением объект с данными за день"""
-
     def __init__(self, year:int, month:int,month_data:list):
         months_name = ('Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь')
         self.year = year
@@ -163,6 +162,8 @@ class work_month():
         self.work_employees = {}
         self.month_data_raw = month_data
         self.month_data = {}
+        self.loss_lable_days = []
+        self.loss_all_data_days = []
     
     def build_day_object(self):
         """Данный метод создает объекты класса day"""
@@ -182,31 +183,16 @@ class work_month():
                         row_label = obj_lable.time
                         start_label = day.lable_come.time
                         end_label = day.lable_go.time
-                        print('Метка претендет: ',type(obj_lable.time),obj_lable.time)
-                        print('Текущая метка входа: ',type(day.lable_come.time),day.lable_come.time)
-                        print('Текущая метка выхода',type(day.lable_go.time),day.lable_go.time)
-                        print(id_row)
                         if row_label < start_label and row_label < end_label:
+                            obj_lable.set_flag(0)
                             day.lable_come = obj_lable
                         elif row_label > start_label and row_label > end_label:
+                            obj_lable.set_flag(1)
                             day.lable_go = obj_lable
                         elif row_label > start_label and row_label < end_label:
                             pass
                         else:
-                            print('Ошибка в данных')
-                            print('ID: ',id_row)
-                            print('Метка претендет не подошла: ',obj_lable.time)
-                            print('Метка входа: ',day.lable_come.time)
-                            print('Метка выхода: ',day.lable_go.time)
-                            print('------------------')
-                        print('-------------------------------------------')
-                        print('Метка входа после редактирования: ',type(day.lable_come.time),day.lable_come.time)
-                        print('Метка выхода после редактирования: ',type(day.lable_go.time),day.lable_go.time)
-                        print('-------------------------------------------')
-                        d = input() 
-#                self.month_data[id_row].append(obj_day)
-                #Вот тут надо написать логику добавления метки в уже существующий день
-
+                            pass
     def get_year(self):
         """Данный метод возвращает год"""
         return self.year
@@ -221,11 +207,12 @@ class work_month():
     
     def get_employees(self):
         """Данный метод возвращает словарь работников"""
-        return self.employees
+        return self.work_employees
     
     def get_month_data(self):
         """Данный метод возвращает словарь с данными за месяц"""
         return self.month_data
+    
     def check_day_in_list_month(self,id:int,day:int):
         """Данный метод проверяет, есть ли день в списке рабочих  дней месяца для пользователя"""
         days_int_list = []
@@ -237,8 +224,24 @@ class work_month():
             else:
                 return False
         else:
-            print('Данный пользователь не работал в этом месяце')
             return False
+    def check_loss_lable(self):
+        """Данный метод проверяет, есть ли пропущенные метки за месяц"""
+        for id in self.month_data:
+            loss_lable_days = []
+            for day in self.month_data[id]:
+                if day.lable_come.flag == day.lable_go.flag:
+                    loss_lable_days.append(day.get_day())
+            self.loss_lable_days = loss_lable_days 
+                
+    def __str__(self) -> str:
+        """Данный метод возвращает строку с данными за месяц"""
+        work_employees = ' '
+        for id in self.work_employees:
+            work_employees += self.work_employees[id].info() + ', '
+        work_employees = work_employees[:-2]
+        string = f' Месяц: {self.month_name} {self.year} года.\n Работники: {work_employees}.\n Данные за месяц: {self.month_data}'
+        return string
 
 class employee():
     """Данный класс хранит информацию о работнике. Атрибутами являются id работника, фамилия, имя,
@@ -283,7 +286,7 @@ class employee():
     def get_id(self):
         """Данный метод возвращает id работника"""
         return self.id
-    def get_surname(self):
+    def get_family(self):
         """Данный метод возвращает фамилию работника"""
         return self.surname
     def get_name(self):
@@ -298,7 +301,19 @@ class employee():
     def get_total_work_time(self):
         """Данный метод возвращает общее рабочее время работника"""
         return self.total_work_time
-
+    def info(self,f = 's'):
+        """Данный метод выводит информацию о работнике"""
+        if f == 's':
+            if self.name == self.family:
+                return(f'{self.name}')
+            else:
+                return(f'{self.family} {self.name}')
+        elif f == 'f':
+            return(f'Работник: {self.family} {self.name}. Роль: {self.role_name}. Зарплатная ставка: {self.rate}.')
+    def __str__(self) -> str:
+        """Данный метод возвращает строку с данными о работнике"""
+        string = f'Работник: {self.family} {self.name}. Роль: {self.role_name}. Зарплатная ставка: {self.rate}.'
+        return string
 class excel_table():
     """Данный класс хранит информацию для построения таблицы в excel,имя файла, путь до файла. Имеет метод построения excel файла"""
     pass
