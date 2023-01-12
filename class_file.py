@@ -179,8 +179,32 @@ class work_month():
             else:
                 for day in self.month_data[id_row]:
                     if day.get_day() == obj_lable.get_day():
-                        day.lable_come 
-                self.month_data[id_row].append(obj_day)
+                        row_label = obj_lable.time
+                        start_label = day.lable_come.time
+                        end_label = day.lable_go.time
+                        print('Метка претендет: ',type(obj_lable.time),obj_lable.time)
+                        print('Текущая метка входа: ',type(day.lable_come.time),day.lable_come.time)
+                        print('Текущая метка выхода',type(day.lable_go.time),day.lable_go.time)
+                        print(id_row)
+                        if row_label < start_label and row_label < end_label:
+                            day.lable_come = obj_lable
+                        elif row_label > start_label and row_label > end_label:
+                            day.lable_go = obj_lable
+                        elif row_label > start_label and row_label < end_label:
+                            pass
+                        else:
+                            print('Ошибка в данных')
+                            print('ID: ',id_row)
+                            print('Метка претендет не подошла: ',obj_lable.time)
+                            print('Метка входа: ',day.lable_come.time)
+                            print('Метка выхода: ',day.lable_go.time)
+                            print('------------------')
+                        print('-------------------------------------------')
+                        print('Метка входа после редактирования: ',type(day.lable_come.time),day.lable_come.time)
+                        print('Метка выхода после редактирования: ',type(day.lable_go.time),day.lable_go.time)
+                        print('-------------------------------------------')
+                        d = input() 
+#                self.month_data[id_row].append(obj_day)
                 #Вот тут надо написать логику добавления метки в уже существующий день
 
     def get_year(self):
@@ -208,11 +232,12 @@ class work_month():
         if id in self.month_data.keys():
             for day_obj in self.month_data[id]:
                 days_int_list.append(day_obj.get_day())
-            if day in self.month_data[id]:
+            if day in days_int_list:
                 return True
             else:
                 return False
         else:
+            print('Данный пользователь не работал в этом месяце')
             return False
 
 class employee():
