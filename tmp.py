@@ -22,6 +22,9 @@ print(test_month.__sizeof__())
 print(test_month.work_employees)
 print(test_month.month_data)
 
+test_month.check_loss_lable()
+print(test_month.loss_lable_days)
+
 # for id in test_month.work_employees:
 #     print('\n')
 #     print('ID: ',test_month.work_employees[id].id)
