@@ -1,5 +1,7 @@
 from datetime import date,time
-from class_file import lable,work_day,work_month
+from lable import Lable
+from employee import Employee
+from work_month import Work_month
 import sys
 from os import path
 directory = 'data'
@@ -13,14 +15,12 @@ tmp_line = list_lines[0]
 tmp_line = tmp_line.rstrip('\n')
 year = int(tmp_line[10:14])
 month = int(tmp_line[15:17])
-test_month = work_month(year,month,list_lines)
+test_month = Work_month(year,month,list_lines)
 test_month.build_day_object()
 print(test_month)
 print(test_month.__sizeof__())
 print(test_month.work_employees)
 print(test_month.month_data)
-
-test_month.
 
 # for id in test_month.work_employees:
 #     print('\n')
