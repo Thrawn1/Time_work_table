@@ -15,7 +15,7 @@ class Work_month():
         self.work_employees = {}
         self.month_data_raw = month_data
         self.month_data = {}
-        self.loss_lable_days = []
+        self.loss_lable_days = {}
         self.loss_all_data_days = []
     
     def build_day_object(self):
@@ -85,8 +85,47 @@ class Work_month():
             for day in self.month_data[id]:
                 if day.lable_come.flag == day.lable_go.flag:
                     loss_lable_days.append(day.get_day())
-            self.loss_lable_days = loss_lable_days 
+            self.loss_lable_days[id] = loss_lable_days
                 
+    def display_info_loss_lable(self):
+        """Данный метод выводит информацию о пропущенных метках"""
+        for id in self.loss_lable_days:
+            if len(self.loss_lable_days[id]) != 0:
+                print(f'Работник {self.work_employees[id].get_name()} {self.work_employees[id].get_surname()} пропустил метки в дни: {self.loss_lable_days[id]}')
+
+    def get_all_work_days_month(self):
+        """Данный метод возвращает список с всеми рабочими днями месяца, учитывающий все 
+        исключени и особенности произодственного календаря"""
+        name_file_holiday = 'holiday.txt'
+        name_file_postponed_works_days = 'postponed_working_days.txt'
+        
+        #Реалиовать создание списка, в котором будут все рабочие дни месяца - те дни, которые в файле holiday.txt - выходные, те что в postponed_working_days.txt - считаются рабочими. Метод возвращает список с датами
+        #Создаем список с выходными днями
+        holiday_list = []
+        with open(name_file_holiday,'r') as file:
+            for line in file:
+                holiday_list.append(int(line))
+        #Создаем список с перенесенными рабочими днями
+        postponed_works_days_list = []
+        with open(name_file_postponed_works_days,'r') as file:
+            for line in file:
+                postponed_works_days_list.append(int(line))
+        #Создаем список с рабочими днями
+        all_work_days_month = []
+        for day in range(1,self.get_days_in_month()+1):
+            if day not in holiday_list and day not in postponed_works_days_list:
+                all_work_days_month.append(day)
+        return all_work_days_month
+
+    def check_loss_days_in_work_month(self):
+        """Данный метод проверяет, есть ли пропущенные дни в месяце"""
+        for id in self.month_data:
+            loss_days = []
+            for day in self.month_data[id]:
+                if day.lable_come.flag == 1 or day.lable_go.flag == 0:
+                    loss_days.append(day.get_day())
+            self.loss_days_in_work_month[id] = loss_days
+
     def __str__(self) -> str:
         """Данный метод возвращает строку с данными за месяц"""
         work_employees = ' '
