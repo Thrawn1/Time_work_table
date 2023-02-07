@@ -1,6 +1,9 @@
 from work_day import Work_day
 from lable import Lable
 from employee import Employee
+from calendar import monthrange
+from datetime import date
+from os.path import join
 
 class Work_month():
     """Данный класс хранит информацию за месяц. 
@@ -93,29 +96,48 @@ class Work_month():
             if len(self.loss_lable_days[id]) != 0:
                 print(f'Работник {self.work_employees[id].get_name()} {self.work_employees[id].get_surname()} пропустил метки в дни: {self.loss_lable_days[id]}')
 
+    def _get_all_work_days_months_ideally(self):
+        """Данный метод возвращает список со всеми рабочими днями месяца,учитывая все исключения и особенности произодственного календаря"""
+        name_file_holiday = 'holidays.dat'
+        name_file_postponed_works_days = 'postponed_working_days.dat'
+        directory_1 = 'data'
+        directory_2 = 'variable_data_for_app'
+        path_file_holiday = join(directory_1,directory_2,name_file_holiday)
+        path_file_postponed_works_days = join(directory_1,directory_2,name_file_postponed_works_days)
+        list_obj_holiday = []
+        list_obj_postponed_works_days = []
+        all_work_days_months_ideally = []
+        with open(path_file_holiday,'r',encoding='utf-8') as file:
+            for line in file:
+                line = line.rstrip('\n')
+                str_line = line.split('.')
+                srt_line_1 = [int(i) for i in str_line]
+                if line[1] == self.month:
+                    list_obj_holiday.append(srt_line_1[0])
+                print(list_obj_holiday)
+        with open(path_file_postponed_works_days,'r',encoding='utf-8') as file:
+            for line in file:
+                line = line.rstrip('\n')
+                str_line = line.split('.')
+                srt_line_1 = [int(i) for i in str_line]
+                if line[1] == self.month:
+                    list_obj_postponed_works_days.append(srt_line_1[0])
+                print(list_obj_postponed_works_days)
+        last_day_month = monthrange(self.year,self.month)[1]
+        for i in range (1,last_day_month+1):
+            date_obj = date(self.year,self.month,i)
+            if date_obj.weekday() != 5 and date_obj.weekday() != 6:
+                if i not in list_obj_holiday:
+                    all_work_days_months_ideally.append(i)
+            if len(list_obj_postponed_works_days) != 0:
+                all_work_days_months_ideally += list_obj_postponed_works_days
+                all_work_days_months_ideally = all_work_days_months_ideally.sort()
+        return all_work_days_months_ideally
+
     def get_all_work_days_month(self):
         """Данный метод возвращает список с всеми рабочими днями месяца, учитывающий все 
         исключени и особенности произодственного календаря"""
-        name_file_holiday = 'holiday.txt'
-        name_file_postponed_works_days = 'postponed_working_days.txt'
-        
-        #Реалиовать создание списка, в котором будут все рабочие дни месяца - те дни, которые в файле holiday.txt - выходные, те что в postponed_working_days.txt - считаются рабочими. Метод возвращает список с датами
-        #Создаем список с выходными днями
-        holiday_list = []
-        with open(name_file_holiday,'r') as file:
-            for line in file:
-                holiday_list.append(int(line))
-        #Создаем список с перенесенными рабочими днями
-        postponed_works_days_list = []
-        with open(name_file_postponed_works_days,'r') as file:
-            for line in file:
-                postponed_works_days_list.append(int(line))
-        #Создаем список с рабочими днями
-        all_work_days_month = []
-        for day in range(1,self.get_days_in_month()+1):
-            if day not in holiday_list and day not in postponed_works_days_list:
-                all_work_days_month.append(day)
-        return all_work_days_month
+        pass
 
     def check_loss_days_in_work_month(self):
         """Данный метод проверяет, есть ли пропущенные дни в месяце"""
