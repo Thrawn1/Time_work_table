@@ -45,7 +45,7 @@ class Employee():
         return self.id
     def get_family(self):
         """Данный метод возвращает фамилию работника"""
-        return self.surname
+        return self.family
     def get_name(self):
         """Данный метод возвращает имя работника"""
         return self.name
