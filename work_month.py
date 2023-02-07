@@ -19,7 +19,7 @@ class Work_month():
         self.month_data_raw = month_data
         self.month_data = {}
         self.loss_lable_days = {}
-        self.loss_all_data_days = []
+        self.loss_all_data_days = {}
     
     def build_day_object(self):
         """Данный метод создает объекты класса day"""
@@ -27,11 +27,11 @@ class Work_month():
             id_row = int(line[7:10])
             if id_row not in self.work_employees:
                 self.work_employees[id_row] = Employee(id_row)
+                self.month_data[id_row] = []
             obj_lable = Lable(line)
             flag_chek_day = self.check_day_in_list_month(id_row, obj_lable.get_day())
             if flag_chek_day == False:
                 obj_day = Work_day(obj_lable)
-                self.month_data[id_row] = []
                 self.month_data[id_row].append(obj_day)
             else:
                 for day in self.month_data[id_row]:
@@ -114,7 +114,6 @@ class Work_month():
                 srt_line_1 = [int(i) for i in str_line]
                 if line[1] == self.month:
                     list_obj_holiday.append(srt_line_1[0])
-                print(list_obj_holiday)
         with open(path_file_postponed_works_days,'r',encoding='utf-8') as file:
             for line in file:
                 line = line.rstrip('\n')
@@ -122,7 +121,6 @@ class Work_month():
                 srt_line_1 = [int(i) for i in str_line]
                 if line[1] == self.month:
                     list_obj_postponed_works_days.append(srt_line_1[0])
-                print(list_obj_postponed_works_days)
         last_day_month = monthrange(self.year,self.month)[1]
         for i in range (1,last_day_month+1):
             date_obj = date(self.year,self.month,i)
@@ -134,19 +132,17 @@ class Work_month():
                 all_work_days_months_ideally = all_work_days_months_ideally.sort()
         return all_work_days_months_ideally
 
-    def get_all_work_days_month(self):
-        """Данный метод возвращает список с всеми рабочими днями месяца, учитывающий все 
-        исключени и особенности произодственного календаря"""
-        pass
-
     def check_loss_days_in_work_month(self):
         """Данный метод проверяет, есть ли пропущенные дни в месяце"""
-        for id in self.month_data:
-            loss_days = []
+        mandatory_business_days_of_the_month = self._get_all_work_days_months_ideally()
+        for id in self.month_data.keys():
             for day in self.month_data[id]:
-                if day.lable_come.flag == 1 or day.lable_go.flag == 0:
-                    loss_days.append(day.get_day())
-            self.loss_days_in_work_month[id] = loss_days
+                day_int = day.get_day()
+                try:
+                    mandatory_business_days_of_the_month.remove(day_int)
+                except ValueError:
+                    pass
+            self.loss_all_data_days[id] = mandatory_business_days_of_the_month
 
     def __str__(self) -> str:
         """Данный метод возвращает строку с данными за месяц"""
@@ -156,3 +152,45 @@ class Work_month():
         work_employees = work_employees[:-2]
         string = f' Месяц: {self.month_name} {self.year} года.\n Работники: {work_employees}.\n Данные за месяц: {self.month_data}'
         return string
+
+    
+    def _search_object_day(self,id,day):
+        """Данный метод возвращает объект класса Day"""
+        for day_obj in self.month_data[id]:
+            if day_obj.get_day() == day:
+                return day_obj
+
+    def _display_info_loss_lable(self,id):
+        if id in self.loss_lable_days:
+            if len(self.loss_lable_days[id]) != 0:
+                print(f'Работник {self.work_employees[id].get_name()} {self.work_employees[id].get_family()} пропустил метки в дни:')
+                for day in self.loss_lable_days[id]:
+                    data_obj = self._search_object_day(id,day)
+                    print(f'{data_obj} Метка: {data_obj.get_go()}')
+    
+    def _display_info_loss_day(self,id):
+        names_weekdays = ('Понедельник','Вторник','Среда','Четверг','Пятница','Суббота','Воскресенье')
+        months_name = ('Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь')
+        if id in self.loss_all_data_days:
+            if len(self.loss_all_data_days[id]) != 0:
+                print(f'Работник {self.work_employees[id].get_name()} {self.work_employees[id].get_family()} пропустил данные в дни:')
+                for day in self.loss_all_data_days[id]:
+                    date_obj = date(self.year,self.month,day)
+                    day_name = date_obj.weekday()
+                    info_day = str(date_obj.day) + ' ' + months_name[self.month-1] + ' ' + str(self.year) +' ' + names_weekdays[day_name]
+                    print(info_day)
+    
+    def _generate_lists_exclusion(self):
+        """Данный метод генерирует списки исключений и проживающих в цеху"""
+        for id in self.work_employees:
+            role = self.work_employees[id].get_role()
+            print(role)
+    def display_info_loss_data (self):
+        """Данный метод выводит информацию о пропущенных днях"""
+        for id in self.work_employees:
+            role_name = self.work_employees[id].get_role()
+            if role_name != 'Руководитель' and role_name == 'Кладовщик':
+                self._display_info_loss_lable(id)
+                self._display_info_loss_day(id)
+        
+        
