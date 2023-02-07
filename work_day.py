@@ -57,3 +57,8 @@ class Work_day():
             return True
         else:
             return False
+    def __str__(self) -> str:
+        number_char = len(self.day_of_week)
+        if number_char < 11:
+            self.day_of_week = self.day_of_week + ' '*(11 - number_char)
+        return f'{self.day} {self.month_name} {self.year} - {self.day_of_week}'
