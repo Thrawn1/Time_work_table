@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date,time
 from lable import Lable
 from employee import Employee
@@ -24,6 +25,49 @@ print(test_month.month_data)
 
 test_month.check_loss_lable()
 print(test_month.loss_lable_days)
+
+print('----------------------------------------------------------------------------------------------------')
+month_test = 1
+year_test = 2023
+name_file_holiday = 'holidays.dat'
+name_file_postponed_works_days = 'postponed_working_days.dat'
+directory_1 = 'data'
+directory_2 = 'variable_data_for_app'
+path_file_holiday = path.join(directory_1,directory_2,name_file_holiday)
+path_file_postponed_works_days = path.join(directory_1,directory_2,name_file_postponed_works_days)
+list_obj_holiday = []
+list_obj_postponed_works_days = []
+all_work_days_months_ideally = []
+
+with open(path_file_holiday,'r',encoding='utf-8') as file:
+    for line in file:
+        line = line.rstrip('\n')
+        str_line = line.split('.')
+        srt_line_1 = [int(i) for i in str_line]
+        if srt_line_1[1] == month_test:
+            list_obj_holiday.append(srt_line_1[0])
+print('Выходные',list_obj_holiday)
+
+with open(path_file_postponed_works_days,'r',encoding='utf-8') as file:
+    for line in file:
+        line = line.rstrip('\n')
+        str_line = line.split('.')
+        srt_line_1 = [int(i) for i in str_line]
+        if srt_line_1[1] == month_test:
+            list_obj_postponed_works_days.append(srt_line_1[0])
+print('Дополнительные рабочие дни',list_obj_postponed_works_days)
+
+last_day_month = monthrange(year,month_test)[1]
+
+for i in range(1,last_day_month+1):
+    day_obj = date(year_test,month_test,i)
+    if day_obj.weekday() != 5 and day_obj.weekday() != 6:
+        if i not in list_obj_holiday:
+            all_work_days_months_ideally.append(i)
+if len(list_obj_postponed_works_days) != 0:
+    all_work_days_months_ideally = all_work_days_months_ideally + list_obj_postponed_works_days
+    all_work_days_months_ideally.sort()
+print('Все рабочие дни',all_work_days_months_ideally)
 
 # for id in test_month.work_employees:
 #     print('\n')
