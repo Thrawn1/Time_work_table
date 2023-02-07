@@ -58,4 +58,4 @@ class Lable():
             flag_str = 'Уход'
         else:
             flag_str = 'Не определен'
-        return f'flag: {flag_str}, date: {self.date}, time: {self.time}'
+        return f'{flag_str}, Время отметки: {self.time}'
