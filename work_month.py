@@ -185,11 +185,12 @@ class Work_month():
         for id in self.work_employees:
             role = self.work_employees[id].get_role()
             print(role)
+
     def display_info_loss_data (self):
         """Данный метод выводит информацию о пропущенных днях"""
         for id in self.work_employees:
             role_name = self.work_employees[id].get_role()
-            if role_name != 'Руководитель' and role_name == 'Кладовщик':
+            if role_name != 'Руководитель' and role_name != 'Кладовщик':
                 self._display_info_loss_lable(id)
                 self._display_info_loss_day(id)
         
