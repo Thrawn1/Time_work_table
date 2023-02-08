@@ -1,5 +1,5 @@
 from lable import Lable
-
+from datetime import time
 class Work_day():
     """Данный класс хранит информацию за день. Атрибутами являются год,месяц,день в числовом виде, а так же день недели, название месяца в строковом виде
      метка прихода, метка ухода """
@@ -64,8 +64,15 @@ class Work_day():
         return f'{self.day} {self.month_name} {self.year} - {self.day_of_week}'
     
     def edit_lable(self, flag):
-# В классе Label есть метод редактирования. Использовать его.
-        if flag == 0:
-           self.lable_come = Lable()
+        """Данный метод редактирует метку. В качестве аргумента принимает флаг, который определяет, какую метку редактировать"""
+        new_time_row = input('Введите время метки в формате ЧЧ ММ СС: ')
+        list_data = new_time_row.split(' ')
+        new_time = list_data[0] + ':' + list_data[1] + ':' + list_data[2]
+        #new_time = '12:12:12'
+        #Имеет смысл переработать старые функции, что бы они проверяли корректность ввода и добавляли недостающие данные по рандому
+        if flag == 0 or time.fromisoformat(new_time) < self.lable_go:
+           self.lable_come.edit_lable(new_time)
         elif flag == 1:
-           self.lable_go = Lable()
+           self.lable_go.edit_time_lable(new_time)
+        else:
+            print('Ошибка определения редактируемой метки')

@@ -193,5 +193,10 @@ class Work_month():
             if role_name != 'Руководитель' and role_name != 'Кладовщик':
                 self._display_info_loss_lable(id)
                 self._display_info_loss_day(id)
-        
-        
+
+    def _edit_data_day_employee(self,id,day):
+        """Данный метод редактирует данные о дне для конкретного работника"""
+        for day_obj in self.month_data[id]:
+            if day_obj.get_day() == day:
+                day_obj.edit_data(go,leave)
+                break
