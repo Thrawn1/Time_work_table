@@ -54,7 +54,7 @@ class Employee():
         return self.rate
     def get_role(self):
         """Данный метод возвращает роль работника"""
-        return self.role
+        return self.role_name
     def get_total_work_time(self):
         """Данный метод возвращает общее рабочее время работника"""
         return self.total_work_time
