@@ -40,34 +40,3 @@ class Employee():
                 if int(line_data[0]) == self.id:
                     self.rate = data_rate
         self.total_work_time = 0
-    def get_id(self):
-        """Данный метод возвращает id работника"""
-        return self.id
-    def get_family(self):
-        """Данный метод возвращает фамилию работника"""
-        return self.family
-    def get_name(self):
-        """Данный метод возвращает имя работника"""
-        return self.name
-    def get_rate(self):
-        """Данный метод возвращает зарплатную ставку работника"""
-        return self.rate
-    def get_role(self):
-        """Данный метод возвращает роль работника"""
-        return self.role_name
-    def get_total_work_time(self):
-        """Данный метод возвращает общее рабочее время работника"""
-        return self.total_work_time
-    def info(self,f = 's'):
-        """Данный метод выводит информацию о работнике"""
-        if f == 's':
-            if self.name == self.family:
-                return(f'{self.name}')
-            else:
-                return(f'{self.family} {self.name}')
-        elif f == 'f':
-            return(f'Работник: {self.family} {self.name}. Роль: {self.role_name}. Зарплатная ставка: {self.rate}.')
-    def __str__(self) -> str:
-        """Данный метод возвращает строку с данными о работнике"""
-        string = f'Работник: {self.family} {self.name}. Роль: {self.role_name}. Зарплатная ставка: {self.rate}.'
-        return string
