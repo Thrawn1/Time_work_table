@@ -22,6 +22,27 @@ class read_file_row_data():
         if row_year == self.requset_year and row_month == self.requset_month:
             return True
 
+
+class File_reader():
+    pass
+
+class Data_structure_builder():
+    pass
+
+class Validator():
+    pass
+
+class Editor_structure():
+    pass
+
+class Сalculator():
+    pass
+
+class Builder_result_file():
+    pass
+
+
+
 class Excel_table():
     """Данный класс хранит информацию для построения таблицы в excel,имя файла, путь до файла. Имеет метод построения excel файла"""
     pass
