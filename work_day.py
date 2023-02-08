@@ -62,3 +62,10 @@ class Work_day():
         if number_char < 11:
             self.day_of_week = self.day_of_week + ' '*(11 - number_char)
         return f'{self.day} {self.month_name} {self.year} - {self.day_of_week}'
+    
+    def edit_lable(self, flag):
+# В классе Label есть метод редактирования. Использовать его.
+        if flag == 0:
+           self.lable_come = Lable()
+        elif flag == 1:
+           self.lable_go = Lable()
