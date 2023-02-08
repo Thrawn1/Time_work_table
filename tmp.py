@@ -19,10 +19,10 @@ month = int(tmp_line[15:17])
 test_month = Work_month(year,month,list_lines)
 test_month.build_day_object()
 
-# test_month.check_loss_lable()
+test_month.check_loss_lable()
 # print('LABLE',test_month.loss_lable_days)
 
-# test_month.check_loss_days_in_work_month()
+test_month.check_loss_days_in_work_month()
 # print('LOSS_DAYS',test_month.loss_all_data_days)
 
 
