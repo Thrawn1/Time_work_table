@@ -24,13 +24,26 @@ class read_file_row_data():
 
 
 class File_reader():
+    """Данный класс открывает файл с данными, читает данные и формирует список с данными за месяц."""
+    def __init__(self):
+        self.file_name = '1_attlog.dat'
+        self.directory = 'data' 
+        self.file_data = []
+        self.requset_year = 0
+        self.requset_month = 0
+    
+    name_file = '1_attlog.dat'
+    main_directory = 'data'
+    support_directory = 'variable_data_for_app'
     pass
 
 class Data_structure_builder():
     pass
 
+
 class Validator():
     pass
+
 
 class Editor_structure():
     pass
