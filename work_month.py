@@ -10,14 +10,16 @@ class Work_month():
     Атрибутами являются год,месяц, название месяца в строковом виде, словарь работников, 
     ключи словаря - это id работников, значенеие - это список с объектами класса employee, 
     словарь с данными за месяц, где ключом является id работника, а значением объект с данными за день"""
-    def __init__(self, year:int, month:int,month_data:list):
+    def __init__(self, year:int, month:int):
         months_name = ('Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь')
         self.year = year
         self.month = month
         self.month_name = months_name[month - 1]
         self.work_employees = {}
-        self.month_data_raw = month_data
         self.month_data = {}
         self.loss_lable_days = {}
         self.loss_all_data_days = {}
-    
+
+    def search_id_work_employees(self):
+        """Данный метод ищет все id работников, которые работали в этом месяце по данным за месяц"""
+        for 
