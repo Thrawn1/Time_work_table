@@ -1,6 +1,11 @@
 from os import path
+from employee import Employee
+from lable import Lable
+from work_day import Work_day
+from work_month import Work_month
 
-class read_file_row_data():
+
+class Read_file_row_data():
     """Данный метод необходим, что бы открыть файл с датчика, прочитать данные и сформировать список с данными за месяц. 
     Данные об отметке хранятся как строка.Данный объект хранит имя файла с данными и путь к файлу."""
     def __init__(self):
@@ -23,19 +28,7 @@ class read_file_row_data():
             return True
 
 
-class File_reader():
-    """Данный класс открывает файл с данными, читает данные и формирует список с данными за месяц."""
-    def __init__(self):
-        self.file_name = '1_attlog.dat'
-        self.directory = 'data' 
-        self.file_data = []
-        self.requset_year = 0
-        self.requset_month = 0
-    
-    name_file = '1_attlog.dat'
-    main_directory = 'data'
-    support_directory = 'variable_data_for_app'
-    pass
+
 
 class Data_structure_builder():
     pass
