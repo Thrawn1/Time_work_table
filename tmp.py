@@ -9,4 +9,8 @@ with open('company_data.toml', 'r', encoding='utf-8') as file:
 print(data)
 print(type(data))
 print (data.values())
-print(all(value == 0 for value in data.values()))
+
+if len(data) == 0:
+    print('Файл пуст')
+else:
+    print('Файл не пуст')
