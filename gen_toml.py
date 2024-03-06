@@ -1,9 +1,8 @@
 body_toml = """
-# company_data.toml
+#Для загрузки данных раскоментируйте строки и заполните их данными
 
-# Информация о работниках
-[[employees]]
-  id = 0
+#[[employees]]
+#  id = 0
 #  first_name = 'Иван'
 #  last_name = 'Михайлов'
 #  role = 'Работник цеха'
@@ -11,10 +10,9 @@ body_toml = """
 #  hire_date = '12.07.2017'
 #  birth_date = '12.07.1967'
 
-# Роли в компании
-[roles]
-   [roles.simple_role]
-   id = 0
+# [roles]
+#   [roles.simple_role]
+#   id = 0
 #    name = 'Рабртник цеха'
 #    description = 'Работник цеха'
 #    work_shift = 8
