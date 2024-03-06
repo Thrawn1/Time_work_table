@@ -1,9 +1,9 @@
 
-# company_data.toml
+#company_data.toml
 
-# Информация о работниках
-[[employees]]
-  id = 0
+#[[employees]]
+#Информация о работниках
+#  id = 0
 #  first_name = 'Иван'
 #  last_name = 'Михайлов'
 #  role = 'Работник цеха'
@@ -11,10 +11,10 @@
 #  hire_date = '12.07.2017'
 #  birth_date = '12.07.1967'
 
-# Роли в компании
-[roles]
-   [roles.simple_role]
-   id = 0
+#Роли в компании
+# [roles]
+#   [roles.simple_role]
+#   id = 0
 #    name = 'Рабртник цеха'
 #    description = 'Работник цеха'
 #    work_shift = 8
