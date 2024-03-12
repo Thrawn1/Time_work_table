@@ -7,3 +7,4 @@ temporary_2021_11.pickle
 2021_12_attlog_for_test.dat
 .env/
 .venv/
+*.db
