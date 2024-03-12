@@ -1,8 +1,17 @@
 
-#company_data.toml
+#Для загрузки данных раскоментируйте строки и заполните их данными
 
-#[[employees]]
-#Информация о работниках
+
+# [roles]
+#   [roles.simple_role]
+#   id = 0
+#    name = 'Рабртник цеха'
+#    description = 'Работник цеха'
+#    work_shift = 8
+#    lost_tag_flag = 1
+
+
+# [[employees]]
 #  id = 0
 #  first_name = 'Иван'
 #  last_name = 'Михайлов'
@@ -11,11 +20,4 @@
 #  hire_date = '12.07.2017'
 #  birth_date = '12.07.1967'
 
-#Роли в компании
-# [roles]
-#   [roles.simple_role]
-#   id = 0
-#    name = 'Рабртник цеха'
-#    description = 'Работник цеха'
-#    work_shift = 8
-#    lost_tag_flag = 1
+
