@@ -103,8 +103,9 @@ conn.close()
 # Проверка заполнения таблиц
 conn = sqlite3.connect('company.db')
 cursor = conn.cursor()
-cursor.execute('''SELECT employees.id, employees.first_name, employees.last_name, roles.name, 
-               employees.hourly_rate, employees.hire_date, employees.birth_date FROM employees 
+cursor.execute('''SELECT employees.id, employees.first_name, 
+               employees.last_name, roles.name, employees.hourly_rate, 
+               employees.hire_date, employees.birth_date FROM employees 
                INNER JOIN roles ON employees.role = roles.id''')
 rows = cursor.fetchall()
 for row in rows:
@@ -119,8 +120,8 @@ for row in rows:
         f"Дата рождения: {birth_date}"
     ))
 
-cursor.execute('''SELECT roles.id, roles.name, roles.description, roles.work_shift, roles.lost_tag_flag 
-               FROM roles''')
+cursor.execute('''SELECT roles.id, roles.name, roles.description, 
+               roles.work_shift, roles.lost_tag_flag FROM roles''')
 rows = cursor.fetchall()
 for row in rows:
     role_id, role_name, role_description, work_shift, lost_tag_flag = row
@@ -132,7 +133,8 @@ for row in rows:
         f"Флаг утери тега: {lost_tag_flag}"
     ))
 
-print("-------------------------------------------------------------------------------------------")
+print("""------------------------------------------------------------------
+      ---------------------------------------------------------------------""")
 conn.close()
 
 # Проверка наличия файла БД
