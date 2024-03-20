@@ -8,3 +8,4 @@ temporary_2021_11.pickle
 .env/
 .venv/
 *.db
+company_data_real.toml
