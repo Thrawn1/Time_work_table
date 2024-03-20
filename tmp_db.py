@@ -1,6 +1,26 @@
 import sqlite3
 import os
 import toml
+import datetime
+
+
+
+def convert_to_iso(date):
+    try:
+        date_obj = datetime.datetime.strptime(date, '%d.%m.%y')
+        iso_date = date_obj.date().isoformat()
+        return iso_date
+    except ValueError:
+        print("Неверный формат даты. Пожалуйста, укажите дату в формате ДД.ММ.ГГ.")
+
+
+def convert_to_ddmmyy(date):
+     try:
+        date_obj = datetime.datetime.strptime(date, '%Y-%m-%d')
+        ddmmyy_date = date_obj.strftime('%d.%m.%y')
+        return ddmmyy_date
+     except ValueError:
+        print("Неверный формат даты. Пожалуйста, укажите дату в формате ГГГГ-ММ-ДД.")
 
 
 
