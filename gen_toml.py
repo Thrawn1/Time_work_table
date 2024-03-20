@@ -2,23 +2,41 @@ body_toml = """
 #Для загрузки данных раскоментируйте строки и заполните их данными
 
 
+
 # [roles]
-#   [roles.simple_role]
-#   id = 0
-#    name = 'Рабртник цеха'
-#    description = 'Работник цеха'
-#    work_shift = 8
-#    lost_tag_flag = 1
+
+# [roles.simple_role0]
+# id = 100
+# name = 'Название роли'
+# description = 'Описание роли'
+# work_shift = 24
+# lost_tag_flag = 3
+
+# [roles.simple_role1]
+# id = 101
+# name = 'Название роли'
+# description = 'Описание роли'
+# work_shift = 8
+# lost_tag_flag = 4
 
 
 # [[employees]]
-#  id = 0
-#  first_name = 'Иван'
-#  last_name = 'Михайлов'
-#  role = 'Работник цеха'
-#  hourly_rate = 82323
-#  hire_date = '12.07.2017'
-#  birth_date = '12.07.1967'
+# id = 100
+# first_name = 'Иван'
+# last_name = 'Иванов'
+# role = 'Кто то'
+# hourly_rate = 0
+# hire_date = '00.00.0000'
+# birth_date = '00.00.0000'
+
+# [[employees]]
+# id = 101
+# first_name = 'Петр'
+# last_name = 'Петров'
+# role = 'Еще кто то там'
+# hourly_rate = 0
+# hire_date = '00.00.0000'
+# birth_date = '00.00.0000'
 
 
 """
