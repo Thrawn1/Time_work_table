@@ -116,7 +116,48 @@ if len(data) != 0:
                     conn.commit()
             else:
                 print(f"Employee with id {employee['id']} already exists")
-
+                # Обновление существующей записи по id
+                cursor.execute('SELECT id FROM employees WHERE id = ?', (employee['id'],))
+                existing_employee = cursor.fetchone()
+                if existing_employee is not None:
+                    update_query = 'UPDATE employees SET '
+                    update_values = []
+                    if 'first_name' in employee:
+                        update_query += 'first_name = ?, '
+                        update_values.append(employee['first_name'])
+                    if 'last_name' in employee:
+                        update_query += 'last_name = ?, '
+                        update_values.append(employee['last_name'])
+                    if 'role' in employee:
+                        cursor.execute('SELECT id FROM roles WHERE name = ?', (employee['role'],))
+                        existing_role = cursor.fetchone()
+                        if existing_role is not None:
+                            update_query += 'role = ?, '
+                            update_values.append(existing_role[0])
+                        else:
+                            print(f"Role '{employee['role']}' does not exist")
+                    if 'hourly_rate' in employee:
+                        update_query += 'hourly_rate = ?, '
+                        update_values.append(employee['hourly_rate'])
+                    if 'hire_date' in employee:
+                        update_query += 'hire_date = ?, '
+                        update_values.append(employee['hire_date'])
+                    if 'birth_date' in employee:
+                        update_query += 'birth_date = ?, '
+                        update_values.append(employee['birth_date'])
+                    
+                    # Remove the trailing comma and space from the update_query
+                    update_query = update_query.rstrip(', ')
+                    
+                    # Add the WHERE clause to specify the id of the employee to update
+                    update_query += ' WHERE id = ?'
+                    update_values.append(employee['id'])
+                    
+                    cursor.execute(update_query, update_values)
+                    conn.commit()
+                    print(f"Employee with id {employee['id']} updated successfully")
+                else:
+                    print(f"Employee with id {employee['id']} does not exist")
 #Закрыть соединение
 conn.close()
 
