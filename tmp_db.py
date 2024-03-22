@@ -2,6 +2,7 @@ import datetime
 import sqlite3
 import os
 import toml
+from prettytable import PrettyTable
 
 
 
@@ -187,39 +188,52 @@ conn.close()
 # Проверка заполнения таблиц
 conn = sqlite3.connect('company.db')
 cursor = conn.cursor()
-cursor.execute('''SELECT employees.id, employees.first_name,
+cursor.execute('''SELECT employees.id, employees.first_name, 
                employees.last_name, roles.name, employees.hourly_rate, 
                employees.hire_date, employees.birth_date FROM employees 
                INNER JOIN roles ON employees.role = roles.id''')
 rows = cursor.fetchall()
-for row in rows:
-    (employee_id, first_name, last_name, role_name, hourly_rate,
-     hire_date, birth_date) = row
-    print((
-        f"ID сотрудника: {employee_id}, "
-        f"Имя: {first_name}, "
-        f"Фамилия: {last_name}, "
-        f"Роль: {role_name}, "
-        f"Почасовая ставка: {hourly_rate}, "
-        f"Дата приема на работу: {hire_date}, "
-        f"Дата рождения: {birth_date}"
-    ))
 
-cursor.execute('''SELECT roles.id, roles.name, roles.description,
-               roles.work_shift, roles.lost_tag_flag FROM roles''')
-rows = cursor.fetchall()
-for row in rows:
-    role_id, role_name, role_description, work_shift, lost_tag_flag = row
-    print((
-        f"ID роли: {role_id}, "
-        f"Название: {role_name}, "
-        f"Описание: {role_description}, "
-        f"Длина рабочей смены: {work_shift}, "
-        f"Флаг утери тега: {lost_tag_flag}"
-    ))
+# Создаем объект PrettyTable и добавляем заголовки
+table = PrettyTable()
+table.field_names = ["ID сотрудника", "Имя", "Фамилия", "Роль", 
+                     "Почасовая ставка", "Дата приема на работу", 
+                     "Дата рождения"]
 
-print("""------------------------------------------------------------------
-      ---------------------------------------------------------------------""")
+# Добавляем строки в таблицу
+for row in rows:
+    table.add_row(row)
+
+# Выводим таблицу
+print(table)
+
+
+# Запрос на выборку данных из таблицы roles
+cursor.execute('''SELECT id, name, work_shift, lost_tag_flag FROM roles''')
+roles = cursor.fetchall()
+
+# Создаем объект PrettyTable и добавляем заголовки
+roles_table = PrettyTable()
+roles_table.field_names = ["ID роли", "Имя роли", "Длина смены", "Флаг утери"]
+
+# Добавляем строки в таблицу
+for role in roles:
+    roles_table.add_row(role)
+
+# Выводим таблицу
+print(roles_table)
+
+cursor.execute('''SELECT id, name, description FROM roles''')
+roles_d = cursor.fetchall()
+roles_table_description = PrettyTable()
+roles_table_description.field_names = ["ID роли", "Имя роли","Описание "]
+for role in roles_d:
+    roles_table_description.add_row(role)
+print(roles_table_description)
+
+
+
+#Закрыть соединение
 conn.close()
 
 # Проверка наличия файла БД
