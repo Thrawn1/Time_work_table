@@ -1,22 +1,40 @@
 import sqlite3
-from prettytable import PrettyTable
+new_file = '2_attlog.dat'
 
-# Проверка заполнения таблиц
-conn = sqlite3.connect('company.db')
+data_list = []
+
+with open ('1_attlog.dat', 'r') as file:
+    for line in file:
+        line_3 = line.strip()
+        print(len(line_3[1][0]))
+        now_year = int(line[10:14])
+        if 2015 < now_year:
+            data_list.append(line)
+        else:
+            pass
+#            print(line)
+
+with open(new_file, 'w') as file:
+    for line in data_list:
+        file.write(line)
+
+
+name_db = 'line.db'
+conn = sqlite3.connect(name_db)
 cursor = conn.cursor()
-cursor.execute('''SELECT employees.id, employees.first_name, 
-               employees.last_name, roles.name, employees.hourly_rate, 
-               employees.hire_date, employees.birth_date FROM employees 
-               INNER JOIN roles ON employees.role = roles.id''')
-rows = cursor.fetchall()
+# Создание таблицы line в базе данных. Если таблица уже существует, то
+# она не будет создана
+cursor.execute('''CREATE TABLE IF NOT EXISTS line
+                (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                line TEXT)''')
+conn.commit()
+# Заполнение таблицы line данными из файла 2_attlog.dat
+with open(new_file, 'r') as file:
+    for line in file:
+        cursor.execute('INSERT INTO line (line) VALUES (?)', (line,))
+conn.commit()
 
-# Создаем объект PrettyTable и добавляем заголовки
-table = PrettyTable()
-table.field_names = ["ID сотрудника", "Имя", "Фамилия", "Роль", "Почасовая ставка", "Дата приема на работу", "Дата рождения"]
-
-# Добавляем строки в таблицу
-for row in rows:
-    table.add_row(row)
-
-# Выводим таблицу
-print(table)
+# Запрос данных из таблицы line
+cursor.execute('SELECT * FROM line')
+#print(cursor.fetchall())
+conn.close()
