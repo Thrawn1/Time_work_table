@@ -1,6 +1,6 @@
-import re  # Импортируем модуль для работы с регулярными выражениями
-import sqlite3  # Импортируем модуль для работы с базой данных SQLite
-import prettytable  # Импортируем модуль для создания красивых таблиц
+import re
+import sqlite3  
+import prettytable
 
 name_db = 'line_new.db'
 
@@ -74,8 +74,18 @@ table = prettytable.PrettyTable()
 table.field_names = ['id', 'id_user', 'date', 'time', 'create_date', 'update_flag', 'update_date']
 for row in data:
     table.add_row(row)
-#print(table)
+print(table)
+
+# Получить последний id
+cursor.execute('SELECT MAX(id) FROM line')
+print(cursor.fetchone()[0])
+
+#Получить первую  дату за 2020 год для id=6
+cursor.execute('SELECT date,time FROM line WHERE id_user = 6 AND date LIKE "2020%" ORDER BY date LIMIT 1')
+print(cursor.fetchone())
+
 
 conn.close()
+
 
 
