@@ -1,7 +1,14 @@
 from os.path import isfile
 import sqlite3
+from colorama import init, Fore, Style
 from toml import load
 
+def get_date_list_from_file(name_file:str) -> list:
+    date_list = []
+    with open(name_file, 'r') as file:
+        for line in file:
+            date_list.append(line.strip())
+    return date_list
 
 def generate_toml(name_file:str) -> None:
     pass
@@ -18,26 +25,14 @@ def check_data_toml(name_file:str) -> bool:
         print(f"Файл '{name_file}' не найден. Создан новый дефолтный файл.")
         return False
 
-def check_data_label(name_file:str) -> bool:
-    if isfile(name_file):
-        with open(name_file, 'r') as file:
-            data = load(file)
-            if len(data) == 0:
-                return False
-            return True
-    return False
-
-def check_data_db(name_db:str) -> bool:
-    if  isfile(name_db):
-        conn = sqlite3.connect(name_db)
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM employees')
-        if len(cursor.fetchall()) == 0:
-            return False
-        return True
+def check_data_label(name_file_data_label:str, name_db:str) -> bool:
+    if isfile(name_file_data_label):
+        pass
     else:
+        init(autoreset=True)  # Инициализация модуля colorama
+        print(Fore.RED + Style.BRIGHT+ 
+              f"Ошибка: Файл '{name_file_data_label}' с датчика отсутствует.")
         return False
-
 def create_db(name_db:str) -> None:
     conn = sqlite3.connect(name_db)
     cursor = conn.cursor()
