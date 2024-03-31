@@ -1,14 +1,52 @@
 from os.path import isfile
 import sqlite3
+import re
 from colorama import init, Fore, Style
 from toml import load
 
-def get_date_list_from_file(name_file:str) -> list:
-    date_list = []
+def get_date_list_from_file(name_file:str) -> set:
+    """
+    Получает список дат из файла.
+
+    Аргументы:
+    name_file (str): Путь к файлу.
+
+    Возвращает:
+    set: Множество уникальных дат в формате 'YYYY-MM'.
+
+    Пример использования:
+    >>> get_date_list_from_file('/path/to/file.txt')
+    {'2022-01', '2022-02', '2022-03'}
+    """
+    date_list = set()
     with open(name_file, 'r') as file:
-        for line in file:
-            date_list.append(line.strip())
+        rows = file.readlines()
+    for row in rows:
+        parts = re.split(r'\s+', row)
+        if int(parts[2][:4]) > 2015:
+            date = parts[2][:7]
+            date_list.add(date)
     return date_list
+
+def get_date_list_from_db(name_db:str) -> set:
+    """
+    Получает список дат из базы данных.
+
+    Аргументы:
+    name_db (str): Путь к файлу базы данных.
+
+    Возвращает:
+    set: Множество уникальных дат в формате "гггг-мм".
+    """
+    conn = sqlite3.connect(name_db)
+    cursor = conn.cursor()
+    cursor.execute('SELECT date FROM line')
+    date_list = set()
+    for row in cursor.fetchall():
+        date_list.add(row[0][:7])
+    return date_list
+
+
 
 def generate_toml(name_file:str) -> None:
     pass
@@ -24,13 +62,24 @@ def check_data_toml(name_file:str) -> bool:
         generate_toml(name_file)
         print(f"Файл '{name_file}' не найден. Создан новый дефолтный файл.")
         return False
+def get_diff_data(name_file_data_label:str, name_db:str) -> set:
+    data_from_file = get_date_list_from_file(name_file_data_label)
+    data_from_db = get_date_list_from_db(name_db)
+    difference_data = data_from_file - data_from_db
+    return difference_data
 
 def check_data_label(name_file_data_label:str, name_db:str) -> bool:
     if isfile(name_file_data_label):
-        pass
+        difference_data = get_diff_data(name_file_data_label, name_db)
+        if len(difference_data) > 0:
+            return True
+        else:
+            print (Fore.GREEN + Style.BRIGHT +
+                   f"Новых данных в '{name_file_data_label}' нет.")
+            return False
     else:
         init(autoreset=True)  # Инициализация модуля colorama
-        print(Fore.RED + Style.BRIGHT+ 
+        print(Fore.RED + Style.BRIGHT+
               f"Ошибка: Файл '{name_file_data_label}' с датчика отсутствует.")
         return False
 def create_db(name_db:str) -> None:
@@ -72,7 +121,7 @@ def create_db(name_db:str) -> None:
     conn.commit()
     conn.close()
 
-def load_data(name_db:str, name_file_toml_user_and_roles:str, 
+def load_data(name_db:str, name_file_toml_user_and_roles:str,
 name_file_data_label:str) -> None:
     if isfile(name_db):
         if check_data_toml(name_file_toml_user_and_roles):
@@ -81,16 +130,22 @@ name_file_data_label:str) -> None:
             with open(name_file_toml_user_and_roles, 'r') as file:
                 data = load(file)
                 for key, value in data.items():
-                    cursor.execute("""INSERT INTO roles (name, description, 
+                    cursor.execute("""INSERT INTO roles (name, description,
                                    work_shift, lost_tag_flag) 
                                    VALUES (?, ?, ?, ?)""",
-                                   (key, value['description'], 
-                                    value['work_shift'], 
+                                   (key, value['description'],
+                                    value['work_shift'],
                                     value['lost_tag_flag']))
             conn.commit()
             conn.close()
         else:
             print(f"В файле '{name_file_toml_user_and_roles}' нет данных.")
+        if check_data_label(name_file_data_label, name_db):
+            conn = sqlite3.connect(name_db)
+            cursor = conn.cursor()
+            
+            conn.commit()
+            conn.close()
     else:
         print(f"Ошибка: Файл '{name_db}' не найден.")
         create_db(name_db)
