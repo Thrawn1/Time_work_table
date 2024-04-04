@@ -9,4 +9,5 @@ temporary_2021_11.pickle
 .venv/
 *.db
 company_data_real.toml
+company_data_real copy.toml
 2_attlog.dat
