@@ -4,7 +4,7 @@ import prettytable
 
 name_db = 'line_new.db'
 
-with open('1_attlog.dat', 'r') as file:
+with open('2_attlog.dat', 'r') as file:
     rows = file.readlines()
 
 def parse_rows(input_rows):
@@ -26,8 +26,14 @@ cursor = conn.cursor()
     # она не будет создана. Таблица содержит три столбца: id,id_user, date, time,
 #create date, update flag, update date. При создании записи в таблице
 # update_flag устанавливается в NULL и update_date устанавливается в NULL
-
-
+cursor.execute('''CREATE TABLE IF NOT EXISTS line
+                (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_user INTEGER,
+                date TEXT,
+                time TEXT,
+                create_date TEXT DEFAULT CURRENT_TIMESTAMP,
+                update_flag INTEGER DEFAULT NULL,
+                update_date TEXT DEFAULT NULL)''')
 conn.commit()
 # Заполнение таблицы line данными из файла 2_attlog.dat
 
@@ -74,9 +80,10 @@ print(table)
 cursor.execute('SELECT MAX(id) FROM line')
 print(cursor.fetchone()[0])
 
-#Получить первую  дату за 2020 год для id=9
-cursor.execute('SELECT date,time FROM line WHERE id_user = 9 AND date LIKE "2020%" ORDER BY date LIMIT 1')
+#Получить первую  дату за 2020 год для id=6
+cursor.execute('SELECT date,time FROM line WHERE id_user = 6 AND date LIKE "2020%" ORDER BY date LIMIT 1')
 print(cursor.fetchone())
+
 
 
 conn.close()
