@@ -36,6 +36,12 @@ class DualDataAccess:
         Если файл найден — читаем из него. 
         Если файла нет — идём в базу данных.
         """
+        if not isinstance(year, int) or not isinstance(month, int):
+            raise ValueError("Year and month must be integers")
+        if not (1 <= month <= 12):
+            raise ValueError("Month must be between 1 and 12")
+        if not (1900 <= year <= 9999):
+            raise ValueError("Year must be between 1900 and 9999")
 
         if os.path.exists(self.file_name):
             # Читаем из файла
@@ -84,16 +90,16 @@ class DualDataAccess:
     def _parse_line_to_record(self, line: str) -> Optional[AttendanceRecord]:
         """
         Преобразует строку файла в объект AttendanceRecord.
+        Формат строки: ID DATE_TIME STATUS PUNCH WORKCODE SENSORID
+        Пример: 6 2016-11-16 13:58:36 1 255 1 0
         """
-        parts = line.strip().split()
-        if len(parts) < 3:
+        parts = line.strip().split(None)  # split() without args handles multiple whitespace characters
+        if len(parts) < 7:  # проверяем что есть все необходимые части
             return None
 
         try:
-            employee_id = int(parts[0])
-            date_str = parts[1]  # '2021-03-01'
-            time_str = parts[2]  # '06:30:00', и т.д.
-            dt_str = date_str + " " + time_str
+            employee_id = int(parts[0])  # ID сотрудника
+            dt_str = parts[1] + " " + parts[2]  # объединяем дату и время
             dt_obj = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S")
 
             return AttendanceRecord(employee_id, dt_obj)
@@ -125,5 +131,10 @@ if __name__ == "__main__":
 
     dal = DualDataAccess(file_name="1_attlog.dat", db=fake_db)
 
-    records_march = dal.get_attendance_for_month(2021, 3)
-    print("Результат чтения:", records_march)
+    records_march = dal.get_attendance_for_month(2020, 3)
+    print("\nСписок отметок за март 2020:")
+    print("-" * 50)
+    for record in records_march:
+        print(f"Сотрудник ID: {record.employee_id:<5} Дата/время: {record.dt.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("-" * 50)
+    print(f"Всего записей: {len(records_march)}")
