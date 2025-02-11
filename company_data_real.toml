@@ -1,0 +1,181 @@
+
+[roles]
+
+[roles.simple_role0]
+id = 0
+name = 'Работник цеха'
+description = 'Работник цеха'
+work_shift = 8
+lost_tag_flag = 1
+
+[roles.simple_role1]
+id = 1
+name = 'Кладовщик'
+description = 'Кладовщик с фиксированным окладом'
+work_shift = 8
+lost_tag_flag = 0
+
+[roles.simple_role2]
+id = 2
+name = 'Начальник Производства'
+description = 'Начальник Производства МарималСтоун'
+work_shift = -1
+lost_tag_flag = 0
+
+[roles.simple_role3]
+id = 3
+name = 'Круглосуточный работник производства'
+description = 'Человек, живущий в цеху и работающий по особым правилам'
+work_shift = 12
+lost_tag_flag = 0
+
+[roles.simple_role4]
+id = 4
+name = 'Работник цеха на спецставке'
+description = 'Ставка временного работника, рассчитываемых за день, а по времени'
+work_shift = 12
+lost_tag_flag = 1
+
+[[employees]]
+id = 1
+first_name = 'Александр'
+last_name = 'Родыгин'
+role = 'Работник цеха'
+hourly_rate = 120
+hire_date = '12.07.2011'
+birth_date = '01.07.1971'
+
+[[employees]]
+id = 2
+first_name = 'Валерий'
+last_name = 'Рощин'
+role = 'Кладовщик'
+hourly_rate = 17000
+hire_date = '01.01.2006'
+birth_date = '12.09.1957'
+
+[[employees]]
+id = 3
+first_name = 'Сергей'
+last_name = 'Русаков'
+role = 'Работник цеха'
+hourly_rate = 90
+hire_date = '12.07.2010'
+birth_date = '03.08.1993'
+
+[[employees]]
+id = 4
+first_name = 'Алексей'
+last_name = 'Пигин'
+role = 'Работник цеха'
+hourly_rate = 120
+hire_date = '01.11.2015'
+birth_date = '18.02.1979'
+
+[[employees]]
+id = 5
+first_name = 'Андрей'
+last_name = 'Середнев'
+role = 'Работник цеха'
+hourly_rate = 150
+hire_date = '05.05.2019'
+birth_date = '06.12.1978'
+
+[[employees]]
+id = 6
+first_name = 'Никита'
+last_name = 'Кочуев'
+role = 'Работник цеха'
+hourly_rate = 130
+hire_date = '01.06.2018'
+birth_date = '14.09.1998'
+
+[[employees]]
+id = 7
+first_name = 'Василий'
+last_name = 'Еремин'
+role = 'Начальник Производства'
+hourly_rate = 80000
+hire_date = '01.07.2016'
+birth_date = '12.07.1990'
+
+[[employees]]
+id = 8
+first_name = 'Ильхом'
+last_name = ''
+role = 'Круглосуточный работник производства'
+hourly_rate = 1000
+hire_date = '05.06.2021'
+birth_date = '01.06.1980'
+
+[[employees]]
+id = 9
+first_name = 'Дмитрий'
+last_name = 'Журавлев'
+role = 'Работник цеха'
+hourly_rate = 125
+hire_date = '12.07.2017'
+birth_date = '02.02.1986'
+
+[[employees]]
+id = 10
+first_name = 'Антолий'
+last_name = 'Манылюк'
+role = 'Работник цеха'
+hourly_rate = 10
+hire_date = '12.07.2017'
+birth_date = '20.01.1980'
+
+[[employees]]
+id = 11
+first_name = 'Алексей'
+last_name = 'Фомин'
+role = 'Работник цеха'
+hourly_rate = 110
+hire_date = '12.07.2017'
+birth_date = '12.07.1967'
+
+[[employees]]
+id = 12
+first_name = 'Сергей'
+last_name = 'Широков'
+role = 'Работник цеха'
+hourly_rate = 150
+hire_date = '01.12.2022'
+birth_date = '01.01.1975'
+
+[[employees]]
+id = 13
+first_name = 'Боря'
+last_name = ''
+role = 'Работник цеха на спецставке'
+hourly_rate = 1500
+hire_date = '01.01.1970'
+birth_date = '01.01.1970'
+
+[[employees]]
+id = 14
+first_name = 'Сергей'
+last_name = 'Григорьев'
+role = 'Работник цеха'
+hourly_rate = 110
+hire_date = '01.10.2022'
+birth_date = '12.07.1967'
+
+[[employees]]
+id = 15
+first_name = 'Алексей'
+last_name = 'Шабашов'
+role = 'Работник цеха'
+hourly_rate = 117
+hire_date = '01.09.2023'
+birth_date = '02.07.2003'
+
+[[employees]]
+id = 27
+first_name = 'Александр'
+last_name = 'Зарицкий'
+role = 'Начальник Производства'
+hourly_rate = 0
+hire_date = '01.04.2020'
+birth_date = '03.09.1973'
