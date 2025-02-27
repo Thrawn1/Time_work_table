@@ -31,7 +31,24 @@ class DatFileProcessor:
     """
     DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
 
-    def read_dat_file(self, file_path: str) -> List[AttendanceRecord]:
+    def _is_record_in_target_period(self, record: AttendanceRecord,target_period:tuple) -> bool:
+        """
+        Проверяет, попадает ли запись в целевой период.
+        :param record: Объект AttendanceRecord.
+        :return: True, если запись в целевом периоде, иначе False.
+        """
+        if target_period is not None:
+            year = target_period[0]
+            month = target_period[1]
+            record_date = record.timestamp.date()
+            if record_date.year == year and record_date.month == month:
+                return True
+            else:
+                return False
+        else:
+            return True
+
+    def read_dat_file(self, file_path: str, target_period: Optional[tuple] = None) -> List[AttendanceRecord]:
         """
         Основной метод для чтения .dat файла и конвертации строк в объекты AttendanceRecord.
         :param file_path: Путь к .dat файлу.
@@ -53,7 +70,7 @@ class DatFileProcessor:
                         continue
 
                     record = self._parse_line(line, line_number)
-                    if record:
+                    if record and self._is_record_in_target_period(record,target_period):
                         records.append(record)
 
             logging.info(f"Файл '{file_path}' успешно прочитан. Всего записей: {len(records)}.")

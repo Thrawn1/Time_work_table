@@ -8,3 +8,46 @@
 2025-02-26 12:56:26 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 18818.
 2025-02-26 14:44:35 [WARNING] [Строка 7175] Неверный формат даты/времени '1990-00--8 -16:-29:-40'. Строка: '9	1990-00--8 -16:-29:-40	1	255	1	0'
 2025-02-26 14:44:35 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 18818.
+2025-02-27 19:53:19 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 19:53:44 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 19:55:49 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 19:58:24 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 20:05:12 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 20:06:09 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 20:06:32 [ERROR] Ошибка при чтении файла '1_attlog.dat': DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+Traceback (most recent call last):
+  File "C:\Users\basil\Documents\Projects\Time_work_table\dat_file_module.py", line 73, in read_dat_file
+    if record and self._is_record_in_target_period(record):
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required positional argument: 'target_period'
+2025-02-27 20:10:59 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 255.

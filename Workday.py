@@ -11,15 +11,14 @@ class Workday():
         self.is_weekend = False
         self.is_vacation = False
         self.is_sick_leave = False
-        self.raw_line = None
-
+        self.raw_lines = []
 
 
     def check_missing_mark(self):
-        if self.start_time is None or self.end_time is None:
+        if self.start_time == self.end_time:
             return True
     def get_workday_hours(self):
-        if self.start_time is None or self.end_time is None:
+        if self.start_time == self.end_time:
             return 0
         return (self.end_time - self.start_time).seconds / 3600
     def __str__(self):
