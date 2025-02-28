@@ -13,6 +13,14 @@ class Workday():
         self.is_sick_leave = False
         self.raw_lines = []
 
+    def add_time(self, time:datetime.time):
+        if self.start_time is None:
+            self.start_time = time
+            self.end_time = time
+        elif time > self.end_time:
+            self.end_time = time
+        elif time < self.start_time:
+            self.start_time = time
 
     def check_missing_mark(self):
         if self.start_time == self.end_time:

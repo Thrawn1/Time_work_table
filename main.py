@@ -2,7 +2,19 @@ from dat_file_module import DatFileProcessor
 from db_manager import DBManager
 from interactive import post_data_employee
 from Workday import Workday
+from Employee import Employee
 import pickle
+
+
+def check_employee(employees:list, employee_id:int) -> bool:
+    for employee in employees:
+        if employee.id == employee_id:
+            return True
+    return False
+def get_data_from_db(employee_id:int, employees_db:list) -> tuple:
+    for employee in employees_db:
+        if employee['employee_id'] == employee_id:
+            return employee
 
 db_file_name = "employees.db"
 db_manager = DBManager(db_file_name)
@@ -13,6 +25,18 @@ file_path = "1_attlog.dat"
 records = processor.read_dat_file(file_path, target_period=(2023, 5))
 print(f'Всего записей: {len(records)}')
 print(f'Первая запись: {records[0]}')
-pickle_file = "records.pickle"
-with open(pickle_file, "wb") as f:
-    pickle.dump(records, f)
+employees = []
+employees_db = db_manager.get_all_employees()
+for record in records:
+    if not check_employee(employees, record.employee_id):
+       id = record.employee_id
+       data = get_data_from_db(id, employees_db)
+       employees.append(Employee(id, data['first_name'], data['last_name'], data['role'], data['hourly_rate'], data['role_coefficient']))
+
+for record in records:
+    for employee in employees:
+        if record.employee_id == employee.id:
+            print(record.timestamp.date())
+            if employee.workdays != []:
+            workday = Workday(record.timestamp.date(), employee.id)
+            workday.add_workday(record.timestamp.time())

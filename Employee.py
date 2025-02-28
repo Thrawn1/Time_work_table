@@ -1,6 +1,7 @@
 
 class Employee:
-    def __init__(self, first_name, last_name,role, hourly_rate, workday_hours=8):
+    def __init__(self,employee_id, first_name, last_name,role, hourly_rate, workday_hours=8):
+        self.id = employee_id
         self.last_name = last_name
         self.first_name = first_name
         self.salary = 0
@@ -10,7 +11,7 @@ class Employee:
         self.workdays  = []
 
     def displayEmployee(self):
-        print("Name : ", self.name,  ", Salary: ", self.salary)
+        print(f"ID: {self.id}, Name: {self.first_name} {self.last_name}, Role: {self.role}, Hourly Rate: {self.hourly_rate}, Salary: {self.salary}")
     def add_workday(self, workday):
         self.workdays.append(workday)
     def calculate_monthly_salary(self):
