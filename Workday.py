@@ -30,4 +30,4 @@ class Workday():
             return 0
         return (self.end_time - self.start_time).seconds / 3600
     def __str__(self):
-        return f"Workday: {self.date} {self.time} {self.employee_id}"
+        return f"Workday: {self.date}, Start: {self.start_time}, End: {self.end_time}"

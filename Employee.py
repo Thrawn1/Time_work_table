@@ -1,4 +1,4 @@
-
+from datetime import date
 class Employee:
     def __init__(self,employee_id, first_name, last_name,role, hourly_rate, workday_hours=8):
         self.id = employee_id
@@ -20,3 +20,13 @@ class Employee:
         pass
     def get_full_info(self):
         return f"{self.first_name} {self.last_name}, {self.role}, {self.salary}"
+    def search_by_workday(self, date:date):
+        for workday in self.workdays:
+            if workday.date == date:
+                return self.workdays.pop(self.workdays.index(workday))
+        return None
+    def check_workday(self, date:date):
+        for workday in self.workdays:
+            if workday.date == date:
+                return True
+        return False

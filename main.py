@@ -1,9 +1,8 @@
 from dat_file_module import DatFileProcessor
 from db_manager import DBManager
-from interactive import post_data_employee
 from Workday import Workday
 from Employee import Employee
-import pickle
+
 
 
 def check_employee(employees:list, employee_id:int) -> bool:
@@ -36,7 +35,22 @@ for record in records:
 for record in records:
     for employee in employees:
         if record.employee_id == employee.id:
-            print(record.timestamp.date())
-            if employee.workdays != []:
-            workday = Workday(record.timestamp.date(), employee.id)
-            workday.add_workday(record.timestamp.time())
+            if employee.check_workday(record.timestamp.date()) == False:
+                workday = Workday(record.timestamp.date(), employee.id)
+                workday.add_time(record.timestamp.time())
+                employee.workdays.append(workday)
+            else:
+                workday = employee.search_by_workday(record.timestamp.date())
+                workday.add_time(record.timestamp.time())
+                employee.workdays.append(workday)
+
+
+for employee in employees:
+    print(employee.workdays)
+    for workday in employee.workdays:
+        print(workday)
+        if workday.check_missing_mark():
+            print("Отсутствует отметка")
+        else:
+            print("Отметка есть")
+    #employee.displayEmployee()
