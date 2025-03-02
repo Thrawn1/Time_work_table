@@ -35,14 +35,13 @@ for record in records:
 for record in records:
     for employee in employees:
         if record.employee_id == employee.id:
-            if employee.check_workday(record.timestamp.date()) == False:
+            if employee.search_by_workday(record.timestamp.date()) is None:
                 workday = Workday(record.timestamp.date(), employee.id)
                 workday.add_time(record.timestamp.time())
                 employee.workdays.append(workday)
             else:
                 workday = employee.search_by_workday(record.timestamp.date())
                 workday.add_time(record.timestamp.time())
-                employee.workdays.append(workday)
 
 
 for employee in employees:
