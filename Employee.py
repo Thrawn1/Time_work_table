@@ -10,23 +10,17 @@ class Employee:
         self.workday_hours = workday_hours
         self.workdays  = []
 
-    def displayEmployee(self):
-        print(f"ID: {self.id}, Name: {self.first_name} {self.last_name}, Role: {self.role}, Hourly Rate: {self.hourly_rate}, Salary: {self.salary}")
     def add_workday(self, workday):
-        self.workdays.append(workday)
+        if self.search_by_workday(workday.date) is None:
+            self.workdays.append(workday)
+        else:
+            print("Рабочий день уже добавлен")
     def calculate_monthly_salary(self):
         pass
     def check_missed_days(self):
         pass
-    def get_full_info(self):
-        return f"{self.first_name} {self.last_name}, {self.role}, {self.salary}"
     def search_by_workday(self, date:date):
         for workday in self.workdays:
             if workday.date == date:
-                return self.workdays.pop(self.workdays.index(workday))
+                return workday
         return None
-    def check_workday(self, date:date):
-        for workday in self.workdays:
-            if workday.date == date:
-                return True
-        return False
