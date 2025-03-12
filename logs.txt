@@ -112,3 +112,4 @@ TypeError: DatFileProcessor._is_record_in_target_period() missing 1 required pos
 2025-02-28 22:19:11 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 29.
 2025-02-28 22:19:27 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 29.
 2025-02-28 22:49:21 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 29.
+2025-03-12 12:31:27 [INFO] Файл '1_attlog.dat' успешно прочитан. Всего записей: 29.
