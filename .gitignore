@@ -1,2 +1,8 @@
 /.env
 summary_chat.md
+/__pycache__
+/result
+/tests/__pycache__
+*.html
+*.xlsx
+/supporting_files/__pycache__
