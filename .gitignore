@@ -1,0 +1,8 @@
+/.env
+/__pycache__
+/result
+/tests
+*.html
+*.xlsx
+*.db
+/supporting_files
