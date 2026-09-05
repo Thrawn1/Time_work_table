@@ -1,4 +1,5 @@
 *.pyc
+__pycache__/
 *.odg#
 *.xlsx
 *.html
@@ -7,4 +8,8 @@ temporary_2021_11.pickle
 2021_12_attlog_for_test.dat
 .env/
 .venv/
-employees.db
+*.egg-info/
+dist/
+build/
+temporary.pickle
+*.pickle
