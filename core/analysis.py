@@ -5,6 +5,17 @@ from core.constants import WEEKDAYS_NAME, MONTHS_NAME_GENITIVE, MONTHS_NAME_TO_R
 from core.file_parser import definition_of_working_day
 
 
+def _get_marks_and_missed(time_table: dict, emp_id: int, year: int, month: int) -> tuple:
+    role = EMPLOYEES.get(emp_id)
+    if role is None:
+        return 0, 0
+    if role.role_id in (1, 4):
+        return search_missed_marks(time_table, emp_id, year, month), search_missed_work_days(time_table, emp_id, year, month)
+    if role.role_id == 3:
+        return 0, search_missed_work_days(time_table, emp_id, year, month)
+    return 0, 0
+
+
 def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:
     last_day = monthrange(year, month)[1]
     work_days: list[str] = []
@@ -22,10 +33,12 @@ def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:
 
 
 def search_missed_work_days(time_table: dict, emp_id: int, year: int, month: int) -> list[str] | int:
+    if emp_id not in EMPLOYEES:
+        return 0
     month_days = generation_of_lists_of_days(year, month)
     employee_dates = [d for d in time_table if emp_id in time_table[d]]
     if not employee_dates:
-        return 0
+        return month_days[0] if month_days[0] else 0
     missed = [d for d in month_days[0] if d not in employee_dates]
     return missed if missed else 0
 
@@ -56,19 +69,10 @@ def format_datetime_russian(dt_obj: datetime, fmt: str) -> str:
 
 
 def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int) -> None:
-    from core.config import EMPLOYEES
     role = EMPLOYEES.get(emp_id)
     if role is None:
         return
-    if role.role_id in (1, 4):
-        list_marks = search_missed_marks(time_table, emp_id, year, month)
-        list_missed = search_missed_work_days(time_table, emp_id, year, month)
-    elif role.role_id == 3:
-        list_marks = 0
-        list_missed = search_missed_work_days(time_table, emp_id, year, month)
-    else:
-        list_marks = 0
-        list_missed = 0
+    list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
     name = f'{role.last_name} {role.first_name}'.strip()
     if list_marks != 0 or list_missed != 0:
         print('--------------------------------------------------------------------------------------------------------------------------------------------')
@@ -96,24 +100,26 @@ def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int) -> N
                 print('\t\t\t------------------')
 
 
+def _set_mark(time_table: dict, date_key: str, emp_id: int, marks: list) -> None:
+    try:
+        time_table[date_key][emp_id] = marks
+    except KeyError:
+        time_table[date_key] = {emp_id: marks}
+
+
+def _save_session(time_table: dict) -> None:
+    from core.session import save_session
+    save_session(time_table)
+
+
 def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> None:
     from randomazer_time_value import time_data_generation
-    from pickle import dump
     from sys import stderr
 
-    from core.config import EMPLOYEES
     role = EMPLOYEES.get(emp_id)
     if role is None:
         return
-    if role.role_id in (1, 4):
-        list_marks = search_missed_marks(time_table, emp_id, year, month)
-        list_missed = search_missed_work_days(time_table, emp_id, year, month)
-    elif role.role_id == 3:
-        list_marks = 0
-        list_missed = search_missed_work_days(time_table, emp_id, year, month)
-    else:
-        list_marks = 0
-        list_missed = 0
+    list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
     name = f'{role.last_name} {role.first_name}'.strip()
     if list_marks != 0:
         print(f"ПРЕДУПРЕЖДЕНИЕ! {name} имеет только одну отметку в рабочем дне!", file=stderr)
@@ -131,8 +137,7 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         time_table[date_key][emp_id][1] = dt_write
                     else:
                         time_table[date_key][emp_id][0] = dt_write
-                    with open('temporary.pickle', 'wb') as f:
-                        dump(time_table, f)
+                    _save_session(time_table)
                     print('Ввод данных об отметки подтвержден!', dt_write)
                     break
     if list_missed != 0:
@@ -150,33 +155,18 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                     t_end = time_data_generation(input('Введите время: '))
                     dt_end = datetime.strptime(f'{missed_day} {t_end}', '%Y-%m-%d %H %M %S')
                     print('\nДанные за день введены\n')
-                    try:
-                        time_table[missed_day][emp_id] = [dt_end, dt_begin, 'work']
-                    except KeyError:
-                        time_table[missed_day] = {}
-                        time_table[missed_day][emp_id] = [dt_end, dt_begin, 'work']
-                    with open('temporary.pickle', 'wb') as f:
-                        dump(time_table, f)
+                    _set_mark(time_table, missed_day, emp_id, [dt_end, dt_begin, 'work'])
+                    _save_session(time_table)
                     break
                 elif switch == '2':
                     dt_vac = datetime.strptime(f'{missed_day} 00 00 01', '%Y-%m-%d %H %M %S')
-                    try:
-                        time_table[missed_day][emp_id] = [dt_vac, dt_vac, 'vacation']
-                    except KeyError:
-                        time_table[missed_day] = {}
-                        time_table[missed_day][emp_id] = [dt_vac, dt_vac, 'vacation']
-                    with open('temporary.pickle', 'wb') as f:
-                        dump(time_table, f)
+                    _set_mark(time_table, missed_day, emp_id, [dt_vac, dt_vac, 'vacation'])
+                    _save_session(time_table)
                     break
                 elif switch == '3':
                     dt_truancy = datetime.strptime(f'{missed_day} 23 59 59', '%Y-%m-%d %H %M %S')
-                    try:
-                        time_table[missed_day][emp_id] = [dt_truancy, dt_truancy, 'truancy']
-                    except KeyError:
-                        time_table[missed_day] = {}
-                        time_table[missed_day][emp_id] = [dt_truancy, dt_truancy, 'truancy']
-                    with open('temporary.pickle', 'wb') as f:
-                        dump(time_table, f)
+                    _set_mark(time_table, missed_day, emp_id, [dt_truancy, dt_truancy, 'truancy'])
+                    _save_session(time_table)
                     break
                 else:
                     print('Введите правильный пункт меню!')

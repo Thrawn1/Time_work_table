@@ -1,7 +1,6 @@
 import argparse
 import sys
 from os.path import exists
-from pickle import load, dump
 
 from core.config import load_config, set_secret_key
 from core.file_parser import read_file_data
@@ -11,6 +10,7 @@ from core.calculations import calculate_hours_per_day, calculate_hours_per_month
 from core.excel_builder import build_excel
 from core.html_builder import build_html, _build_total_data
 from core.constants import MONTHS_NAME_TO_RUSSIAN
+from core.session import load_session, save_session, session_exists, remove_session
 
 
 def main():
@@ -22,6 +22,7 @@ def main():
     parser.add_argument('-m', '--month', type=int, help='Месяц (1-12)')
     parser.add_argument('-k', '--key', default='0', help='Секретный ключ (или t для без зарплаты)')
     parser.add_argument('--no-edit', action='store_true', help='Пропустить интерактивное редактирование')
+    parser.add_argument('--resume', action='store_true', help='Восстановить сохраненную сессию из temporary.pickle')
     args = parser.parse_args()
 
     load_config()
@@ -38,13 +39,19 @@ def main():
     set_secret_key(secret_key)
 
     pickle_path = 'temporary.pickle'
-    if exists(pickle_path):
-        with open(pickle_path, 'rb') as f:
-            data_array = load(f)
+    json_path = 'temporary.json'
+    if args.resume and (exists(json_path) or exists(pickle_path)):
+        data_array = load_session()
+        if data_array is None:
+            print('Не удалось восстановить сессию!')
+            sys.exit(1)
         first_date = list(data_array.keys())[0]
         year = int(first_date[:4])
         month = int(first_date[5:7])
     else:
+        if not args.resume and session_exists():
+            print(f'ВНИМАНИЕ: найден файл сессии. '
+                  'Он будет проигнорирован. Используйте --resume для восстановления.')
         year = args.year or int(input('Введите год: '))
         month = args.month or int(input('Введите месяц: '))
         list_data = read_file_data(args.file, year, month)
@@ -72,7 +79,7 @@ def main():
 
     work_time = calculate_hours_per_day(data_array)
     summary, restructured = calculate_hours_per_month(work_time)
-    wages = calculate_wages(summary, secret_key)
+    wages = calculate_wages(summary)
     build_excel(data_array, work_time, summary, wages)
 
     for emp_id in emp_ids:
@@ -98,11 +105,7 @@ def main():
             print(f'\n\t\tЗарплата (учитывая молоко, но без премий): {td["salary_whith_milk"]}')
             print('\t\t\t--------------------------')
 
-    try:
-        import os
-        os.remove(pickle_path)
-    except (FileNotFoundError, OSError):
-        pass
+    remove_session()
 
 
 if __name__ == '__main__':

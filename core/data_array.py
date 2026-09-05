@@ -47,13 +47,7 @@ def get_employee_work_dates(time_table: dict, emp_id: int) -> list[str]:
 
 
 def get_all_employees_in_data(time_table: dict) -> list[int]:
-    employees_seen: list[int] = []
-    all_ids = set(EMPLOYEES.keys())
-    for cell in time_table.values():
-        for emp_id in cell:
-            if emp_id in all_ids and emp_id not in employees_seen:
-                employees_seen.append(emp_id)
-    return employees_seen
+    return list(EMPLOYEES.keys())
 
 
 def get_name_employee(emp_id: int) -> str:

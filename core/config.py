@@ -77,14 +77,14 @@ def _load_employees() -> dict[int, EmployeeData]:
                 id=emp_id, first_name=first_name, last_name=last_name,
                 role_id=role_id, role_name=role_name, hourly_rate=0,
             )
-    rates = _load_wage_rates()
+    rates = load_wage_rates()
     for emp_id, rate in rates.items():
         if emp_id in employees:
             employees[emp_id].hourly_rate = rate
     return employees
 
 
-def _load_wage_rates() -> dict[int, float]:
+def load_wage_rates() -> dict[int, float]:
     rates: dict[int, float] = {}
     key = _get_secret_key()
     with open(WAGE_RATES_FILE, 'r', encoding='utf-8') as f:

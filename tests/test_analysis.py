@@ -46,11 +46,12 @@ class TestSearchMissedWorkDays:
         assert '2026-07-07' in result
 
     def test_employee_no_marks_at_all(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        """P1 #5 BUG: Employee with zero marks returns 0 instead of list of all workdays."""
+        """P1 #5 FIXED: Employee with zero marks returns all workdays as missed."""
         tt = {}
         result = search_missed_work_days(tt, 101, 2026, 7)
-        # BUG: returns 0 because employee_dates is empty
-        assert result == 0  # This documents the bug - should be a list of all workdays
+        # FIXED: returns all workdays, not 0
+        assert result != 0
+        assert '2026-07-06' in result
 
     def test_employee_in_other_month(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """Employee only has marks in a different month - all July workdays are missed."""

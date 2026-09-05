@@ -146,7 +146,8 @@ class TestGetEmployeeWorkDates:
 
 
 class TestGetAllEmployeesInData:
-    def test_returns_unique_ids(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
+    def test_returns_all_handbook_employees(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
+        """P1 #5 FIXED: returns all employees from handbook, not just those with marks."""
         lines = [
             make_line(101, '2026-07-06', '08:00:00'),
             make_line(101, '2026-07-07', '08:00:00'),
@@ -154,7 +155,10 @@ class TestGetAllEmployeesInData:
         ]
         tt = build_data_array(lines)
         ids = get_all_employees_in_data(tt)
-        assert ids == [101, 102]
+        # FIXED: all handbook employees, not just those with marks
+        assert 101 in ids
+        assert 102 in ids
+        assert 103 in ids
 
 
 class TestGetNameEmployee:

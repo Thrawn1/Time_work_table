@@ -145,8 +145,8 @@ class TestCalculateHoursPerDay:
         assert tag_overtime == ''
         assert tag_day == 'work'
 
-    def test_role3_vacation_becomes_work(self, setup_employees):
-        """P1 #2 BUG: Role 3 with vacation tag is returned as 'work'."""
+    def test_role3_vacation_preserved(self, setup_employees):
+        """P1 #2 FIXED: Role 3 with vacation tag preserves 'vacation' status."""
         date_key = '2026-07-06'
         time_table = {
             date_key: {
@@ -154,12 +154,12 @@ class TestCalculateHoursPerDay:
             }
         }
         result = calculate_hours_per_day(time_table)
-        _, _, _, tag_day = result[date_key][102]
-        # BUG: role 3 always returns 'work', vacation is lost
-        assert tag_day == 'work'  # This documents the current (broken) behavior
+        abs_delta, worked, tag_overtime, tag_day = result[date_key][102]
+        assert tag_day == 'vacation'
+        assert worked == timedelta(0)
 
-    def test_role3_truancy_becomes_work(self, setup_employees):
-        """P1 #2 BUG: Role 3 with truancy tag is returned as 'work'."""
+    def test_role3_truancy_preserved(self, setup_employees):
+        """P1 #2 FIXED: Role 3 with truancy tag preserves 'truancy' status."""
         date_key = '2026-07-06'
         time_table = {
             date_key: {
@@ -168,8 +168,7 @@ class TestCalculateHoursPerDay:
         }
         result = calculate_hours_per_day(time_table)
         _, _, _, tag_day = result[date_key][102]
-        # BUG: role 3 always returns 'work', truancy is lost
-        assert tag_day == 'work'  # This documents the current (broken) behavior
+        assert tag_day == 'truancy'
 
     def test_role4_works_like_role1(self, setup_employees):
         """Role 4 should behave like role 1."""
@@ -216,7 +215,7 @@ class TestCalculateHoursPerMonth:
         ])
         summary, restructured = calculate_hours_per_month(work_time)
         total_work, overtime_wd, undertime_wd = summary[101][0]
-        total_holiday, overwork_we = summary[101][1]
+        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
         vacation = summary[101][2]
         truancy = summary[101][3]
         assert total_work == 1
@@ -253,9 +252,10 @@ class TestCalculateHoursPerMonth:
             ('2026-07-04', 101, timedelta(hours=2), timedelta(hours=10), 'переработка', 'weekend'),
         ])
         summary, _ = calculate_hours_per_month(work_time)
-        total_holiday, overwork_we = summary[101][1]
+        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
         assert total_holiday == 1
-        assert overwork_we == timedelta(hours=2)
+        assert overtime_we == timedelta(hours=2)
+        assert total_worked_we == timedelta(hours=10)
 
     def test_vacation_counted(self, setup_employees):
         """Vacation days are counted separately."""
@@ -286,7 +286,7 @@ class TestCalculateHoursPerMonth:
         ])
         summary, _ = calculate_hours_per_month(work_time)
         total_work, overtime_wd, undertime_wd = summary[101][0]
-        total_holiday, overwork_we = summary[101][1]
+        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
         vacation = summary[101][2]
         truancy = summary[101][3]
         assert total_work == 2
@@ -295,22 +295,22 @@ class TestCalculateHoursPerMonth:
         assert truancy == 1
         assert overtime_wd == timedelta(hours=1)
         assert undertime_wd == timedelta(0)
-        assert overwork_we == timedelta(hours=2)
+        assert overtime_we == timedelta(hours=2)
+        assert total_worked_we == timedelta(hours=10)
 
-    def test_holiday_not_in_monthly_aggregation(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        """P1 #1 BUG: Holiday tag is not recognized in monthly aggregation."""
+    def test_holiday_counted_in_monthly_aggregation(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
+        """P1 #1 FIXED: Holiday tag is now recognized in monthly aggregation."""
         work_time = self._build_work_time([
             ('2026-01-01', 101, timedelta(hours=2), timedelta(hours=10), 'переработка', 'holiday'),
         ])
         summary, restructured = calculate_hours_per_month(work_time)
-        # Holiday is not 'work', 'weekend', 'vacation', or 'truancy'
-        # so it falls through all branches and is not counted at all
         total_work, _, _ = summary[101][0]
-        total_holiday, _ = summary[101][1]
+        total_holiday, overtime_we, _, total_worked_we = summary[101][1]
+        # FIXED: holiday counted in total_holiday, not lost
         assert total_work == 0
-        assert total_holiday == 0
-        # The day is simply lost
-        assert 101 not in restructured or len(restructured[101][0]) == 0
+        assert total_holiday == 1
+        assert overtime_we == timedelta(hours=2)
+        assert total_worked_we == timedelta(hours=10)
 
     def test_role3_monthly_summary(self, setup_employees):
         """Role 3: all days counted as work in monthly summary."""
@@ -332,7 +332,7 @@ class TestCalculateWages:
         summary = {
             101: (
                 (1, timedelta(0), timedelta(0)),   # work_days, overtime, undertime
-                (0, timedelta(0)),   # holiday_days, overwork_weekend
+                (0, timedelta(0), timedelta(0), timedelta(0)),   # holiday_days, overtime, undertime, worked
                 0,  # vacation
                 0,  # truancy
             )
@@ -353,7 +353,7 @@ class TestCalculateWages:
         summary = {
             101: (
                 (1, timedelta(hours=2), timedelta(0)),
-                (0, timedelta(0)),
+                (0, timedelta(0), timedelta(0), timedelta(0)),
                 0, 0,
             )
         }
@@ -373,7 +373,7 @@ class TestCalculateWages:
         summary = {
             101: (
                 (1, timedelta(0), timedelta(hours=6)),
-                (0, timedelta(0)),
+                (0, timedelta(0), timedelta(0), timedelta(0)),
                 0, 0,
             )
         }
@@ -385,27 +385,30 @@ class TestCalculateWages:
         assert total > 0  # FIX: no longer negative
 
     def test_role1_weekend_pay(self, setup_employees, mock_wage_rates):
-        """Weekend work: 1.5 * rate * days."""
+        """Weekend work: 1.5 * rate_per_second * worked_seconds."""
+        rate = 800
+        rate_per_sec = rate / (8 * 3600)
+        worked = timedelta(hours=8)
+        expected_salary = round(1.5 * rate_per_sec * worked.total_seconds(), 2)
         summary = {
             101: (
                 (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0)),  # 1 weekend day, no extra overwork
+                (1, timedelta(0), timedelta(0), worked),  # 1 day, 0 overtime, 0 undertime, 8h worked
                 0, 0,
             )
         }
         result = calculate_wages(summary)
         total, milk, total_with_milk = result[101]
-        # 1.5 * 800 * 1 = 1200
-        assert total == 1200
+        assert total == expected_salary
         assert milk == 40  # weekends also get milk
-        assert total_with_milk == 1240
+        assert total_with_milk == expected_salary + 40
 
     def test_role1_vacation_pay(self, setup_employees, mock_wage_rates):
         """Vacation: rate * days."""
         summary = {
             101: (
                 (0, timedelta(0), timedelta(0)),
-                (0, timedelta(0)),
+                (0, timedelta(0), timedelta(0), timedelta(0)),
                 5,  # 5 vacation days
                 0,
             )
@@ -420,15 +423,16 @@ class TestCalculateWages:
         """20 work days, 2 weekend days, 1 vacation."""
         rate = 800
         rate_per_sec = rate / (8 * 3600)
+        weekend_worked = timedelta(hours=8)
         weekend_overwork = timedelta(hours=3)
         expected_weekday = rate * 20
-        # Code uses: 1.5 * rate * days + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_sec * overtime_secs
-        expected_weekend = 1.5 * rate * 2 + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_sec * weekend_overwork.total_seconds()
+        expected_weekend = (1.5 * rate_per_sec * weekend_worked.total_seconds()
+                            + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_sec * weekend_overwork.total_seconds())
         expected_vacation = rate * 1
         summary = {
             101: (
                 (20, timedelta(0), timedelta(0)),
-                (2, weekend_overwork),
+                (2, weekend_overwork, timedelta(0), weekend_worked),
                 1, 0,
             )
         }
@@ -443,7 +447,7 @@ class TestCalculateWages:
         summary = {
             102: (
                 (22, timedelta(0), timedelta(0)),
-                (0, timedelta(0)),
+                (0, timedelta(0), timedelta(0), timedelta(0)),
                 0, 0,
             )
         }
@@ -458,7 +462,7 @@ class TestCalculateWages:
         summary = {
             102: (
                 (1, timedelta(0), timedelta(0)),
-                (1, timedelta(0)),
+                (1, timedelta(0), timedelta(0), timedelta(0)),
                 0, 0,
             )
         }
