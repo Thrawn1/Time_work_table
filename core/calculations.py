@@ -1,5 +1,5 @@
 from datetime import timedelta
-from core.config import EMPLOYEES
+from core.config import EMPLOYEES, load_wage_rates
 from core.constants import WORKING_DAY_HOURS, MILK_ALLOWANCE_PER_DAY, OVERTIME_WEEKDAY_MULTIPLIER
 
 
@@ -58,28 +58,28 @@ def calculate_hours_per_month(work_time: dict) -> tuple[dict[int, tuple], dict]:
         truancy_days = len(groups[3])
         total_work = len(work_days)
         total_holiday = len(holiday_days)
-        overwork_weekday = timedelta(0)
+        overtime_weekday = timedelta(0)
+        undertime_weekday = timedelta(0)
         for delta, tag, _ in work_days:
             if tag == 'переработка':
-                overwork_weekday += delta
+                overtime_weekday += delta
             else:
-                overwork_weekday -= delta
-        overwork_weekend = timedelta(0)
+                undertime_weekday += delta
+        overtime_weekend = timedelta(0)
         for delta, tag, _ in holiday_days:
             if tag == 'переработка':
-                overwork_weekend += delta
+                overtime_weekend += delta
         summary[emp_id] = (
-            (total_work, overwork_weekday),
-            (total_holiday, overwork_weekend),
+            (total_work, overtime_weekday, undertime_weekday),
+            (total_holiday, overtime_weekend),
             vacation_days,
             truancy_days,
         )
     return summary, restructured
 
 
-def calculate_wages(summary: dict, secret_key: float) -> dict[int, tuple[float, float, float]]:
-    from core.config import WAGE_RATES_FILE
-    rates = _load_rates(secret_key)
+def calculate_wages(summary: dict) -> dict[int, tuple[float, float, float]]:
+    rates = load_wage_rates()
     result: dict[int, tuple[float, float, float]] = {}
     for emp_id, data in summary.items():
         emp = EMPLOYEES.get(emp_id)
@@ -90,15 +90,17 @@ def calculate_wages(summary: dict, secret_key: float) -> dict[int, tuple[float, 
             work_shift_secs = WORKING_DAY_HOURS * 3600
             rate_per_second = rate / work_shift_secs
             work_weekdays = data[0][0]
-            overwork_weekday = data[0][1]
+            overtime_weekday = data[0][1]
+            undertime_weekday = data[0][2]
             work_holidays = data[1][0]
-            overwork_holiday = data[1][1]
+            overtime_holiday = data[1][1]
             vacation_days = data[2]
             money_for_milk = (work_weekdays + work_holidays) * MILK_ALLOWANCE_PER_DAY
             salary_weekdays = (rate * work_weekdays
-                               + OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overwork_weekday.total_seconds())
+                               + OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overtime_weekday.total_seconds()
+                               - rate_per_second * undertime_weekday.total_seconds())
             salary_weekends = (1.5 * rate * work_holidays
-                               + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overwork_holiday.total_seconds())
+                               + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overtime_holiday.total_seconds())
             salary_vacation = rate * vacation_days
             total = round(salary_weekdays + salary_weekends + salary_vacation, 2)
             total_with_milk = total + money_for_milk
@@ -110,18 +112,3 @@ def calculate_wages(summary: dict, secret_key: float) -> dict[int, tuple[float, 
     return result
 
 
-def _load_rates(secret_key: float) -> dict[int, float]:
-    from core.config import WAGE_RATES_FILE
-    rates: dict[int, float] = {}
-    with open(WAGE_RATES_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split(' ')
-            emp_id = int(parts[0])
-            raw = parts[1].strip('[]')
-            rate_parts = raw.split('.')
-            decrypted = float(rate_parts[1] + '.' + rate_parts[0])
-            rates[emp_id] = round(decrypted * secret_key)
-    return rates

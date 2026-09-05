@@ -215,7 +215,7 @@ class TestCalculateHoursPerMonth:
             ('2026-07-06', 101, timedelta(0), timedelta(hours=8), '', 'work'),
         ])
         summary, restructured = calculate_hours_per_month(work_time)
-        total_work, overwork_wd = summary[101][0]
+        total_work, overtime_wd, undertime_wd = summary[101][0]
         total_holiday, overwork_we = summary[101][1]
         vacation = summary[101][2]
         truancy = summary[101][3]
@@ -223,16 +223,19 @@ class TestCalculateHoursPerMonth:
         assert total_holiday == 0
         assert vacation == 0
         assert truancy == 0
+        assert overtime_wd == timedelta(0)
+        assert undertime_wd == timedelta(0)
 
-    def test_undertime_subtracts_from_overwork(self, setup_employees):
-        """P1 #3: Undertime in a single day reduces overwork, can go negative."""
+    def test_undertime_separate_from_overtime(self, setup_employees):
+        """P1 #3 FIX: Undertime is tracked separately, not mixed with overtime."""
         work_time = self._build_work_time([
             ('2026-07-06', 101, timedelta(hours=6), timedelta(hours=2), 'недоработка', 'work'),
         ])
         summary, _ = calculate_hours_per_month(work_time)
-        _, overwork_wd = summary[101][0]
-        # Current behavior: undertime is subtracted, resulting in negative overwork
-        assert overwork_wd == timedelta(hours=-6)  # This documents the bug
+        _, overtime_wd, undertime_wd = summary[101][0]
+        # FIX: undertime goes to separate field, overtime stays zero
+        assert overtime_wd == timedelta(0)
+        assert undertime_wd == timedelta(hours=6)
 
     def test_overtime_positive(self, setup_employees):
         """Normal overtime adds up."""
@@ -240,8 +243,9 @@ class TestCalculateHoursPerMonth:
             ('2026-07-06', 101, timedelta(hours=2), timedelta(hours=10), 'переработка', 'work'),
         ])
         summary, _ = calculate_hours_per_month(work_time)
-        _, overwork_wd = summary[101][0]
-        assert overwork_wd == timedelta(hours=2)
+        _, overtime_wd, undertime_wd = summary[101][0]
+        assert overtime_wd == timedelta(hours=2)
+        assert undertime_wd == timedelta(0)
 
     def test_weekend_overtime_only_positive(self, setup_employees):
         """P1 #4: Weekend overwork only counts positive deltas."""
@@ -281,7 +285,7 @@ class TestCalculateHoursPerMonth:
             ('2026-07-09', 101, timedelta(0), timedelta(0), '', 'truancy'),
         ])
         summary, _ = calculate_hours_per_month(work_time)
-        total_work, overwork_wd = summary[101][0]
+        total_work, overtime_wd, undertime_wd = summary[101][0]
         total_holiday, overwork_we = summary[101][1]
         vacation = summary[101][2]
         truancy = summary[101][3]
@@ -289,7 +293,8 @@ class TestCalculateHoursPerMonth:
         assert total_holiday == 1
         assert vacation == 1
         assert truancy == 1
-        assert overwork_wd == timedelta(hours=1)
+        assert overtime_wd == timedelta(hours=1)
+        assert undertime_wd == timedelta(0)
         assert overwork_we == timedelta(hours=2)
 
     def test_holiday_not_in_monthly_aggregation(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
@@ -300,7 +305,7 @@ class TestCalculateHoursPerMonth:
         summary, restructured = calculate_hours_per_month(work_time)
         # Holiday is not 'work', 'weekend', 'vacation', or 'truancy'
         # so it falls through all branches and is not counted at all
-        total_work, _ = summary[101][0]
+        total_work, _, _ = summary[101][0]
         total_holiday, _ = summary[101][1]
         assert total_work == 0
         assert total_holiday == 0
@@ -314,7 +319,7 @@ class TestCalculateHoursPerMonth:
             ('2026-07-07', 102, timedelta(0), timedelta(hours=8), '', 'work'),
         ])
         summary, _ = calculate_hours_per_month(work_time)
-        total_work, _ = summary[102][0]
+        total_work, _, _ = summary[102][0]
         assert total_work == 2
 
 
@@ -326,7 +331,7 @@ class TestCalculateWages:
         """8-hour day, no overtime: rate * 1."""
         summary = {
             101: (
-                (1, timedelta(0)),   # work_days, overwork_weekday
+                (1, timedelta(0), timedelta(0)),   # work_days, overtime, undertime
                 (0, timedelta(0)),   # holiday_days, overwork_weekend
                 0,  # vacation
                 0,  # truancy
@@ -347,7 +352,7 @@ class TestCalculateWages:
         expected_salary = rate * 1 + 1.5 * rate_per_sec * overtime_secs
         summary = {
             101: (
-                (1, timedelta(hours=2)),
+                (1, timedelta(hours=2), timedelta(0)),
                 (0, timedelta(0)),
                 0, 0,
             )
@@ -358,32 +363,32 @@ class TestCalculateWages:
         assert milk == 40
         assert total_with_milk == round(expected_salary, 2) + 40
 
-    def test_role1_negative_overtime_gives_negative_salary(self, setup_employees, mock_wage_rates):
-        """P1 #3 BUG: Negative overwork reduces salary below zero for 2h day."""
+    def test_role1_undertime_reduces_salary_correctly(self, setup_employees, mock_wage_rates):
+        """P1 #3 FIX: 2h workday reduces salary by regular rate, not 1.5x."""
         rate = 800
         rate_per_sec = rate / (8 * 3600)
-        # From calculate_hours_per_month: 2h day -> overwork = timedelta(hours=-6)
-        # But we test the wage formula directly
-        negative_overwork = timedelta(hours=-6)
-        expected_salary = rate * 1 + 1.5 * rate_per_sec * negative_overwork.total_seconds()
+        undertime_secs = timedelta(hours=6).total_seconds()
+        # FIX: undertime subtracted at regular rate (not 1.5x)
+        expected_salary = rate * 1 - rate_per_sec * undertime_secs
         summary = {
             101: (
-                (1, negative_overwork),
+                (1, timedelta(0), timedelta(hours=6)),
                 (0, timedelta(0)),
                 0, 0,
             )
         }
         result = calculate_wages(summary)
         total, milk, total_with_milk = result[101]
-        # This should be negative: 800 + 1.5 * (800/28800) * (-21600) = 800 - 900 = -100
-        assert total < 0
+        # 800 - (800/28800)*21600 = 800 - 600 = 200
         assert total == round(expected_salary, 2)
+        assert total == 200
+        assert total > 0  # FIX: no longer negative
 
     def test_role1_weekend_pay(self, setup_employees, mock_wage_rates):
         """Weekend work: 1.5 * rate * days."""
         summary = {
             101: (
-                (0, timedelta(0)),
+                (0, timedelta(0), timedelta(0)),
                 (1, timedelta(0)),  # 1 weekend day, no extra overwork
                 0, 0,
             )
@@ -399,7 +404,7 @@ class TestCalculateWages:
         """Vacation: rate * days."""
         summary = {
             101: (
-                (0, timedelta(0)),
+                (0, timedelta(0), timedelta(0)),
                 (0, timedelta(0)),
                 5,  # 5 vacation days
                 0,
@@ -422,7 +427,7 @@ class TestCalculateWages:
         expected_vacation = rate * 1
         summary = {
             101: (
-                (20, timedelta(0)),
+                (20, timedelta(0), timedelta(0)),
                 (2, weekend_overwork),
                 1, 0,
             )
@@ -437,7 +442,7 @@ class TestCalculateWages:
         """Role 3: flat rate * (work_days + holiday_days)."""
         summary = {
             102: (
-                (22, timedelta(0)),
+                (22, timedelta(0), timedelta(0)),
                 (0, timedelta(0)),
                 0, 0,
             )
@@ -452,7 +457,7 @@ class TestCalculateWages:
         """Role 3 never gets milk allowance."""
         summary = {
             102: (
-                (1, timedelta(0)),
+                (1, timedelta(0), timedelta(0)),
                 (1, timedelta(0)),
                 0, 0,
             )

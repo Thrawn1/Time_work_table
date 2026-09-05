@@ -2,6 +2,7 @@ from datetime import timedelta
 from core.config import EMPLOYEES
 from core.data_array import get_name_employee, is_settlement_allowed
 from core.constants import MONTHS_NAME_TO_RUSSIAN
+from core.calculations import str_timedelta
 
 
 def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
@@ -51,6 +52,7 @@ def _build_total_data(emp_id: int, summary: dict, wages: dict) -> dict:
         'family': get_name_employee(emp_id),
         'all_work_weekdays': data[0][0],
         'weekdays_overtime': str_timedelta(data[0][1]),
+        'weekdays_undertime': str_timedelta(data[0][2]),
         'work_weekend': data[1][0],
         'overtime_weekend': str_timedelta(data[1][1]),
         'vacation': data[2],
@@ -90,7 +92,7 @@ def _gen_header(table_type: int) -> list[str]:
                   'Общее время работы', 'Переработка']
     else:
         topics = ['Фамилия', 'Отработано будних дней', 'Переработка в будние дни',
-                  'Рабочих выходных', 'Переработка в выходные дни',
+                  'Недоработка в будние дни', 'Рабочих выходных', 'Переработка в выходные дни',
                   'Количество дней отпуска', 'Оклад', 'Молоко', 'Зарплата']
     lines = ['    <thead>\n', '      <tr style="text-align: center;">\n']
     for t in topics:
@@ -125,6 +127,7 @@ def _gen_total_row(total: dict) -> list[str]:
     row.append(f'          <th align="center">{total["family"]}</th>\n')
     row.append(f'          <th>{total["all_work_weekdays"]}</th>\n')
     row.append(f'          <th>{total["weekdays_overtime"]}</th>\n')
+    row.append(f'          <th>{total["weekdays_undertime"]}</th>\n')
     row.append(f'          <th>{total["work_weekend"]}</th>\n')
     row.append(f'          <th>{total["overtime_weekend"]}</th>\n')
     row.append(f'          <th>{total["vacation"]}</th>\n')
@@ -134,7 +137,3 @@ def _gen_total_row(total: dict) -> list[str]:
     row.append('        </tr>\n')
     return row
 
-
-def str_timedelta(td: timedelta) -> str:
-    from core.calculations import str_timedelta as _str_timedelta
-    return _str_timedelta(td)

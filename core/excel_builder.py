@@ -85,8 +85,9 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
         if row[0].value:
             max_row = row[0].row
     count = max_row + 3
-    topics = ['Фамилия', 'Отработано будних дней', 'Переработка', 'Рабочих выходных',
-              'Переработка выходных', 'Количество дней отпуска', 'Оклад', 'Молоко', 'Зарплата']
+    topics = ['Фамилия', 'Отработано будних дней', 'Переработка', 'Недоработка',
+              'Рабочих выходных', 'Переработка выходных', 'Количество дней отпуска',
+              'Оклад', 'Молоко', 'Зарплата']
     for i, topic in enumerate(topics, 8):
         ws.cell(column=i, row=count, value=topic).border = border
     count += 1
@@ -97,15 +98,16 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
         ws.cell(column=9, row=count, value=summary[emp_id][0][0]).border = border
         ws.cell(column=9, row=count).alignment = Alignment(horizontal='center')
         ws.cell(column=10, row=count, value=summary[emp_id][0][1]).border = border
-        ws.cell(column=11, row=count, value=summary[emp_id][1][0]).border = border
-        ws.cell(column=11, row=count).alignment = Alignment(horizontal='center')
-        ws.cell(column=12, row=count, value=summary[emp_id][1][1]).border = border
-        ws.cell(column=13, row=count, value=summary[emp_id][2]).border = border
-        ws.cell(column=13, row=count).alignment = Alignment(horizontal='center')
+        ws.cell(column=11, row=count, value=summary[emp_id][0][2]).border = border
+        ws.cell(column=12, row=count, value=summary[emp_id][1][0]).border = border
+        ws.cell(column=12, row=count).alignment = Alignment(horizontal='center')
+        ws.cell(column=13, row=count, value=summary[emp_id][1][1]).border = border
+        ws.cell(column=14, row=count, value=summary[emp_id][2]).border = border
+        ws.cell(column=14, row=count).alignment = Alignment(horizontal='center')
         if emp_id in wages:
-            ws.cell(column=14, row=count, value=wages[emp_id][0]).border = border
-            ws.cell(column=15, row=count, value=wages[emp_id][1]).border = border
-            ws.cell(column=16, row=count, value=wages[emp_id][2]).border = border
+            ws.cell(column=15, row=count, value=wages[emp_id][0]).border = border
+            ws.cell(column=16, row=count, value=wages[emp_id][1]).border = border
+            ws.cell(column=17, row=count, value=wages[emp_id][2]).border = border
         count += 1
 
 
