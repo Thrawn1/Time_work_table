@@ -15,19 +15,6 @@ WEEKDAYS_NAME: dict[int, str] = {
     3: 'Четверг', 4: 'Пятница', 5: 'Суббота', 6: 'Воскресенье',
 }
 
-MONTHS_NAME_EN_TO_RUSSIAN: dict[str, str] = {
-    'January': 'Января', 'February': 'Февраля', 'March': 'Марта',
-    'April': 'Апреля', 'May': 'Мая', 'June': 'Июня',
-    'July': 'Июля', 'August': 'Августа', 'September': 'Сентября',
-    'October': 'Октября', 'November': 'Ноября', 'December': 'Декабря',
-}
-
-WEEKDAYS_NAME_EN_TO_RUSSIAN: dict[str, str] = {
-    'Monday': 'Понедельник', 'Tuesday': 'Вторник', 'Wednesday': 'Среда',
-    'Thursday': 'Четверг', 'Friday': 'Пятница', 'Saturday': 'Суббота',
-    'Sunday': 'Воскресенье',
-}
-
 WORKING_DAY_HOURS: int = 8
 MILK_ALLOWANCE_PER_DAY: int = 40
 OVERTIME_WEEKDAY_MULTIPLIER: float = 1.5
