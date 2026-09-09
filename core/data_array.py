@@ -1,6 +1,6 @@
 from datetime import datetime
 from core.config import EMPLOYEES, SETTLEMENT_EXCEPTIONS
-from core.file_parser import read_file_data, definition_of_working_day
+from core.file_parser import read_file_data, definition_of_working_day, parse_attlog_line
 from core.constants import WEEKDAYS_NAME, MONTHS_NAME_TO_RUSSIAN
 
 
@@ -30,16 +30,8 @@ def build_data_array(list_month: list[str]) -> dict[str, dict[int, list]]:
 
 
 def _parse_line(line: str) -> tuple[int, datetime] | None:
-    import re
-    pattern = re.compile(
-        r'^\s*(\d+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+'
-    )
-    match = pattern.match(line)
-    if not match:
-        return None
-    emp_id = int(match.group(1))
-    dt = datetime.strptime(match.group(2), '%Y-%m-%d %H:%M:%S')
-    return emp_id, dt
+    """Единый парсер DAT-строк (делегирует file_parser, оставлен ради тестов)."""
+    return parse_attlog_line(line)
 
 
 def get_employee_work_dates(time_table: dict, emp_id: int) -> list[str]:

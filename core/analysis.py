@@ -222,6 +222,77 @@ def _save_session(time_table: dict) -> None:
     save_session(time_table)
 
 
+def _dt(day: str, t: str) -> datetime:
+    """'2026-07-21' + '08 00 00' -> datetime. Бросает ValueError."""
+    return datetime.strptime(f'{day} {t}', '%Y-%m-%d %H %M %S')
+
+
+def _dt_vac(day: str) -> datetime:
+    return _dt(day, '00 00 01')
+
+
+def _dt_truancy(day: str) -> datetime:
+    return _dt(day, '23 59 59')
+
+
+def _read_work_times(suffix: str = '') -> tuple[str, str, bool] | None:
+    """Спросить приход/уход один раз. None — отмена."""
+    got_begin = _read_valid_time(f'Время прихода{suffix}')
+    if got_begin is None:
+        return None
+    got_end = _read_valid_time(f'Время ухода{suffix}')
+    if got_end is None:
+        return None
+    (t_begin, rand_begin), (t_end, rand_end) = got_begin, got_end
+    return t_begin, t_end, bool(rand_begin or rand_end)
+
+
+def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
+                     t_begin: str, t_end: str, randomized: bool,
+                     action: str, date_ref: str) -> bool:
+    """Проверить, подтвердить и записать рабочие дни. True — записано."""
+    from core import ui
+
+    try:
+        dt_b0, dt_e0 = _dt(days[0], t_begin), _dt(days[0], t_end)
+    except ValueError as e:
+        ui.error(f'Ошибка: неверное время ({e}). Введите заново.')
+        return False
+    err = _validate_pair(dt_b0, dt_e0)
+    if err is not None:
+        ui.error(f'Ошибка: {err}. Не сохранено. Введите заново или 0 для пропуска.')
+        return False
+    count = f' x {len(days)} дн.' if len(days) > 1 else '.'
+    preview = (f'Выйдет за {date_ref}: приход {dt_b0.time()} уход {dt_e0.time()} '
+               f'длительность {dt_e0 - dt_b0}{count}')
+    if randomized:
+        preview += ' (часть времени дополнена случайно — проверьте!)'
+    if not _confirm_save(preview):
+        ui.info('Не подтверждено. Введите заново или 0 для пропуска.')
+        return False
+    for day in days:
+        _set_mark(time_table, day, emp_id, [_dt(day, t_end), _dt(day, t_begin), 'work'])
+    _save_session(time_table)
+    ui.info(f'\nДанные за {date_ref} введены\n')
+    record_edit(emp_id, date_ref, action, None, [dt_e0, dt_b0, 'work'], randomized=randomized)
+    return True
+
+
+def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
+                       action: str, date_ref: str, confirm_q: str) -> bool:
+    """Одно подтверждение на все дни. tag: 'vacation' | 'truancy'."""
+    if not _confirm_save(confirm_q):
+        return False
+    mark_of = _dt_vac if tag == 'vacation' else _dt_truancy
+    for day in days:
+        mark = mark_of(day)
+        _set_mark(time_table, day, emp_id, [mark, mark, tag])
+    _save_session(time_table)
+    mark0 = mark_of(days[0])
+    record_edit(emp_id, date_ref, action, None, [mark0, mark0, tag])
+    return True
+
+
 def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> None:
     from sys import stderr
     from core import ui
@@ -248,7 +319,7 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         break  # пропуск этого дня
                     entered_time, randomized = got
                     try:
-                        dt_write = datetime.strptime(f'{date_key} {entered_time}', '%Y-%m-%d %H %M %S')
+                        dt_write = _dt(date_key, entered_time)
                     except ValueError as e:
                         ui.error(f'Ошибка: неверное время ({e}). Введите снова.')
                         continue
@@ -291,74 +362,37 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                 ui.info('[a] пропустить все оставшиеся')
                 valid = ('1', '2', '3', 'a')
             while True:
-                switch = ui.ask_menu('Введите пункт меню:', valid)
-                if switch in ('0', 'q', 'отмена'):
-                    break
-                if switch == 'a':
-                    skip_rest = True
-                    break
-                if switch == '4' and multi:
-                    for day in group:
-                        _edit_one_missed_day(time_table, emp_id, day)
-                    break
-                if switch == '1':
-                    got_begin = _read_valid_time('Время прихода (одно на все дни диапазона)')
-                    if got_begin is None:
+                match ui.ask_menu('Введите пункт меню:', valid):
+                    case '0' | 'q' | 'отмена':
                         break
-                    got_end = _read_valid_time('Время ухода (одно на все дни диапазона)')
-                    if got_end is None:
+                    case 'a':
+                        skip_rest = True
                         break
-                    t_begin, rand_begin = got_begin
-                    t_end, rand_end = got_end
-                    try:
-                        dt_b0 = datetime.strptime(f'{group[0]} {t_begin}', '%Y-%m-%d %H %M %S')
-                        dt_e0 = datetime.strptime(f'{group[0]} {t_end}', '%Y-%m-%d %H %M %S')
-                    except ValueError as e:
-                        ui.error(f'Ошибка: неверное время ({e}). Введите заново.')
-                        continue
-                    err = _validate_pair(dt_b0, dt_e0)
-                    if err is not None:
-                        ui.error(f'Ошибка: {err}. Не сохранено. Введите заново или 0 для пропуска.')
-                        continue
-                    preview = (f'Выйдет за {label}: приход {dt_b0.time()} '
-                               f'уход {dt_e0.time()} длительность {dt_e0 - dt_b0} '
-                               f'x {len(group)} дн.')
-                    randomized_fill = bool(rand_begin or rand_end)
-                    if randomized_fill:
-                        preview += ' (часть времени дополнена случайно — проверьте!)'
-                    if _confirm_save(preview):
+                    case '4' if multi:
                         for day in group:
-                            dt_begin = datetime.strptime(f'{day} {t_begin}', '%Y-%m-%d %H %M %S')
-                            dt_end = datetime.strptime(f'{day} {t_end}', '%Y-%m-%d %H %M %S')
-                            _set_mark(time_table, day, emp_id, [dt_end, dt_begin, 'work'])
-                        _save_session(time_table)
-                        ui.info(f'\nДанные за {label} введены\n')
-                        record_edit(emp_id, label, f'рабочие дни x{len(group)}', None,
-                                    [dt_e0, dt_b0, 'work'],
-                                    randomized=randomized_fill)
+                            _edit_one_missed_day(time_table, emp_id, day)
                         break
-                    ui.info('Не подтверждено. Введите заново или 0 для пропуска.')
-                    continue
-                elif switch == '2':
-                    if _confirm_save(f'Отметить {label} как отпуск?'):
-                        for day in group:
-                            dt_vac = datetime.strptime(f'{day} 00 00 01', '%Y-%m-%d %H %M %S')
-                            _set_mark(time_table, day, emp_id, [dt_vac, dt_vac, 'vacation'])
-                        _save_session(time_table)
-                        record_edit(emp_id, label, f'отпуск x{len(group)}', None,
-                                    [dt_vac, dt_vac, 'vacation'])
-                        break
-                    continue
-                elif switch == '3':
-                    if _confirm_save(f'Отметить {label} как прогул?'):
-                        for day in group:
-                            dt_truancy = datetime.strptime(f'{day} 23 59 59', '%Y-%m-%d %H %M %S')
-                            _set_mark(time_table, day, emp_id, [dt_truancy, dt_truancy, 'truancy'])
-                        _save_session(time_table)
-                        record_edit(emp_id, label, f'прогул x{len(group)}', None,
-                                    [dt_truancy, dt_truancy, 'truancy'])
-                        break
-                    continue
+                    case '1':
+                        got = _read_work_times(' (одно на все дни диапазона)' if multi else '')
+                        if got is None:
+                            break
+                        t_begin, t_end, randomized = got
+                        date_ref = label if multi else group[0]
+                        if _apply_work_days(time_table, emp_id, group, t_begin, t_end,
+                                            randomized, f'рабочие дни x{len(group)}', date_ref):
+                            break
+                    case '2':
+                        date_ref = label if multi else group[0]
+                        if _apply_status_days(time_table, emp_id, group, 'vacation',
+                                              f'отпуск x{len(group)}', date_ref,
+                                              f'Отметить {date_ref} как отпуск?'):
+                            break
+                    case '3':
+                        date_ref = label if multi else group[0]
+                        if _apply_status_days(time_table, emp_id, group, 'truancy',
+                                              f'прогул x{len(group)}', date_ref,
+                                              f'Отметить {date_ref} как прогул?'):
+                            break
 
 
 def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
@@ -366,58 +400,23 @@ def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
     from core import ui
 
     while True:
-        sw = ui.ask_menu(f'{day}: [1] рабочий [2] отпуск [3] прогул [0] пропустить день:',
-                         ('1', '2', '3'))
-        if sw in ('0', 'q', 'отмена'):
-            return 'skip'
-        if sw == '1':
-            got_begin = _read_valid_time('Время прихода')
-            if got_begin is None:
+        match ui.ask_menu(f'{day}: [1] рабочий [2] отпуск [3] прогул [0] пропустить день:',
+                          ('1', '2', '3')):
+            case '0' | 'q' | 'отмена':
                 return 'skip'
-            got_end = _read_valid_time('Время ухода')
-            if got_end is None:
-                return 'skip'
-            t_begin, rand_begin = got_begin
-            t_end, rand_end = got_end
-            try:
-                dt_begin = datetime.strptime(f'{day} {t_begin}', '%Y-%m-%d %H %M %S')
-                dt_end = datetime.strptime(f'{day} {t_end}', '%Y-%m-%d %H %M %S')
-            except ValueError as e:
-                ui.error(f'Ошибка: неверное время ({e}). Введите день заново.')
-                continue
-            err = _validate_pair(dt_begin, dt_end)
-            if err is not None:
-                ui.error(f'Ошибка: {err}. Не сохранено. Введите день заново или 0 для пропуска.')
-                continue
-            preview = (f'Выйдет за {day}: приход {dt_begin.time()} '
-                       f'уход {dt_end.time()} длительность {dt_end - dt_begin}.')
-            randomized_fill = bool(rand_begin or rand_end)
-            if randomized_fill:
-                preview += ' (часть времени дополнена случайно — проверьте!)'
-            if _confirm_save(preview):
-                _set_mark(time_table, day, emp_id, [dt_end, dt_begin, 'work'])
-                _save_session(time_table)
-                record_edit(emp_id, day, 'заполнен день', None,
-                            list(time_table[day][emp_id]),
-                            randomized=randomized_fill)
-                return 'done'
-            ui.info('Не подтверждено. Введите день заново или 0 для пропуска.')
-            continue
-        elif sw == '2':
-            if _confirm_save(f'Отметить {day} как отпуск?'):
-                dt_vac = datetime.strptime(f'{day} 00 00 01', '%Y-%m-%d %H %M %S')
-                _set_mark(time_table, day, emp_id, [dt_vac, dt_vac, 'vacation'])
-                _save_session(time_table)
-                record_edit(emp_id, day, 'отпуск', None,
-                            list(time_table[day][emp_id]))
-                return 'done'
-            continue
-        elif sw == '3':
-            if _confirm_save(f'Отметить {day} как прогул?'):
-                dt_truancy = datetime.strptime(f'{day} 23 59 59', '%Y-%m-%d %H %M %S')
-                _set_mark(time_table, day, emp_id, [dt_truancy, dt_truancy, 'truancy'])
-                _save_session(time_table)
-                record_edit(emp_id, day, 'прогул', None,
-                            list(time_table[day][emp_id]))
-                return 'done'
-            continue
+            case '1':
+                got = _read_work_times()
+                if got is None:
+                    return 'skip'
+                t_begin, t_end, randomized = got
+                if _apply_work_days(time_table, emp_id, [day], t_begin, t_end,
+                                    randomized, 'заполнен день', day):
+                    return 'done'
+            case '2':
+                if _apply_status_days(time_table, emp_id, [day], 'vacation',
+                                      'отпуск', day, f'Отметить {day} как отпуск?'):
+                    return 'done'
+            case '3':
+                if _apply_status_days(time_table, emp_id, [day], 'truancy',
+                                      'прогул', day, f'Отметить {day} как прогул?'):
+                    return 'done'
