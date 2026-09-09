@@ -68,6 +68,12 @@ def main():
         if is_settlement_allowed(emp_id):
             analyze_for_print(data_array, emp_id, year, month)
 
+    from core.ui import build_dashboard_rows, print_dashboard
+    print_dashboard(
+        build_dashboard_rows(data_array, emp_ids, year, month),
+        title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
+    )
+
     if not args.no_edit:
         for emp_id in emp_ids:
             if is_settlement_allowed(emp_id):
