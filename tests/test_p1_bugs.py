@@ -74,14 +74,41 @@ class TestP1_1_HolidaysLostInCalculations:
         assert milk == 40
 
     def test_holiday_single_mark_not_suggested_for_edit(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        """BUG: single holiday mark is not flagged by search_missed_marks
-        because holiday is excluded from the check."""
+        """FIXED: single holiday mark IS flagged by search_missed_marks."""
         from core.analysis import search_missed_marks
         dt = make_dt('2026-01-01', '08:00:00')
         tt = {'2026-01-01': {101: [dt, dt, 'holiday']}}
         result = search_missed_marks(tt, 101, 2026, 1)
-        # BUG: holiday marks are not checked for single-mark
-        assert result == 0
+        assert result != 0
+        assert result[0][0] == '2026-01-01'
+
+    def test_holiday_shows_times_in_html(self, setup_employees):
+        """Регрессия: праздничная смена показывает время, а не 'holiday'."""
+        from core.calculations import calculate_hours_per_day
+        from core.html_builder import _build_daily_data, _gen_day_row
+        date_key = '2026-01-01'
+        tt = {date_key: {101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday']}}
+        wt = calculate_hours_per_day(tt)
+        dd = _build_daily_data(101, tt, wt)
+        assert len(dd) == 1
+        html = ''.join(_gen_day_row(dd[0]))
+        assert '08:00:00' in html
+        assert '16:00:00' in html
+        assert 'colspan' not in html
+
+    def test_holiday_shows_times_in_excel(self, setup_employees):
+        """Регрессия: праздничная смена заполняет ячейки времени в Excel."""
+        from openpyxl import Workbook
+        from core.calculations import calculate_hours_per_day
+        from core.excel_builder import _write_data_rows
+        date_key = '2026-01-01'
+        tt = {date_key: {101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday']}}
+        wt = calculate_hours_per_day(tt)
+        wb = Workbook()
+        ws = wb.active
+        _write_data_rows(ws, tt, wt)
+        assert ws.cell(column=3, row=2).value is not None
+        assert ws.cell(column=4, row=2).value is not None
 
 
 # =============================================================================
@@ -165,6 +192,31 @@ class TestP1_2_Role3LosesStatus:
         total, milk, total_with_milk = result[102]
         # FIXED: 0 work+holiday days = 0 salary
         assert total == 0
+
+    def test_role3_weekend_preserved(self, setup_employees):
+        """Регрессия: роль 3 сохраняет 'weekend', а не подменяет на 'work'."""
+        from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
+        date_key = '2026-07-04'
+        tt = {date_key: {102: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'weekend']}}
+        wt = calculate_hours_per_day(tt)
+        assert wt[date_key][102][3] == 'weekend'
+        assert wt[date_key][102][1] == timedelta(hours=8)
+        summary, _ = calculate_hours_per_month(wt)
+        assert summary[102][0][0] == 0  # не в буднях
+        assert summary[102][1][0] == 1  # в выходных
+        total, _, _ = calculate_wages(summary)[102]
+        assert total == 800
+
+    def test_role3_holiday_preserved(self, setup_employees):
+        """Регрессия: роль 3 сохраняет 'holiday', а не подменяет на 'work'."""
+        from core.calculations import calculate_hours_per_day, calculate_hours_per_month
+        date_key = '2026-01-01'
+        tt = {date_key: {102: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday']}}
+        wt = calculate_hours_per_day(tt)
+        assert wt[date_key][102][3] == 'holiday'
+        summary, _ = calculate_hours_per_month(wt)
+        assert summary[102][0][0] == 0
+        assert summary[102][1][0] == 1
 
 
 # =============================================================================

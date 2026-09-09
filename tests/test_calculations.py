@@ -421,13 +421,15 @@ class TestCalculateWages:
 
     def test_role1_mixed_month(self, setup_employees, mock_wage_rates):
         """20 work days, 2 weekend days, 1 vacation."""
+        from core.constants import OVERTIME_WEEKEND_MULTIPLIER
         rate = 800
         rate_per_sec = rate / (8 * 3600)
         weekend_worked = timedelta(hours=8)
         weekend_overwork = timedelta(hours=3)
         expected_weekday = rate * 20
-        expected_weekend = (1.5 * rate_per_sec * weekend_worked.total_seconds()
-                            + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_sec * weekend_overwork.total_seconds())
+        # Выходные оплачиваются только по факту: 1.5x * worked.
+        # overtime/undertime из summary в оплату не входят (уже сидят в worked).
+        expected_weekend = OVERTIME_WEEKEND_MULTIPLIER * rate_per_sec * weekend_worked.total_seconds()
         expected_vacation = rate * 1
         summary = {
             101: (
@@ -469,3 +471,36 @@ class TestCalculateWages:
         result = calculate_wages(summary)
         _, milk, _ = result[102]
         assert milk == 0
+
+    def test_short_weekend_never_negative(self, setup_employees, mock_wage_rates):
+        """Регрессия: 2ч в выходной + недоработка 6ч -> 300, а не -300."""
+        from core.constants import OVERTIME_WEEKEND_MULTIPLIER
+        rate = 800
+        rate_per_sec = rate / (8 * 3600)
+        summary = {
+            101: (
+                (0, timedelta(0), timedelta(0)),
+                (1, timedelta(0), timedelta(hours=6), timedelta(hours=2)),
+                0, 0,
+            )
+        }
+        total, milk, total_with_milk = calculate_wages(summary)[101]
+        expected = round(OVERTIME_WEEKEND_MULTIPLIER * rate_per_sec * timedelta(hours=2).total_seconds(), 2)
+        assert total == expected == 300.0
+        assert total >= 0
+
+    def test_weekend_overtime_not_double_counted(self, setup_employees, mock_wage_rates):
+        """Регрессия: 10ч в выходной (8+2) -> 1500, а не 1950."""
+        from core.constants import OVERTIME_WEEKEND_MULTIPLIER
+        rate = 800
+        rate_per_sec = rate / (8 * 3600)
+        summary = {
+            101: (
+                (0, timedelta(0), timedelta(0)),
+                (1, timedelta(hours=2), timedelta(0), timedelta(hours=10)),
+                0, 0,
+            )
+        }
+        total, _, _ = calculate_wages(summary)[101]
+        expected = round(OVERTIME_WEEKEND_MULTIPLIER * rate_per_sec * timedelta(hours=10).total_seconds(), 2)
+        assert total == expected == 1500.0

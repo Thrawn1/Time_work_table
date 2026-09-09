@@ -57,7 +57,7 @@ def _write_data_rows(ws, time_table: dict, work_time: dict) -> None:
             ws.cell(column=2, row=count, value=date_key).border = border
             marks = time_table[date_key][emp_id]
             tag = marks[2]
-            if tag in ('work', 'weekend'):
+            if tag in ('work', 'weekend', 'holiday'):
                 if date_key not in work_time or emp_id not in work_time[date_key]:
                     continue
                 ws.cell(column=3, row=count, value=marks[1].time()).border = border

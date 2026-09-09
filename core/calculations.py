@@ -1,6 +1,11 @@
 from datetime import timedelta
 from core.config import EMPLOYEES, load_wage_rates
-from core.constants import WORKING_DAY_HOURS, MILK_ALLOWANCE_PER_DAY, OVERTIME_WEEKDAY_MULTIPLIER
+from core.constants import (
+    WORKING_DAY_HOURS,
+    MILK_ALLOWANCE_PER_DAY,
+    OVERTIME_WEEKDAY_MULTIPLIER,
+    OVERTIME_WEEKEND_MULTIPLIER,
+)
 
 
 def str_timedelta(td: timedelta) -> str:
@@ -33,9 +38,14 @@ def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
                     result[date_key][emp_id] = (
                         timedelta(0), timedelta(0), '', tag_day
                     )
-                else:
+                elif tag_day in ('work', 'weekend', 'holiday'):
                     result[date_key][emp_id] = (
-                        timedelta(0), timedelta(hours=WORKING_DAY_HOURS), '', 'work'
+                        timedelta(0), timedelta(hours=WORKING_DAY_HOURS), '', tag_day
+                    )
+                else:
+                    # Неизвестный тег — не выдумываем рабочий день, сохраняем как есть с 0ч
+                    result[date_key][emp_id] = (
+                        timedelta(0), timedelta(0), '', tag_day
                     )
     return result
 
@@ -107,17 +117,18 @@ def calculate_wages(summary: dict) -> dict[int, tuple[float, float, float]]:
             overtime_weekday = data[0][1]
             undertime_weekday = data[0][2]
             work_holidays = data[1][0]
-            overtime_holiday = data[1][1]
-            undertime_holiday = data[1][2]
+            # overtime_holiday / undertime_holiday остаются в summary только
+            # для отчетности — в оплату не входят, т.к. total_worked_holiday
+            # уже содержит все фактически отработанные секунды. Добавление
+            # их сверху давало двойной учет переработки (2.25x) и отрицательную
+            # зарплату за короткие смены (1.5*worked - undertime < 0).
             total_worked_holiday = data[1][3]
             vacation_days = data[2]
             money_for_milk = (work_weekdays + work_holidays) * MILK_ALLOWANCE_PER_DAY
             salary_weekdays = (rate * work_weekdays
                                + OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overtime_weekday.total_seconds()
                                - rate_per_second * undertime_weekday.total_seconds())
-            salary_weekends = (1.5 * rate_per_second * total_worked_holiday.total_seconds()
-                               + 1.5 * OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overtime_holiday.total_seconds()
-                               - rate_per_second * undertime_holiday.total_seconds())
+            salary_weekends = OVERTIME_WEEKEND_MULTIPLIER * rate_per_second * total_worked_holiday.total_seconds()
             salary_vacation = rate * vacation_days
             total = round(salary_weekdays + salary_weekends + salary_vacation, 2)
             total_with_milk = total + money_for_milk

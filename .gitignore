@@ -13,3 +13,6 @@ dist/
 build/
 temporary.pickle
 *.pickle
+_secret_key.tmp
+temporary.json
+*.tmp

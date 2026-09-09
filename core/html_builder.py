@@ -110,7 +110,7 @@ def _gen_day_row(day: dict) -> list[str]:
     row = [f'        <tr>\n']
     row.append(f'          <td>{day["family"]}</td>\n')
     row.append(f'          <td>{day["date"]}</td>\n')
-    if tag in ('work', 'weekend'):
+    if tag in ('work', 'weekend', 'holiday'):
         row.append(f'          <td>{day["time_begin"]}</td>\n')
         row.append(f'          <td>{day["time_end"]}</td>\n')
         row.append(f'          <td>{day["delta_time"]}</td>\n')
