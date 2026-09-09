@@ -4,7 +4,7 @@ from os.path import exists
 
 from core.config import load_config, set_secret_key
 from core.file_parser import read_file_data
-from core.data_array import build_data_array, get_all_employees_in_data, is_settlement_allowed
+from core.data_array import build_data_array, get_all_employees_in_data, get_employees_with_marks, is_settlement_allowed
 from core.analysis import analyze_for_print, analyze_for_edit
 from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
 from core.excel_builder import build_excel
@@ -23,6 +23,9 @@ def main():
     parser.add_argument('-k', '--key', default='0', help='Секретный ключ (или t для без зарплаты)')
     parser.add_argument('--no-edit', action='store_true', help='Пропустить интерактивное редактирование')
     parser.add_argument('--resume', action='store_true', help='Восстановить сохраненную сессию из temporary.pickle')
+    parser.add_argument('--include-empty', action='store_true',
+                        help='Включить в расчет сотрудников без единой отметки за месяц '
+                             '(действующий, но отсутствовал весь месяц: отпуск/прогул)')
     args = parser.parse_args()
 
     load_config()
@@ -71,7 +74,14 @@ def main():
 
     print(f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} год')
 
-    emp_ids = get_all_employees_in_data(data_array)
+    if args.include_empty:
+        emp_ids = get_all_employees_in_data(data_array)
+    else:
+        emp_ids = get_employees_with_marks(data_array)
+        skipped = len(get_all_employees_in_data(data_array)) - len(emp_ids)
+        if skipped:
+            print(f'Без отметок за месяц пропущено сотрудников: {skipped} '
+                  f'(см. второй блок сводки; для включения — --include-empty).')
 
     from core.ui import (
         build_dashboard_rows,
@@ -97,7 +107,7 @@ def main():
             analyze_for_print(data_array, emp_id, year, month)
 
     print_dashboard(
-        build_dashboard_rows(data_array, emp_ids, year, month),
+        build_dashboard_rows(data_array, get_all_employees_in_data(data_array), year, month),
         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
     )
 
@@ -126,6 +136,9 @@ def main():
 
     for emp_id in emp_ids:
         if is_settlement_allowed(emp_id):
+            if emp_id not in summary:
+                print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
+                continue
             td = _build_total_data(emp_id, summary, wages)
             print('--------------------------------------------------------------------------------------------------------------------------------------------')
             print(f'\nФамилия работника:  {td["family"]}')

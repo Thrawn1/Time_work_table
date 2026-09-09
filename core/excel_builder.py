@@ -6,6 +6,9 @@ from core.constants import MONTHS_NAME_TO_RUSSIAN
 
 
 def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
+    if not time_table:
+        print('Нет данных для общей таблицы, Excel не создан.')
+        return ''
     wb = Workbook()
     ws = wb.active
     _setup_columns(ws)

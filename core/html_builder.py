@@ -8,6 +8,12 @@ from core.calculations import str_timedelta
 def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
     family = get_name_employee(emp_id)
     daily_data = _build_daily_data(emp_id, time_table, work_time)
+    if not daily_data:
+        print(f'Пропущен {family or emp_id}: нет отметок за период, HTML не создан.')
+        return ''
+    if emp_id not in summary or emp_id not in wages:
+        print(f'Пропущен {family or emp_id}: нет данных расчета (роль не поддерживается?), HTML не создан.')
+        return ''
     total_data = _build_total_data(emp_id, summary, wages)
     month_num = daily_data[0]['date'][5:7]
     year_str = daily_data[0]['date'][:4]

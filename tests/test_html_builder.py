@@ -24,3 +24,14 @@ def test_str_timedelta_complex():
 def test_str_timedelta_large():
     td = timedelta(hours=100, minutes=5, seconds=59)
     assert str_timedelta(td) == '100:05:59'
+
+
+def test_build_html_no_marks_returns_empty(setup_employees):
+    """Сотрудник без отметок: HTML не создается, вместо IndexError — ''."""
+    from core.html_builder import build_html
+    assert build_html(103, {}, {}, {}, {}) == ''
+
+
+def test_build_excel_empty_returns_empty():
+    from core.excel_builder import build_excel
+    assert build_excel({}, {}, {}, {}) == ''

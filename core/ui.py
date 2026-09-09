@@ -70,19 +70,28 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
 
 
 def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
-    """Напечатать дашборд: rich-таблица или plain-фолбэк."""
+    """Дашборд двумя блоками: в расчете — таблицей, без отметок — списком.
+
+    Сотрудники без единой отметки (бывшие, другие смены) не смешиваются
+    с проблемами действующих — иначе их 15+ строк хоронят реальные пропуски.
+    """
+    active = [r for r in rows if r['has_marks']]
+    inactive = [r for r in rows if not r['has_marks']]
     if not HAS_RICH:
-        print(f'=== {title} ===')
-        for r in rows:
+        print(f'=== {title}: в расчете ({len(active)}) ===')
+        for r in active:
             print(f"{r['name']}: одиночных={r['single']} пропусков={r['missed']} [{r['status']}]")
+        print(f'--- Без отметок за месяц ({len(inactive)}): в расчет не включены ---')
+        for r in inactive:
+            print(f"{r['name']} [Нет данных]")
         return
     console = get_console()
-    table = Table(title=title)
+    table = Table(title=f'{title}: в расчете ({len(active)})')
     table.add_column('Сотрудник')
     table.add_column('Одиночные', justify='right')
     table.add_column('Пропуски', justify='right')
     table.add_column('Статус', justify='center')
-    for r in rows:
+    for r in active:
         table.add_row(
             r['name'],
             str(r['single']),
@@ -90,6 +99,10 @@ def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
             f"[{r['style']}]{r['status']}[/{r['style']}]",
         )
     console.print(table)
+    if inactive:
+        names = ', '.join(r['name'] for r in inactive)
+        console.print(f'[dim]Без отметок за месяц ({len(inactive)}), '
+                      f'в расчет не включены: {names}[/dim]')
 
 
 def print_header(title: str) -> None:

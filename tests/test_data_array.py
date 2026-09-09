@@ -4,6 +4,7 @@ from core.data_array import (
     _parse_line,
     get_employee_work_dates,
     get_all_employees_in_data,
+    get_employees_with_marks,
     get_name_employee,
     is_settlement_allowed,
 )
@@ -159,6 +160,23 @@ class TestGetAllEmployeesInData:
         assert 101 in ids
         assert 102 in ids
         assert 103 in ids
+
+
+class TestGetEmployeesWithMarks:
+    def test_only_with_marks(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
+        """В расчет по умолчанию — только те, у кого есть отметки."""
+        lines = [
+            make_line(101, '2026-07-06', '08:00:00'),
+            make_line(101, '2026-07-07', '08:00:00'),
+            make_line(102, '2026-07-06', '08:00:00'),
+        ]
+        tt = build_data_array(lines)
+        ids = get_employees_with_marks(tt)
+        assert ids == [101, 102]
+        assert 103 not in ids
+
+    def test_empty_table(self, setup_employees):
+        assert get_employees_with_marks({}) == []
 
 
 class TestGetNameEmployee:

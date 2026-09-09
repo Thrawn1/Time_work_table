@@ -47,7 +47,19 @@ def get_employee_work_dates(time_table: dict, emp_id: int) -> list[str]:
 
 
 def get_all_employees_in_data(time_table: dict) -> list[int]:
+    """Все из справочника — для дашборда (включая бывших/без отметок)."""
     return list(EMPLOYEES.keys())
+
+
+def get_employees_with_marks(time_table: dict) -> list[int]:
+    """Только те, у кого есть хотя бы одна отметка за период, по порядку справочника.
+
+    Это участники расчета по умолчанию: сотрудники без единой отметки
+    (уволенные, другие смены) в расчет не включаются. Для genuinely
+    отсутствовавшего весь месяц действующего сотрудника — флаг --include-empty.
+    """
+    with_marks = {emp_id for day in time_table.values() for emp_id in day}
+    return [emp_id for emp_id in EMPLOYEES if emp_id in with_marks]
 
 
 def get_name_employee(emp_id: int) -> str:

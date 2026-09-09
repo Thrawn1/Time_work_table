@@ -57,6 +57,16 @@ class TestBuildRows:
         # rich печатает таблицу в stdout — проверяем, что имя/статус есть
         assert 'Нет данных' in out or 'Петров' in out
 
+    def test_two_blocks(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty, capsys):
+        """Бывшие (без отметок) — отдельным блоком, а не в общей таблице проблем."""
+        dt = make_dt('2026-07-06', '08:00:00')
+        tt = {'2026-07-06': {101: [dt, dt, 'work']}}
+        rows = build_dashboard_rows(tt, [101, 102], 2026, 7)
+        print_dashboard(rows, title='Тест')
+        out = capsys.readouterr().out
+        assert 'в расчете (1)' in out
+        assert 'Без отметок за месяц (1)' in out
+
 
 class TestMenuAndConfirm:
     def test_ask_menu_valid(self):
