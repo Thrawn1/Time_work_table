@@ -13,6 +13,21 @@ from core.constants import MONTHS_NAME_TO_RUSSIAN
 from core.session import load_session, save_session, session_exists, remove_session
 
 
+def parse_secret_key(key_input: str) -> tuple[float, bool, str | None]:
+    """Разобрать -k. Возвращает (secret, salary_mode, warning|None).
+
+    salary_mode=False: режим без зарплаты (t/0/мусор) — оклад будет нулевым.
+    """
+    if key_input == 't' or key_input == '0':
+        return 0.0, False, None
+    if key_input.isdigit() and 2 < len(key_input) < 123:
+        return float(key_input) / 100, True, None
+    return 0.0, False, (
+        f'ключ "{key_input}" не распознан (нужны только цифры, длина 3-122, '
+        'или t для режима без зарплаты)'
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Система расчета заработной платы и учета рабочего времени'
@@ -31,15 +46,15 @@ def main():
     load_config()
 
     print('\n\t\tСистема расчета заработной платы и учета рабочего времени работников\n')
-    key_input = args.key
-    if key_input == 't' or key_input == '0':
-        secret_key = 0.0
-    elif key_input.isdigit() and 2 < len(key_input) < 123:
-        secret_key = float(key_input) / 100
-    else:
-        secret_key = 0.0
+    secret_key, salary_mode, key_warning = parse_secret_key(args.key)
+    if key_warning:
+        print(f'ВНИМАНИЕ: {key_warning}. Расчет в режиме БЕЗ зарплаты: оклад будет нулевым.')
 
     set_secret_key(secret_key)
+    if salary_mode:
+        print('Режим: расчет зарплаты (ключ принят).')
+    else:
+        print('Режим: учет времени БЕЗ зарплаты (оклад = 0, молоко считается).')
 
     from core.analysis import clear_journal
     clear_journal()
@@ -126,6 +141,13 @@ def main():
     work_time = calculate_hours_per_day(data_array)
     summary, restructured = calculate_hours_per_month(work_time)
     wages = calculate_wages(summary)
+    from core.config import load_wage_rates
+    from core.data_array import get_name_employee
+    rates = load_wage_rates()
+    zero_rate = [e for e in summary if rates.get(e, 0) == 0]
+    for emp_id in zero_rate:
+        print(f'ВНИМАНИЕ: {get_name_employee(emp_id) or emp_id} — ставка 0 '
+              f'(нет в wage_rates.dat или неверный ключ -k). Оклад будет нулевым, только молоко.')
     print_preview(build_preview_rows(summary, wages))
 
     print_header('Отчеты')
