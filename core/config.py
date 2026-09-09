@@ -10,8 +10,6 @@ WAGE_RATES_FILE = path.join(VARIABLE_DATA_DIR, 'wage_rates.dat')
 HOLIDAYS_FILE = path.join(VARIABLE_DATA_DIR, 'holidays.dat')
 POSTPONED_DAYS_FILE = path.join(VARIABLE_DATA_DIR, 'postponed_working_days.dat')
 SETTLEMENT_EXCEPTIONS_FILE = path.join(VARIABLE_DATA_DIR, 'settlement_exceptions.dat')
-TOML_CONFIG_FILE = 'company_data_real.toml'
-DEFAULT_ATTLOG_FILE = path.join(DATA_DIR, '1_attlog.dat')
 
 
 @dataclass

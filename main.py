@@ -10,7 +10,7 @@ from core.calculations import calculate_hours_per_day, calculate_hours_per_month
 from core.excel_builder import build_excel
 from core.html_builder import build_html
 from core.constants import MONTHS_NAME_TO_RUSSIAN
-from core.session import load_session, save_session, session_exists, remove_session
+from core.session import load_session, session_exists, remove_session
 
 
 def parse_secret_key(key_input: str) -> tuple[float, bool, str | None]:
