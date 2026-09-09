@@ -8,7 +8,7 @@ from core.data_array import build_data_array, get_all_employees_in_data, get_emp
 from core.analysis import analyze_for_print, analyze_for_edit
 from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
 from core.excel_builder import build_excel
-from core.html_builder import build_html, _build_total_data
+from core.html_builder import build_html
 from core.constants import MONTHS_NAME_TO_RUSSIAN
 from core.session import load_session, save_session, session_exists, remove_session
 
@@ -91,6 +91,7 @@ def main():
         print_header,
         print_journal,
         print_preview,
+        print_salary_report,
         print_start_screen,
     )
     from core.analysis import get_journal
@@ -132,29 +133,13 @@ def main():
 
     for emp_id in emp_ids:
         if is_settlement_allowed(emp_id):
-            build_html(emp_id, data_array, work_time, summary, wages)
-
-    for emp_id in emp_ids:
-        if is_settlement_allowed(emp_id):
             if emp_id not in summary:
                 print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
                 continue
-            td = _build_total_data(emp_id, summary, wages)
-            print('--------------------------------------------------------------------------------------------------------------------------------------------')
-            print(f'\nФамилия работника:  {td["family"]}')
-            print('\n\t\t ВСЕГО ЗА МЕСЯЦ:\n')
-            print(f'\n\t\tБудние рабочие дни за месяц: {td["all_work_weekdays"]}')
-            print('\t\t\t--------------------------')
-            print(f'\n\t\tПереработки за будние рабочие дни в месяце: {td["weekdays_overtime"]}')
-            print('\t\t\t--------------------------')
-            print(f'\n\t\tРабочие выходные дни за месяц: {td["work_weekend"]}')
-            print('\t\t\t--------------------------')
-            print(f'\n\t\tПереработки за рабочие выходные дни в месяце: {td["overtime_weekend"]}')
-            print('\t\t\t--------------------------')
-            print(f'\n\t\tКоличество дней отпуска: {td["vacation"]}')
-            print('\t\t\t--------------------------')
-            print(f'\n\t\tЗарплата (учитывая молоко, но без премий): {td["salary_whith_milk"]}')
-            print('\t\t\t--------------------------')
+            build_html(emp_id, data_array, work_time, summary, wages)
+
+    print_salary_report(build_preview_rows(summary, wages),
+                        title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — зарплата к начислению')
 
     print_journal(get_journal())
     remove_session()

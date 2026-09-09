@@ -287,9 +287,48 @@ def print_journal(entries: list[dict], title: str = 'Журнал исправл
     table.add_column('Сотрудник')
     table.add_column('Дата')
     table.add_column('Действие')
-    table.add_column('Было → стало')
+    table.add_column('Было -> стало')
     for e in entries:
         rnd = ' [yellow](случайное время)[/yellow]' if e.get('randomized') else ''
         table.add_row(e['ts'], e['name'], e['date'], e['action'],
-                      f"{e['before']} → {e['after']}{rnd}")
+                      f"{e['before']} -> {e['after']}{rnd}")
+    console.print(table)
+
+
+def print_salary_report(rows: list[dict], title: str = 'Итоги месяца') -> None:
+    """Финальный отчет: дни + деньги одной таблицей.
+
+    Строки — из build_preview_rows (там уже salary/milk/total).
+    """
+    if not rows:
+        warn('Нет данных расчета для отчета.')
+        return
+    if not HAS_RICH:
+        print(f'=== {title} ===')
+        for r in rows:
+            print(f"{r['name']}: будни={r['work']} (+{r['overtime']}/-{r['undertime']}) "
+                  f"вых={r['weekend']} отп={r['vacation']} "
+                  f"оклад={r['salary']} молоко={r['milk']} итого={r['total']}")
+        return
+    console = get_console()
+    table = Table(title=title, show_lines=True)
+    table.add_column('Сотрудник')
+    table.add_column('Будни', justify='right')
+    table.add_column('+ / -', justify='right')
+    table.add_column('Вых', justify='right')
+    table.add_column('Отп', justify='right')
+    table.add_column('Оклад', justify='right')
+    table.add_column('Молоко', justify='right')
+    table.add_column('Итого', justify='right', style='bold green')
+    for r in rows:
+        table.add_row(
+            r['name'],
+            str(r['work']),
+            f"+{r['overtime']} / -{r['undertime']}",
+            str(r['weekend']),
+            str(r['vacation']),
+            f"{r['salary']:.2f}",
+            f"{r['milk']:.2f}",
+            f"{r['total']:.2f}",
+        )
     console.print(table)

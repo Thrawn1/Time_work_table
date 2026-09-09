@@ -152,9 +152,9 @@ _JOURNAL: list[dict] = []
 
 
 def _marks_repr(marks: list) -> str:
-    """Кратко: 'приход → уход [тег]'."""
+    """Кратко: 'приход -> уход [тег]'."""
     try:
-        return f'{marks[1].time()} → {marks[0].time()} [{marks[2]}]'
+        return f'{marks[1].time()} -> {marks[0].time()} [{marks[2]}]'
     except (IndexError, AttributeError):
         return str(marks)
 

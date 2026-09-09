@@ -14,6 +14,7 @@ from core.ui import (
     print_start_screen,
     build_preview_rows,
     print_preview,
+    print_salary_report,
     print_journal,
 )
 
@@ -131,6 +132,23 @@ class TestStartAndPreview:
                         'before': 'b', 'after': 'c', 'randomized': True}])
         out = capsys.readouterr().out
         assert 'N' in out
+
+    def test_salary_report(self, setup_employees, mock_wage_rates, capsys):
+        from datetime import timedelta
+        summary = {
+            101: ((20, timedelta(hours=3), timedelta(hours=1)),
+                  (2, timedelta(0), timedelta(0), timedelta(hours=16)), 1, 0),
+        }
+        wages = {101: (1750.0, 880, 2630.0)}
+        rows = build_preview_rows(summary, wages)
+        print_salary_report(rows, title='Зарплата')
+        out = capsys.readouterr().out
+        assert 'Петров' in out
+        assert '2630.00' in out
+
+    def test_salary_report_empty(self, capsys):
+        print_salary_report([])
+        assert 'Нет данных' in capsys.readouterr().out
 
 
 class TestJournal:
