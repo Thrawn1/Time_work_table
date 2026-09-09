@@ -9,11 +9,13 @@ from __future__ import annotations
 try:
     from rich.console import Console
     from rich.table import Table
+    from rich.panel import Panel
 
     HAS_RICH = True
 except ImportError:  # pragma: no cover - fallback проверяется без rich
     Console = None  # type: ignore
     Table = None  # type: ignore
+    Panel = None  # type: ignore
     HAS_RICH = False
 
 _console = None
@@ -96,3 +98,75 @@ def print_header(title: str) -> None:
         print(f'=== {title} ===')
         return
     get_console().rule(title)
+
+
+def info(msg: str) -> None:
+    """Обычное сообщение."""
+    if not HAS_RICH:
+        print(msg)
+        return
+    get_console().print(msg)
+
+
+def warn(msg: str) -> None:
+    """Предупреждение (желтое при rich)."""
+    if not HAS_RICH:
+        print(msg)
+        return
+    get_console().print(f'[yellow]{msg}[/yellow]')
+
+
+def error(msg: str) -> None:
+    """Ошибка (красная при rich)."""
+    if not HAS_RICH:
+        print(msg)
+        return
+    get_console().print(f'[red]{msg}[/red]')
+
+
+def ask_menu(prompt: str, valid: tuple[str, ...], cancel_tokens: tuple[str, ...] = ('0', 'q', 'отмена')) -> str:
+    """Запросить пункт меню до валидного. Возвращает выбор как есть.
+
+    Ввод — через builtins input (мокается в тестах), оформление — через rich.
+    cancel_tokens считаются валидным выбором «пропустить».
+    """
+    allowed = tuple(valid) + tuple(cancel_tokens)
+    while True:
+        raw = input(prompt).strip()
+        if raw in allowed:
+            return raw
+        info(f'Введите один из: {", ".join(allowed)}.')
+
+
+def confirm_save(preview: str) -> bool:
+    """Подтверждение сохранения. True — сохранить, False — ввести заново."""
+    while True:
+        raw = input(f'{preview}\nПодтвердить? [д/н]: ').strip().lower()
+        if raw in ('д', 'y', 'да', 'yes', '1'):
+            return True
+        if raw in ('н', 'n', 'нет', 'no', '0'):
+            return False
+        info('Введите "д" или "н".')
+
+
+def print_day_card_single(name: str, date_key: str, existing) -> None:
+    """Карточка одиночной отметки."""
+    body = (f'Сотрудник: {name}\n'
+            f'Дата: {date_key}\n'
+            f'Сохранено: {existing}\n'
+            '[1] приход  [2] уход  [0] пропустить')
+    if not HAS_RICH:
+        print(body)
+        return
+    get_console().print(Panel(body, title='Одиночная отметка', border_style='yellow'))
+
+
+def print_missed_day_card(name: str, missed_day: str) -> None:
+    """Карточка пропущенного дня."""
+    body = (f'Сотрудник: {name}\n'
+            f'Дата без отметок: {missed_day}\n'
+            '[1] рабочий день  [2] отпуск  [3] прогул  [0] пропустить')
+    if not HAS_RICH:
+        print(body)
+        return
+    get_console().print(Panel(body, title='Нет данных за день', border_style='red'))

@@ -1,7 +1,16 @@
-"""Тесты дашборда (шаг 1 console-ui)."""
+"""Тесты дашборда (шаг 1-2 console-ui)."""
 from datetime import datetime
+from unittest.mock import patch
 
-from core.ui import summarize_employee, build_dashboard_rows, print_dashboard
+from core.ui import (
+    summarize_employee,
+    build_dashboard_rows,
+    print_dashboard,
+    ask_menu,
+    confirm_save,
+    print_day_card_single,
+    print_missed_day_card,
+)
 
 
 def make_dt(date_str, time_str):
@@ -42,3 +51,36 @@ class TestBuildRows:
         out = capsys.readouterr().out
         # rich печатает таблицу в stdout — проверяем, что имя/статус есть
         assert 'Нет данных' in out or 'Петров' in out
+
+
+class TestMenuAndConfirm:
+    def test_ask_menu_valid(self):
+        with patch('builtins.input', return_value='2'):
+            assert ask_menu('Меню:', ('1', '2')) == '2'
+
+    def test_ask_menu_reprompts_then_accepts(self):
+        with patch('builtins.input', side_effect=['9', 'мусор', '1']):
+            assert ask_menu('Меню:', ('1', '2')) == '1'
+
+    def test_ask_menu_cancel(self):
+        with patch('builtins.input', return_value='0'):
+            assert ask_menu('Меню:', ('1', '2')) == '0'
+
+    def test_confirm_yes_no(self):
+        with patch('builtins.input', return_value='д'):
+            assert confirm_save('Сохранить?') is True
+        with patch('builtins.input', return_value='н'):
+            assert confirm_save('Сохранить?') is False
+
+    def test_confirm_reprompts(self):
+        with patch('builtins.input', side_effect=['мусор', 'y']):
+            assert confirm_save('Сохранить?') is True
+
+
+class TestCards:
+    def test_cards_do_not_raise(self, capsys):
+        print_day_card_single('Петров Иван', '2026-07-06', make_dt('2026-07-06', '17:00:00'))
+        print_missed_day_card('Петров Иван', '2026-07-07')
+        out = capsys.readouterr().out
+        assert '2026-07-06' in out
+        assert '2026-07-07' in out

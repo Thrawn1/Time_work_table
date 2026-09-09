@@ -114,6 +114,7 @@ def _validate_pair(come: datetime, go: datetime) -> str | None:
 def _read_valid_time(prompt: str) -> tuple[str, list] | None:
     """Запросить время до валидного ввода. None — пользователь отменил (0)."""
     from randomazer_time_value import parse_and_fill, CANCEL_TOKENS
+    from core import ui
 
     while True:
         raw = input(prompt + ' (формат "Ч М С", 0 — пропустить): ')
@@ -124,24 +125,20 @@ def _read_valid_time(prompt: str) -> tuple[str, list] | None:
         except ValueError as e:
             if str(e) == '__CANCEL__':
                 return None
-            print(f'Ошибка: {e} Попробуйте снова.')
+            ui.error(f'Ошибка: {e} Попробуйте снова.')
             continue
         if randomized:
             names = {'M': 'минуты', 'S': 'секунды', 'H': 'часы'}
             what = ', '.join(names.get(k, k) for k in randomized)
-            print(f'Внимание: {what} отсутствовали и дополнены случайно — проверьте итог.')
+            ui.warn(f'Внимание: {what} отсутствовали и дополнены случайно — проверьте итог.')
         return time_str, randomized
 
 
 def _confirm_save(preview: str) -> bool:
     """Спросить подтверждение. True — сохранить, False — ввести заново."""
-    while True:
-        ans = input(f'{preview}\nПодтвердить? [д/н]: ').strip().lower()
-        if ans in ('д', 'y', 'да', 'yes', '1'):
-            return True
-        if ans in ('н', 'n', 'нет', 'no', '0'):
-            return False
-        print('Введите "д" или "н".')
+    from core import ui
+
+    return ui.confirm_save(preview)
 
 
 def _set_mark(time_table: dict, date_key: str, emp_id: int, marks: list) -> None:
@@ -158,6 +155,7 @@ def _save_session(time_table: dict) -> None:
 
 def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> None:
     from sys import stderr
+    from core import ui
 
     role = EMPLOYEES.get(emp_id)
     if role is None:
@@ -169,10 +167,9 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
         for cell in list_marks:
             date_key = cell[0]
             existing = time_table[date_key][emp_id][0]
-            print('Дата и время отметки, сохраненной в системе:', existing)
-            print('\n\n\tВыберете, какой вариант отметки будет введен:\n\n\t1.Отметка прихода\n\t2.Отметка ухода\n\t0.Пропустить')
+            ui.print_day_card_single(name, date_key, existing)
             while True:
-                choice = input('Выберете пункт меню:').strip()
+                choice = ui.ask_menu('Выберете пункт меню:', ('1', '2'))
                 if choice in ('0', 'q', 'отмена'):
                     break
                 if choice in ('1', '2'):
@@ -183,12 +180,12 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                     try:
                         dt_write = datetime.strptime(f'{date_key} {entered_time}', '%Y-%m-%d %H %M %S')
                     except ValueError as e:
-                        print(f'Ошибка: неверное время ({e}). Введите снова.')
+                        ui.error(f'Ошибка: неверное время ({e}). Введите снова.')
                         continue
                     come, go = (dt_write, existing) if choice == '1' else (existing, dt_write)
                     err = _validate_pair(come, go)
                     if err is not None:
-                        print(f'Ошибка: {err}. Не сохранено. Введите снова или 0 для пропуска.')
+                        ui.error(f'Ошибка: {err}. Не сохранено. Введите снова или 0 для пропуска.')
                         continue
                     preview = (f'Выйдет: приход {come.time()} уход {go.time()} '
                                f'длительность {go - come}.')
@@ -200,18 +197,16 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         else:
                             time_table[date_key][emp_id][0] = dt_write
                         _save_session(time_table)
-                        print('Ввод данных об отметки подтвержден!', dt_write)
+                        ui.info(f'Ввод данных об отметки подтвержден! {dt_write}')
                         break
-                    print('Не подтверждено. Введите снова или 0 для пропуска.')
+                    ui.info('Не подтверждено. Введите снова или 0 для пропуска.')
                     continue
-                print('Введите 1, 2 или 0.')
     if list_missed != 0:
         print(f"ПРЕДУПРЕЖДЕНИЕ! {name} не имеет данных за рабочий день!", file=stderr)
         for missed_day in list_missed:
-            print('Дата без отметок:', missed_day)
-            print('Введите данные за день\n\n\t1.Рабочий день. Ввести отметку прихода и отметку ухода\n\t2.Отпускной день\n\t3.Прогул\n\t0.Пропустить день\n')
+            ui.print_missed_day_card(name, missed_day)
             while True:
-                switch = input('Введите пункт меню:').strip()
+                switch = ui.ask_menu('Введите пункт меню:', ('1', '2', '3'))
                 if switch in ('0', 'q', 'отмена'):
                     break
                 if switch == '1':
@@ -227,22 +222,22 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         dt_begin = datetime.strptime(f'{missed_day} {t_begin}', '%Y-%m-%d %H %M %S')
                         dt_end = datetime.strptime(f'{missed_day} {t_end}', '%Y-%m-%d %H %M %S')
                     except ValueError as e:
-                        print(f'Ошибка: неверное время ({e}). Введите день заново.')
+                        ui.error(f'Ошибка: неверное время ({e}). Введите день заново.')
                         continue
                     err = _validate_pair(dt_begin, dt_end)
                     if err is not None:
-                        print(f'Ошибка: {err}. Не сохранено. Введите день заново или 0 для пропуска.')
+                        ui.error(f'Ошибка: {err}. Не сохранено. Введите день заново или 0 для пропуска.')
                         continue
                     preview = (f'Выйдет за {missed_day}: приход {dt_begin.time()} '
                                f'уход {dt_end.time()} длительность {dt_end - dt_begin}.')
                     if rand_begin[1] or rand_end[1]:
                         preview += ' (часть времени дополнена случайно — проверьте!)'
                     if _confirm_save(preview):
-                        print('\nДанные за день введены\n')
+                        ui.info('\nДанные за день введены\n')
                         _set_mark(time_table, missed_day, emp_id, [dt_end, dt_begin, 'work'])
                         _save_session(time_table)
                         break
-                    print('Не подтверждено. Введите день заново или 0 для пропуска.')
+                    ui.info('Не подтверждено. Введите день заново или 0 для пропуска.')
                     continue
                 elif switch == '2':
                     if _confirm_save(f'Отметить {missed_day} как отпуск?'):
@@ -258,5 +253,3 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         _save_session(time_table)
                         break
                     continue
-                else:
-                    print('Введите правильный пункт меню!')
