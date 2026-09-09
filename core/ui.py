@@ -170,3 +170,113 @@ def print_missed_day_card(name: str, missed_day: str) -> None:
         print(body)
         return
     get_console().print(Panel(body, title='Нет данных за день', border_style='red'))
+
+
+def build_start_info(file: str, year: int, month: int, rows_read: int,
+                     employees_total: int, session_state: str) -> dict:
+    """Чистые данные стартового экрана. session_state: resumed|ignored|none|fresh."""
+    labels = {
+        'resumed': 'сессия восстановлена (--resume)',
+        'ignored': 'найденная сессия проигнорирована (без --resume)',
+        'none': 'сессии не было',
+        'fresh': 'новый расчет',
+    }
+    return {
+        'file': file,
+        'year': year,
+        'month': month,
+        'rows_read': rows_read,
+        'employees_total': employees_total,
+        'session_state': session_state,
+        'session_label': labels.get(session_state, session_state),
+    }
+
+
+def print_start_screen(info: dict) -> None:
+    """Стартовый экран: источник, период, объем, сессия."""
+    lines = (f"Файл: {info['file']}\n"
+             f"Период: {info['month']:02d}.{info['year']}\n"
+             f"Строк данных: {info['rows_read']}\n"
+             f"Сотрудников в расчете: {info['employees_total']}\n"
+             f"Сессия: {info['session_label']}")
+    if not HAS_RICH:
+        print('=== Старт ===')
+        print(lines)
+        return
+    get_console().print(Panel(lines, title='Старт расчета', border_style='cyan'))
+
+
+def build_preview_rows(summary: dict, wages: dict) -> list[dict]:
+    """Чистые строки предпросмотра расчета до записи файлов."""
+    from core.config import EMPLOYEES
+    from core.calculations import str_timedelta
+
+    rows: list[dict] = []
+    for emp_id, data in summary.items():
+        role = EMPLOYEES.get(emp_id)
+        name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
+        salary, milk, total = wages.get(emp_id, (0, 0, 0))
+        rows.append({
+            'emp_id': emp_id,
+            'name': name,
+            'work': data[0][0],
+            'overtime': str_timedelta(data[0][1]),
+            'undertime': str_timedelta(data[0][2]),
+            'weekend': data[1][0],
+            'vacation': data[2],
+            'salary': salary,
+            'milk': milk,
+            'total': total,
+        })
+    return sorted(rows, key=lambda r: r['name'])
+
+
+def print_preview(rows: list[dict], title: str = 'Предпросмотр расчета') -> None:
+    """Таблица предпросмотра до записи файлов."""
+    if not HAS_RICH:
+        print(f'=== {title} ===')
+        for r in rows:
+            print(f"{r['name']}: будни={r['work']} (+{r['overtime']}/-{r['undertime']}) "
+                  f"вых={r['weekend']} отп={r['vacation']} итого={r['total']}")
+        return
+    console = get_console()
+    table = Table(title=title)
+    table.add_column('Сотрудник')
+    table.add_column('Будни', justify='right')
+    table.add_column('Перераб', justify='right')
+    table.add_column('Недораб', justify='right')
+    table.add_column('Выходные', justify='right')
+    table.add_column('Отпуск', justify='right')
+    table.add_column('Итого', justify='right')
+    for r in rows:
+        table.add_row(
+            r['name'], str(r['work']), r['overtime'], r['undertime'],
+            str(r['weekend']), str(r['vacation']), str(r['total']),
+        )
+    console.print(table)
+
+
+def print_journal(entries: list[dict], title: str = 'Журнал исправлений') -> None:
+    """Журнал правок за запуск. Пустой — короткое сообщение."""
+    if not entries:
+        info('Исправлений не вносилось.')
+        return
+    if not HAS_RICH:
+        print(f'=== {title} ({len(entries)}) ===')
+        for e in entries:
+            rnd = ' (часть времени случайна)' if e.get('randomized') else ''
+            print(f"{e['ts']} {e['name']} {e['date']}: {e['action']}: "
+                  f"{e['before']} -> {e['after']}{rnd}")
+        return
+    console = get_console()
+    table = Table(title=f'{title} ({len(entries)})')
+    table.add_column('Время')
+    table.add_column('Сотрудник')
+    table.add_column('Дата')
+    table.add_column('Действие')
+    table.add_column('Было → стало')
+    for e in entries:
+        rnd = ' [yellow](случайное время)[/yellow]' if e.get('randomized') else ''
+        table.add_row(e['ts'], e['name'], e['date'], e['action'],
+                      f"{e['before']} → {e['after']}{rnd}")
+    console.print(table)

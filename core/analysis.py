@@ -148,6 +148,44 @@ def _set_mark(time_table: dict, date_key: str, emp_id: int, marks: list) -> None
         time_table[date_key] = {emp_id: marks}
 
 
+_JOURNAL: list[dict] = []
+
+
+def _marks_repr(marks: list) -> str:
+    """Кратко: 'приход → уход [тег]'."""
+    try:
+        return f'{marks[1].time()} → {marks[0].time()} [{marks[2]}]'
+    except (IndexError, AttributeError):
+        return str(marks)
+
+
+def record_edit(emp_id: int, date_key: str, action: str,
+                before: list | None, after: list, randomized: bool = False) -> None:
+    """Записать правку в журнал запуска."""
+    role = EMPLOYEES.get(emp_id)
+    name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
+    _JOURNAL.append({
+        'ts': datetime.now().isoformat(timespec='seconds'),
+        'emp_id': emp_id,
+        'name': name,
+        'date': date_key,
+        'action': action,
+        'before': _marks_repr(before) if before is not None else '—',
+        'after': _marks_repr(after),
+        'randomized': bool(randomized),
+    })
+
+
+def get_journal() -> list[dict]:
+    """Копия журнала правок за запуск."""
+    return list(_JOURNAL)
+
+
+def clear_journal() -> None:
+    """Очистить журнал (начало запуска / изоляция тестов)."""
+    _JOURNAL.clear()
+
+
 def _save_session(time_table: dict) -> None:
     from core.session import save_session
     save_session(time_table)
@@ -167,6 +205,7 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
         for cell in list_marks:
             date_key = cell[0]
             existing = time_table[date_key][emp_id][0]
+            before_single = list(time_table[date_key][emp_id])
             ui.print_day_card_single(name, date_key, existing)
             while True:
                 choice = ui.ask_menu('Выберете пункт меню:', ('1', '2'))
@@ -197,6 +236,9 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         else:
                             time_table[date_key][emp_id][0] = dt_write
                         _save_session(time_table)
+                        record_edit(emp_id, date_key, 'одиночная метка',
+                                    before_single, list(time_table[date_key][emp_id]),
+                                    randomized=bool(randomized))
                         ui.info(f'Ввод данных об отметки подтвержден! {dt_write}')
                         break
                     ui.info('Не подтверждено. Введите снова или 0 для пропуска.')
@@ -230,12 +272,16 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         continue
                     preview = (f'Выйдет за {missed_day}: приход {dt_begin.time()} '
                                f'уход {dt_end.time()} длительность {dt_end - dt_begin}.')
-                    if rand_begin[1] or rand_end[1]:
+                    randomized_fill = bool(rand_begin or rand_end)
+                    if randomized_fill:
                         preview += ' (часть времени дополнена случайно — проверьте!)'
                     if _confirm_save(preview):
                         ui.info('\nДанные за день введены\n')
                         _set_mark(time_table, missed_day, emp_id, [dt_end, dt_begin, 'work'])
                         _save_session(time_table)
+                        record_edit(emp_id, missed_day, 'заполнен день', None,
+                                    list(time_table[missed_day][emp_id]),
+                                    randomized=randomized_fill)
                         break
                     ui.info('Не подтверждено. Введите день заново или 0 для пропуска.')
                     continue
@@ -244,6 +290,8 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         dt_vac = datetime.strptime(f'{missed_day} 00 00 01', '%Y-%m-%d %H %M %S')
                         _set_mark(time_table, missed_day, emp_id, [dt_vac, dt_vac, 'vacation'])
                         _save_session(time_table)
+                        record_edit(emp_id, missed_day, 'отпуск', None,
+                                    list(time_table[missed_day][emp_id]))
                         break
                     continue
                 elif switch == '3':
@@ -251,5 +299,7 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         dt_truancy = datetime.strptime(f'{missed_day} 23 59 59', '%Y-%m-%d %H %M %S')
                         _set_mark(time_table, missed_day, emp_id, [dt_truancy, dt_truancy, 'truancy'])
                         _save_session(time_table)
+                        record_edit(emp_id, missed_day, 'прогул', None,
+                                    list(time_table[missed_day][emp_id]))
                         break
                     continue

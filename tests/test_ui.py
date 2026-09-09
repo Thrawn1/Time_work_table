@@ -10,6 +10,11 @@ from core.ui import (
     confirm_save,
     print_day_card_single,
     print_missed_day_card,
+    build_start_info,
+    print_start_screen,
+    build_preview_rows,
+    print_preview,
+    print_journal,
 )
 
 
@@ -84,3 +89,72 @@ class TestCards:
         out = capsys.readouterr().out
         assert '2026-07-06' in out
         assert '2026-07-07' in out
+
+
+class TestStartAndPreview:
+    def test_start_info_labels(self):
+        info = build_start_info('1_attlog.dat', 2026, 7, 10, 5, 'ignored')
+        assert info['file'] == '1_attlog.dat'
+        assert 'проигнорирована' in info['session_label']
+
+    def test_print_start_screen(self, capsys):
+        print_start_screen(build_start_info('f.dat', 2026, 7, 3, 2, 'fresh'))
+        assert 'f.dat' in capsys.readouterr().out
+
+    def test_preview_rows_and_print(self, setup_employees, mock_wage_rates, capsys):
+        from datetime import timedelta
+        summary = {
+            101: ((1, timedelta(0), timedelta(0)),
+                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
+        }
+        wages = {101: (800, 40, 840)}
+        rows = build_preview_rows(summary, wages)
+        assert rows[0]['name'] == 'Петров Иван'
+        assert rows[0]['total'] == 840
+        print_preview(rows)
+        assert 'Петров' in capsys.readouterr().out
+
+    def test_print_journal_empty_and_filled(self, capsys):
+        print_journal([])
+        assert 'не вносилось' in capsys.readouterr().out
+        print_journal([{'ts': 't', 'name': 'N', 'date': 'd', 'action': 'a',
+                        'before': 'b', 'after': 'c', 'randomized': True}])
+        out = capsys.readouterr().out
+        assert 'N' in out
+
+
+class TestJournal:
+    def test_single_fix_recorded(self, setup_employees):
+        from core import analysis
+        analysis.clear_journal()
+        date_key = '2026-07-06'
+        existing = make_dt(date_key, '17:00:00')
+        tt = {date_key: {101: [existing, existing, 'work']}}
+        single = [[date_key, existing]]
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+            with patch('builtins.input', side_effect=['1', '08 00 00', 'д']):
+                with patch.object(analysis, '_save_session', lambda x: None):
+                    analysis.analyze_for_edit(tt, 101, 2026, 7)
+        entries = analysis.get_journal()
+        assert len(entries) == 1
+        assert entries[0]['action'] == 'одиночная метка'
+        assert entries[0]['date'] == date_key
+        analysis.clear_journal()
+
+    def test_missed_day_random_flag(self, setup_employees, monkeypatch):
+        import randomazer_time_value as rtv
+        monkeypatch.setattr(rtv, 'minutes_or_seconds_random', lambda: 15)
+        from core import analysis
+        analysis.clear_journal()
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, ['2026-07-06'])):
+            inputs = ['1', '08', '17 00 00', 'д']
+            with patch('builtins.input', side_effect=inputs):
+                with patch.object(analysis, '_save_session', lambda x: None):
+                    tt: dict = {}
+                    analysis.analyze_for_edit(tt, 101, 2026, 7)
+        entries = analysis.get_journal()
+        assert len(entries) == 1
+        assert entries[0]['action'] == 'заполнен день'
+        assert entries[0]['randomized'] is True
+        assert '2026-07-06' in tt
+        analysis.clear_journal()

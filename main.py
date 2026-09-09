@@ -38,8 +38,13 @@ def main():
 
     set_secret_key(secret_key)
 
+    from core.analysis import clear_journal
+    clear_journal()
+
     pickle_path = 'temporary.pickle'
     json_path = 'temporary.json'
+    session_state = 'none'
+    list_data: list[str] = []
     if args.resume and (exists(json_path) or exists(pickle_path)):
         data_array = load_session()
         if data_array is None:
@@ -48,10 +53,14 @@ def main():
         first_date = list(data_array.keys())[0]
         year = int(first_date[:4])
         month = int(first_date[5:7])
+        session_state = 'resumed'
     else:
         if not args.resume and session_exists():
             print(f'ВНИМАНИЕ: найден файл сессии. '
                   'Он будет проигнорирован. Используйте --resume для восстановления.')
+            session_state = 'ignored'
+        else:
+            session_state = 'fresh'
         year = args.year or int(input('Введите год: '))
         month = args.month or int(input('Введите месяц: '))
         list_data = read_file_data(args.file, year, month)
@@ -64,17 +73,36 @@ def main():
 
     emp_ids = get_all_employees_in_data(data_array)
 
+    from core.ui import (
+        build_dashboard_rows,
+        build_preview_rows,
+        build_start_info,
+        print_dashboard,
+        print_header,
+        print_journal,
+        print_preview,
+        print_start_screen,
+    )
+    from core.analysis import get_journal
+
+    rows_read = len(list_data) if list_data else sum(len(day) for day in data_array.values())
+    print_start_screen(build_start_info(
+        args.file if session_state != 'resumed' else '(сессия)',
+        year, month, rows_read, len(emp_ids), session_state,
+    ))
+
+    print_header('Проверка')
     for emp_id in emp_ids:
         if is_settlement_allowed(emp_id):
             analyze_for_print(data_array, emp_id, year, month)
 
-    from core.ui import build_dashboard_rows, print_dashboard
     print_dashboard(
         build_dashboard_rows(data_array, emp_ids, year, month),
         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
     )
 
     if not args.no_edit:
+        print_header('Правки')
         for emp_id in emp_ids:
             if is_settlement_allowed(emp_id):
                 analyze_for_edit(data_array, emp_id, year, month)
@@ -83,9 +111,13 @@ def main():
         if is_settlement_allowed(emp_id):
             analyze_for_print(data_array, emp_id, year, month)
 
+    print_header('Расчет')
     work_time = calculate_hours_per_day(data_array)
     summary, restructured = calculate_hours_per_month(work_time)
     wages = calculate_wages(summary)
+    print_preview(build_preview_rows(summary, wages))
+
+    print_header('Отчеты')
     build_excel(data_array, work_time, summary, wages)
 
     for emp_id in emp_ids:
@@ -111,6 +143,7 @@ def main():
             print(f'\n\t\tЗарплата (учитывая молоко, но без премий): {td["salary_whith_milk"]}')
             print('\t\t\t--------------------------')
 
+    print_journal(get_journal())
     remove_session()
 
 
