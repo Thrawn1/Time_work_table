@@ -1,8 +1,11 @@
 from datetime import datetime
+from unittest.mock import patch
 from core.analysis import (
     search_missed_work_days,
     search_missed_marks,
     generation_of_lists_of_days,
+    group_consecutive_days,
+    format_range,
 )
 
 
@@ -124,3 +127,95 @@ class TestSearchMissedMarks:
         result = search_missed_marks(tt, 101, 2026, 7)
         assert result != 0
         assert len(result) == 2
+
+
+class TestGroupConsecutiveDays:
+    def test_empty(self):
+        assert group_consecutive_days([]) == []
+
+    def test_single(self):
+        assert group_consecutive_days(['2026-07-21']) == [['2026-07-21']]
+
+    def test_consecutive(self):
+        days = ['2026-07-21', '2026-07-22', '2026-07-23']
+        assert group_consecutive_days(days) == [days]
+
+    def test_weekend_gap_merges(self):
+        """Пт и пн (разрыв 3 дня через выходные) — один диапазон."""
+        days = ['2026-07-17', '2026-07-20']
+        assert group_consecutive_days(days) == [days]
+
+    def test_big_gap_splits(self):
+        days = ['2026-07-06', '2026-07-07', '2026-07-20', '2026-07-21']
+        assert group_consecutive_days(days) == [
+            ['2026-07-06', '2026-07-07'], ['2026-07-20', '2026-07-21']]
+
+    def test_unsorted_input(self):
+        days = ['2026-07-22', '2026-07-21', '2026-07-23']
+        assert group_consecutive_days(days) == [['2026-07-21', '2026-07-22', '2026-07-23']]
+
+    def test_format_range(self):
+        assert format_range(['2026-07-21']) == '21.07'
+        assert format_range(['2026-07-21', '2026-07-22', '2026-07-23']) == '21.07–23.07 (3 раб. дн.)'
+
+
+class TestBulkMissedEdit:
+    def test_bulk_vacation(self, setup_employees):
+        """Диапазон из 3 дней отмечается отпуском одним подтверждением."""
+        from core import analysis
+        analysis.clear_journal()
+        missed = ['2026-07-21', '2026-07-22', '2026-07-23']
+        tt: dict = {}
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+            with patch('builtins.input', side_effect=['2', 'д']):
+                with patch.object(analysis, '_save_session', lambda x: None):
+                    analysis.analyze_for_edit(tt, 101, 2026, 7)
+        for d in missed:
+            assert tt[d][101][2] == 'vacation'
+        entries = analysis.get_journal()
+        assert len(entries) == 1
+        assert 'x3' in entries[0]['action']
+        analysis.clear_journal()
+
+    def test_skip_all(self, setup_employees):
+        """'a' пропускает все оставшиеся диапазоны без изменений."""
+        from core import analysis
+        analysis.clear_journal()
+        missed = ['2026-07-06', '2026-07-21', '2026-07-22']
+        tt: dict = {}
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+            with patch('builtins.input', side_effect=['a']):
+                with patch.object(analysis, '_save_session', lambda x: None):
+                    analysis.analyze_for_edit(tt, 101, 2026, 7)
+        assert tt == {}
+        assert analysis.get_journal() == []
+        analysis.clear_journal()
+
+    def test_per_day_fallback(self, setup_employees):
+        """'4': первый день — отпуск, второй — пропустить."""
+        from core import analysis
+        analysis.clear_journal()
+        missed = ['2026-07-21', '2026-07-22']
+        tt: dict = {}
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+            with patch('builtins.input', side_effect=['4', '2', 'д', '0']):
+                with patch.object(analysis, '_save_session', lambda x: None):
+                    analysis.analyze_for_edit(tt, 101, 2026, 7)
+        assert tt['2026-07-21'][101][2] == 'vacation'
+        assert '2026-07-22' not in tt
+        analysis.clear_journal()
+
+    def test_bulk_work_same_time(self, setup_employees):
+        """Диапазон заполняется рабочими днями с одним временем."""
+        from core import analysis
+        analysis.clear_journal()
+        missed = ['2026-07-21', '2026-07-22']
+        tt: dict = {}
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+            with patch('builtins.input', side_effect=['1', '08 00 00', '17 00 00', 'д']):
+                with patch.object(analysis, '_save_session', lambda x: None):
+                    analysis.analyze_for_edit(tt, 101, 2026, 7)
+        for d in missed:
+            assert tt[d][101][1] == make_dt(d, '08:00:00')
+            assert tt[d][101][0] == make_dt(d, '17:00:00')
+        analysis.clear_journal()

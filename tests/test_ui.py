@@ -182,7 +182,7 @@ class TestJournal:
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
         entries = analysis.get_journal()
         assert len(entries) == 1
-        assert entries[0]['action'] == 'заполнен день'
+        assert entries[0]['action'] == 'рабочие дни x1'
         assert entries[0]['randomized'] is True
         assert '2026-07-06' in tt
         analysis.clear_journal()
