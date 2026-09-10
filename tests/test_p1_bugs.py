@@ -58,8 +58,9 @@ class TestP1_1_HolidaysLostInCalculations:
         assert total_worked_we == timedelta(hours=10)
 
     def test_holiday_gives_correct_wages(self, setup_employees, mock_wage_rates, mock_holidays_jan2026, mock_postponed_empty):
-        """FIXED: holiday day is paid at 1.5x rate via salary_weekends."""
+        """FIXED: holiday day is paid at 1.5x hourly fraction of daily rate."""
         from core.calculations import calculate_wages
+        from decimal import Decimal
         summary = {
             101: (
                 (0, timedelta(0), timedelta(0)),   # 0 work days
@@ -69,9 +70,9 @@ class TestP1_1_HolidaysLostInCalculations:
         }
         result = calculate_wages(summary)
         total, milk, total_with_milk = result[101]
-        # FIXED: 1 holiday day, 8h worked = 1.5 * rate_per_sec * 28800 = 1200
-        assert total == 1200
-        assert milk == 40
+        # FIXED: 1 holiday day, 8h worked = 1.5 * (800/8) * 8 = 1200
+        assert total == Decimal('1200.00')
+        assert milk == Decimal('40.00')
 
     def test_holiday_single_mark_not_suggested_for_edit(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """FIXED: single holiday mark IS flagged by search_missed_marks."""
@@ -180,6 +181,7 @@ class TestP1_2_Role3LosesStatus:
     def test_role3_vacation_not_paid_as_work(self, setup_employees, mock_wage_rates):
         """FIXED: role 3 vacation day is NOT paid (not in work+holiday count)."""
         from core.calculations import calculate_wages
+        from decimal import Decimal
         summary = {
             102: (
                 (0, timedelta(0), timedelta(0)),   # 0 work days — FIXED
@@ -191,11 +193,12 @@ class TestP1_2_Role3LosesStatus:
         result = calculate_wages(summary)
         total, milk, total_with_milk = result[102]
         # FIXED: 0 work+holiday days = 0 salary
-        assert total == 0
+        assert total == Decimal('0.00')
 
     def test_role3_weekend_preserved(self, setup_employees):
         """Регрессия: роль 3 сохраняет 'weekend', а не подменяет на 'work'."""
         from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
+        from decimal import Decimal
         date_key = '2026-07-04'
         tt = {date_key: {102: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'weekend']}}
         wt = calculate_hours_per_day(tt)
@@ -205,7 +208,7 @@ class TestP1_2_Role3LosesStatus:
         assert summary[102][0][0] == 0  # не в буднях
         assert summary[102][1][0] == 1  # в выходных
         total, _, _ = calculate_wages(summary)[102]
-        assert total == 800
+        assert total == Decimal('800.00')
 
     def test_role3_holiday_preserved(self, setup_employees):
         """Регрессия: роль 3 сохраняет 'holiday', а не подменяет на 'work'."""
@@ -229,6 +232,7 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
     def test_zero_hour_weekend_gives_zero_pay(self, setup_employees, mock_wage_rates):
         """FIXED: 0-hour weekend shift (single mark) pays 0."""
         from core.calculations import calculate_wages
+        from decimal import Decimal
         summary = {
             101: (
                 (0, timedelta(0), timedelta(0)),
@@ -239,27 +243,25 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         result = calculate_wages(summary)
         total, milk, total_with_milk = result[101]
         # FIXED: 0 hours worked = 0 pay
-        assert total == 0
-        assert milk == 40  # milk is per day count, not per worked hours
+        assert total == Decimal('0.00')
+        assert milk == Decimal('40.00')  # milk is per day count, not per worked hours
 
     def test_two_hour_weekend_pays_proportionally(self, setup_employees, mock_wage_rates):
         """FIXED: 2-hour weekend shift pays proportional to hours."""
         from core.calculations import calculate_wages
-        rate = 800
-        rate_per_sec = rate / (8 * 3600)
-        worked = timedelta(hours=2)
-        expected = round(1.5 * rate_per_sec * worked.total_seconds(), 2)
+        from decimal import Decimal
+        expected = Decimal('300.00')  # 1.5 * (800/8) * 2
         summary = {
             101: (
                 (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), worked),  # 2h worked
+                (1, timedelta(0), timedelta(0), timedelta(hours=2)),  # 2h worked
                 0, 0,
             )
         }
         result = calculate_wages(summary)
         total, _, _ = result[101]
         assert total == expected
-        assert total < 1200  # FIXED: less than full shift
+        assert total < Decimal('1200.00')  # FIXED: less than full shift
 
     def test_single_mark_weekend_flagged_but_paid_correctly(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """FIXED: single mark on weekend IS flagged, and pays based on actual hours."""
@@ -271,6 +273,7 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         result = search_missed_marks(tt, 101, 2026, 7)
         assert result != 0
         # FIXED: 0-hour shift pays 0
+        from decimal import Decimal
         summary = {
             101: (
                 (0, timedelta(0), timedelta(0)),
@@ -280,7 +283,7 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         }
         wages = calculate_wages(summary)
         total, _, _ = wages[101]
-        assert total == 0
+        assert total == Decimal('0.00')
 
     def test_weekend_undertime_tracked(self, setup_employees):
         """FIXED: weekend undertime is now tracked separately."""
@@ -364,61 +367,113 @@ class TestP1_5_EmployeeWithoutMarksDisappears:
 class TestP1_6_SessionReplacesParams:
     """Session now requires explicit --resume flag."""
 
-    def test_pickle_requires_resume_flag(self, setup_employees, monkeypatch, tmp_path):
-        """FIXED: session is ignored without --resume, warning is shown."""
-        import main
+    def test_ignored_session_preserved_and_new_calc_used(
+        self, setup_employees, monkeypatch, tmp_path, capsys
+    ):
+        """Без --resume: июньская сессия бэкапится, расчёт идёт по июльскому файлу."""
+        import main as main_mod
         import sys
-        os.chdir(tmp_path)
+        monkeypatch.chdir(tmp_path)
 
         june_data = {
             '2026-06-15': {
                 101: [make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work'],
             }
         }
-
         from core.session import save_session, SESSION_FILE
+        from core import session as session_mod
         save_session(june_data)
+        assert tmp_path.joinpath(SESSION_FILE).exists()
 
-        calls = {'read_file': 0}
+        july_table = {
+            '2026-07-06': {
+                101: [make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work'],
+            }
+        }
+        calls = {'read_file': [], 'build_array': 0}
 
         def mock_read_file(file_name, year, month):
-            calls['read_file'] += 1
-            return []
+            calls['read_file'].append((file_name, year, month))
+            return ['        101\t2026-07-06 08:00:00\t1\t255\t1\t0']
 
-        def mock_exists(path):
-            if path == SESSION_FILE:
-                return True
-            return False
+        def mock_build_array(lines):
+            calls['build_array'] += 1
+            return dict(july_table)
 
-        monkeypatch.setattr(main, 'read_file_data', mock_read_file)
-        monkeypatch.setattr(main, 'exists', mock_exists)
+        monkeypatch.setattr(main_mod, 'read_file_data', mock_read_file)
+        monkeypatch.setattr(main_mod, 'build_data_array', mock_build_array)
+        monkeypatch.setattr(main_mod, 'load_config', lambda: None)
+        monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
+        monkeypatch.setattr(main_mod, 'analyze_for_print', lambda *a, **k: None)
+        monkeypatch.setattr(main_mod, 'analyze_for_edit', lambda *a, **k: None)
+        monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt: {
+            d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
+                for e in emps} for d, emps in tt.items()})
+        monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
+                            lambda wt: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
+                                                (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
+        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s: {101: (800, 40, 840)})
+        monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
+        monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
+        monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
+        monkeypatch.setattr('core.file_parser.load_holidays', lambda year: [])
+        monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
 
-        # Without --resume, session is ignored and read_file_data is called
         monkeypatch.setattr(sys, 'argv', ['main.py', '-y', '2026', '-m', '7', '-k', 't', '--no-edit'])
-        assert True  # structural — code path exists
+        main_mod.main()
 
-    def test_pickle_with_resume_loads_session(self, setup_employees, monkeypatch, tmp_path):
-        """FIXED: --resume loads from JSON session."""
-        import main
+        # Новый расчёт использовал июльский файл, а не июньскую сессию
+        assert calls['read_file'] and calls['read_file'][0][1:] == (2026, 7)
+        assert calls['build_array'] == 1
+        out = capsys.readouterr().out
+        assert 'проигнорирован' in out or 'сохран' in out
+        # Июньская сессия не потеряна: лежит в бэкапе
+        backups = list(tmp_path.glob('temporary_*.json')) + list(tmp_path.glob('temporary_backup_*.json'))
+        assert backups, 'бэкап игнорируемой сессии должен остаться'
+        from core.session import load_session as _load
+        restored = _load(str(backups[0]))
+        assert restored is not None and '2026-06-15' in restored
+
+    def test_resume_loads_session_without_reading_file(
+        self, setup_employees, monkeypatch, tmp_path, capsys
+    ):
+        """С --resume: файл не читается, используется сессия, после успеха сессия удалена."""
+        import main as main_mod
         import sys
-        os.chdir(tmp_path)
+        monkeypatch.chdir(tmp_path)
 
         june_data = {
             '2026-06-15': {
                 101: [make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work'],
             }
         }
-
-        from core.session import save_session, SESSION_FILE
+        from core.session import save_session, session_exists
         save_session(june_data)
+        assert session_exists()
 
-        def mock_exists(path):
-            if path in (SESSION_FILE, 'temporary.pickle'):
-                return True
-            return False
+        def _fail_read(*a, **k):
+            raise AssertionError('read_file_data не должен вызываться при --resume')
 
-        monkeypatch.setattr(main, 'exists', mock_exists)
+        monkeypatch.setattr(main_mod, 'read_file_data', _fail_read)
+        monkeypatch.setattr(main_mod, 'load_config', lambda: None)
+        monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
+        monkeypatch.setattr(main_mod, 'analyze_for_print', lambda *a, **k: None)
+        monkeypatch.setattr(main_mod, 'analyze_for_edit', lambda *a, **k: None)
+        monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt: {
+            d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
+                for e in emps} for d, emps in tt.items()})
+        monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
+                            lambda wt: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
+                                                (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
+        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s: {101: (800, 40, 840)})
+        monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
+        monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
+        monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
+        monkeypatch.setattr('core.file_parser.load_holidays', lambda year: [])
+        monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
 
-        # With --resume, session IS loaded
         monkeypatch.setattr(sys, 'argv', ['main.py', '--resume', '-k', 't', '--no-edit'])
-        assert True  # structural — code path exists
+        main_mod.main()
+
+        # После успешного resumed-расчёта рабочая сессия удалена
+        assert not session_exists()

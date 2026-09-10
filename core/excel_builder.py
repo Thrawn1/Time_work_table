@@ -5,6 +5,17 @@ from core.data_array import get_name_employee, is_settlement_allowed
 from core.constants import MONTHS_NAME_TO_RUSSIAN
 
 
+def _set_cell(ws, row: int, column: int, value, border=None):
+    """Записать ячейку; текстовые поля с =/+/-/@ — строго как строки (не формулы)."""
+    cell = ws.cell(column=column, row=row, value=value)
+    if border is not None:
+        cell.border = border
+    if isinstance(value, str) and value[:1] in ('=', '+', '-', '@'):
+        # openpyxl иначе сохранит как формулу (data_type 'f')
+        cell.data_type = 's'
+    return cell
+
+
 def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
     if not time_table:
         print('Нет данных для общей таблицы, Excel не создан.')
@@ -13,9 +24,9 @@ def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict) -
     ws = wb.active
     _setup_columns(ws)
     _write_header(ws)
-    _write_data_rows(ws, time_table, work_time)
+    last_detail_row = _write_data_rows(ws, time_table, work_time)
     _write_summary_block(ws, work_time, summary, wages)
-    ws.auto_filter.ref = 'A1:G24'
+    ws.auto_filter.ref = f'A1:G{max(last_detail_row, 1)}'
     list_dates = sorted(time_table.keys())
     month_num = int(list_dates[0][5:7])
     year_str = list_dates[0][:4]
@@ -49,36 +60,41 @@ def _write_header(ws) -> None:
     ws.cell(column=6, row=1).alignment = Alignment(horizontal='center')
 
 
-def _write_data_rows(ws, time_table: dict, work_time: dict) -> None:
+def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
+    """Записать детализацию. Возвращает последнюю строку детализации (>=1)."""
     border = _make_border()
     count = 2
     for date_key in sorted(time_table.keys()):
         for emp_id in time_table[date_key]:
             if not is_settlement_allowed(emp_id):
                 continue
-            ws.cell(column=1, row=count, value=get_name_employee(emp_id)).border = border
-            ws.cell(column=2, row=count, value=date_key).border = border
             marks = time_table[date_key][emp_id]
             tag = marks[2]
             if tag in ('work', 'weekend', 'holiday'):
                 if date_key not in work_time or emp_id not in work_time[date_key]:
                     continue
+                _set_cell(ws, count, 1, get_name_employee(emp_id), border)
+                _set_cell(ws, count, 2, date_key, border)
                 ws.cell(column=3, row=count, value=marks[1].time()).border = border
                 ws.cell(column=4, row=count, value=marks[0].time()).border = border
                 wd = work_time[date_key][emp_id]
                 ws.cell(column=5, row=count, value=wd[1]).border = border
                 ws.cell(column=7, row=count, value=wd[0]).border = border
-                ws.cell(column=6, row=count, value=wd[2]).border = border
-            elif tag == 'vacation':
-                ws.cell(count, 3).border = border
-                ws.merge_cells(start_row=count, start_column=3, end_row=count, end_column=7)
-                ws.cell(column=3, row=count, value='Отпуск').alignment = Alignment(horizontal='center')
-            elif tag == 'truancy':
-                ws.cell(count, 3).border = border
-                ws.merge_cells(start_row=count, start_column=3, end_row=count, end_column=7)
-                ws.cell(column=3, row=count, value='Прогул').alignment = Alignment(horizontal='center')
-            if is_settlement_allowed(emp_id):
+                _set_cell(ws, count, 6, wd[2], border)
                 count += 1
+            elif tag in ('vacation', 'truancy'):
+                _set_cell(ws, count, 1, get_name_employee(emp_id), border)
+                _set_cell(ws, count, 2, date_key, border)
+                _set_cell(ws, count, 3, None, border)
+                ws.merge_cells(start_row=count, start_column=3, end_row=count, end_column=7)
+                label = 'Отпуск' if tag == 'vacation' else 'Прогул'
+                _set_cell(ws, count, 3, label, None).alignment = Alignment(horizontal='center')
+                ws.cell(column=3, row=count).border = border
+                count += 1
+            else:
+                # Неизвестный тег: не выдумываем строку детализации.
+                continue
+    return count - 1
 
 
 def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> None:
@@ -97,7 +113,7 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
     for emp_id in summary:
         if not is_settlement_allowed(emp_id):
             continue
-        ws.cell(column=8, row=count, value=get_name_employee(emp_id)).border = border
+        _set_cell(ws, count, 8, get_name_employee(emp_id), border)
         ws.cell(column=9, row=count, value=summary[emp_id][0][0]).border = border
         ws.cell(column=9, row=count).alignment = Alignment(horizontal='center')
         ws.cell(column=10, row=count, value=summary[emp_id][0][1]).border = border
@@ -108,9 +124,10 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
         ws.cell(column=14, row=count, value=summary[emp_id][2]).border = border
         ws.cell(column=14, row=count).alignment = Alignment(horizontal='center')
         if emp_id in wages:
-            ws.cell(column=15, row=count, value=wages[emp_id][0]).border = border
-            ws.cell(column=16, row=count, value=wages[emp_id][1]).border = border
-            ws.cell(column=17, row=count, value=wages[emp_id][2]).border = border
+            for col, val in ((15, wages[emp_id][0]), (16, wages[emp_id][1]), (17, wages[emp_id][2])):
+                cell = ws.cell(column=col, row=count, value=val)
+                cell.border = border
+                cell.number_format = '0.00'
         count += 1
 
 

@@ -15,7 +15,10 @@ WEEKDAYS_NAME: dict[int, str] = {
     3: 'Четверг', 4: 'Пятница', 5: 'Суббота', 6: 'Воскресенье',
 }
 
+from decimal import Decimal
+
 WORKING_DAY_HOURS: int = 8
-MILK_ALLOWANCE_PER_DAY: int = 40
-OVERTIME_WEEKDAY_MULTIPLIER: float = 1.5
-OVERTIME_WEEKEND_MULTIPLIER: float = 1.5
+# Деньги — Decimal. Ставка: руб/смена 8ч. Молоко: руб/день.
+MILK_ALLOWANCE_PER_DAY: Decimal = Decimal('40.00')
+OVERTIME_WEEKDAY_MULTIPLIER: Decimal = Decimal('1.5')
+OVERTIME_WEEKEND_MULTIPLIER: Decimal = Decimal('1.5')

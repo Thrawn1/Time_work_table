@@ -4,6 +4,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from datetime import datetime
+from decimal import Decimal
 from core.config import EmployeeData, Role
 
 
@@ -24,11 +25,11 @@ def setup_employees(monkeypatch):
     }
     employees = {
         101: EmployeeData(id=101, first_name='Иван', last_name='Петров',
-                          role_id=1, role_name='Работник', hourly_rate=800),
+                          role_id=1, role_name='Работник', daily_rate=Decimal('800.00')),
         102: EmployeeData(id=102, first_name='Мария', last_name='Сидорова',
-                          role_id=3, role_name='Окладник', hourly_rate=800),
+                          role_id=3, role_name='Окладник', daily_rate=Decimal('800.00')),
         103: EmployeeData(id=103, first_name='Алексей', last_name='Козлов',
-                          role_id=4, role_name='Работник4', hourly_rate=800),
+                          role_id=4, role_name='Работник4', daily_rate=Decimal('800.00')),
     }
     exceptions = []
 
@@ -39,7 +40,8 @@ def setup_employees(monkeypatch):
 
     # Patch imported names in all consumer modules
     monkeypatch.setattr(calculations, 'EMPLOYEES', employees)
-    monkeypatch.setattr(calculations, 'load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
+    monkeypatch.setattr(calculations, 'load_wage_rates',
+                        lambda: {101: Decimal('800.00'), 102: Decimal('800.00'), 103: Decimal('800.00')})
     monkeypatch.setattr(data_array, 'EMPLOYEES', employees)
     monkeypatch.setattr(data_array, 'SETTLEMENT_EXCEPTIONS', exceptions)
     monkeypatch.setattr(analysis, 'EMPLOYEES', employees)
@@ -51,9 +53,11 @@ def setup_employees(monkeypatch):
 
 @pytest.fixture
 def mock_wage_rates(monkeypatch):
-    """Mock wage rates to return fixed values (rate=800 for all)."""
+    """Mock wage rates to return fixed values (rate=800.00 руб/смена для всех)."""
+    from decimal import Decimal
     from core import config
-    monkeypatch.setattr(config, 'load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
+    monkeypatch.setattr(config, 'load_wage_rates',
+                        lambda: {101: Decimal('800.00'), 102: Decimal('800.00'), 103: Decimal('800.00')})
 
 
 @pytest.fixture

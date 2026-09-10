@@ -1,8 +1,18 @@
 from datetime import timedelta
+import html
+import re
 from core.config import EMPLOYEES
 from core.data_array import get_name_employee, is_settlement_allowed
 from core.constants import MONTHS_NAME_TO_RUSSIAN
 from core.calculations import str_timedelta
+from core.money import format_money
+
+
+def sanitize_filename_part(text: str) -> str:
+    """Убрать запрещённые в Windows символы <>:\"/\\|?* и управляющие."""
+    cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', text or '').strip()
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+    return cleaned or 'ID'
 
 
 def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
@@ -17,7 +27,8 @@ def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wa
     total_data = _build_total_data(emp_id, summary, wages)
     month_num = daily_data[0]['date'][5:7]
     year_str = daily_data[0]['date'][:4]
-    file_name = f'{family}_{month_num}_{year_str}.html'
+    safe_family = sanitize_filename_part(family or f'ID_{emp_id}')
+    file_name = f'{safe_family}_{emp_id}_{month_num}_{year_str}.html'
     _write_html_file(file_name, daily_data, total_data)
     print(f'Файл готов: {file_name}')
     return file_name
@@ -62,9 +73,9 @@ def _build_total_data(emp_id: int, summary: dict, wages: dict) -> dict:
         'work_weekend': data[1][0],
         'overtime_weekend': str_timedelta(data[1][1]),
         'vacation': data[2],
-        'salary': wages[emp_id][0],
-        'milk': wages[emp_id][1],
-        'salary_whith_milk': wages[emp_id][2],
+        'salary': format_money(wages[emp_id][0]),
+        'milk': format_money(wages[emp_id][1]),
+        'salary_whith_milk': format_money(wages[emp_id][2]),
     }
 
 
@@ -113,33 +124,44 @@ def _gen_header(table_type: int) -> list[str]:
 
 def _gen_day_row(day: dict) -> list[str]:
     tag = day['tag_day']
+    family = html.escape(str(day.get('family', '')), quote=True)
+    date = html.escape(str(day.get('date', '')), quote=True)
     row = [f'        <tr>\n']
-    row.append(f'          <td>{day["family"]}</td>\n')
-    row.append(f'          <td>{day["date"]}</td>\n')
+    row.append(f'          <td>{family}</td>\n')
+    row.append(f'          <td>{date}</td>\n')
     if tag in ('work', 'weekend', 'holiday'):
-        row.append(f'          <td>{day["time_begin"]}</td>\n')
-        row.append(f'          <td>{day["time_end"]}</td>\n')
-        row.append(f'          <td>{day["delta_time"]}</td>\n')
-        row.append(f'          <td>{day["tag_overtime"]}</td>\n')
-        row.append(f'          <td>{day["overtime"]}</td>\n')
+        time_begin = html.escape(str(day.get('time_begin', '')), quote=True)
+        time_end = html.escape(str(day.get('time_end', '')), quote=True)
+        delta = html.escape(str(day.get('delta_time', '')), quote=True)
+        tag_over = html.escape(str(day.get('tag_overtime', '')), quote=True)
+        overtime = html.escape(str(day.get('overtime', '')), quote=True)
+        row.append(f'          <td>{time_begin}</td>\n')
+        row.append(f'          <td>{time_end}</td>\n')
+        row.append(f'          <td>{delta}</td>\n')
+        row.append(f'          <td>{tag_over}</td>\n')
+        row.append(f'          <td>{overtime}</td>\n')
     else:
-        row.append(f'          <td colspan="5" align="center">{tag}</td>\n')
+        tag_esc = html.escape(str(tag), quote=True)
+        row.append(f'          <td colspan="5" align="center">{tag_esc}</td>\n')
     row.append('        </tr>\n')
     return row
 
 
 def _gen_total_row(total: dict) -> list[str]:
+    def esc(v) -> str:
+        return html.escape(str(v), quote=True)
+
     row = ['        <tr>\n']
-    row.append(f'          <th align="center">{total["family"]}</th>\n')
-    row.append(f'          <th>{total["all_work_weekdays"]}</th>\n')
-    row.append(f'          <th>{total["weekdays_overtime"]}</th>\n')
-    row.append(f'          <th>{total["weekdays_undertime"]}</th>\n')
-    row.append(f'          <th>{total["work_weekend"]}</th>\n')
-    row.append(f'          <th>{total["overtime_weekend"]}</th>\n')
-    row.append(f'          <th>{total["vacation"]}</th>\n')
-    row.append(f'          <th>{total["salary"]}</th>\n')
-    row.append(f'          <th>{total["milk"]}</th>\n')
-    row.append(f'          <th>{total["salary_whith_milk"]}</th>\n')
+    row.append(f'          <th align="center">{esc(total.get("family", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("all_work_weekdays", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("weekdays_overtime", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("weekdays_undertime", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("work_weekend", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("overtime_weekend", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("vacation", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("salary", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("milk", ""))}</th>\n')
+    row.append(f'          <th>{esc(total.get("salary_whith_milk", ""))}</th>\n')
     row.append('        </tr>\n')
     return row
 

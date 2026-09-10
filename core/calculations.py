@@ -1,4 +1,5 @@
 from datetime import timedelta
+from decimal import Decimal
 from core.config import EMPLOYEES, load_wage_rates
 from core.constants import (
     WORKING_DAY_HOURS,
@@ -6,6 +7,7 @@ from core.constants import (
     OVERTIME_WEEKDAY_MULTIPLIER,
     OVERTIME_WEEKEND_MULTIPLIER,
 )
+from core.money import as_decimal, quantize_money, timedelta_to_hours
 
 
 def str_timedelta(td: timedelta) -> str:
@@ -24,7 +26,7 @@ def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
             emp = EMPLOYEES.get(emp_id)
             if emp is None:
                 continue
-            if emp.role_id in (1, 4):
+            if emp.role_id in (1, 2, 4):
                 worked = marks[0] - marks[1]
                 standard = timedelta(hours=WORKING_DAY_HOURS)
                 delta = worked - standard
@@ -102,41 +104,80 @@ def calculate_hours_per_month(work_time: dict) -> tuple[dict[int, tuple], dict]:
     return summary, restructured
 
 
-def calculate_wages(summary: dict) -> dict[int, tuple[float, float, float]]:
+def _shift_hours() -> Decimal:
+    """Длительность стандартной смены в часах (ставка — руб/смена за 8ч)."""
+    return Decimal(str(WORKING_DAY_HOURS))
+
+
+def _rate_for(rates: dict, emp_id: int) -> Decimal:
+    """Ставка сотрудника как Decimal руб/смена (моки с int/float тоже годятся)."""
+    return as_decimal(rates.get(emp_id, Decimal('0.00')))
+
+
+def _hourly_fraction(daily_rate: Decimal) -> Decimal:
+    """Часовая доля дневной ставки (точная, без округления до копеек)."""
+    return daily_rate / _shift_hours()
+
+
+def calculate_wages(summary: dict) -> dict[int, tuple[Decimal, Decimal, Decimal]]:
+    """Начислить зарплату. Ставка — руб/смена 8ч (Decimal), итог — копейки HALF_UP.
+
+    Роли 1,4: будни = rate*дни + 1.5*(rate/8)*переработка_ч - (rate/8)*недоработка_ч;
+      выходные = 1.5*(rate/8)*факт_ч; отпуск = rate*дни.
+    Роль 2 (кладовщик): без оплаты переработок, выходные по одинарной ставке.
+    Роль 3: rate*(будни+выходные), без молока.
+    Молоко: 40.00 * (будни_дни + выходные_дни).
+    Квантование только финального итога (промежуточное — полная точность).
+    """
     rates = load_wage_rates()
-    result: dict[int, tuple[float, float, float]] = {}
+    result: dict[int, tuple[Decimal, Decimal, Decimal]] = {}
     for emp_id, data in summary.items():
         emp = EMPLOYEES.get(emp_id)
         if emp is None:
             continue
         if emp.role_id in (1, 4):
-            rate = rates.get(emp_id, 0)
-            work_shift_secs = WORKING_DAY_HOURS * 3600
-            rate_per_second = rate / work_shift_secs
+            rate = _rate_for(rates, emp_id)
+            hourly = _hourly_fraction(rate)
             work_weekdays = data[0][0]
-            overtime_weekday = data[0][1]
-            undertime_weekday = data[0][2]
+            overtime_h = timedelta_to_hours(data[0][1])
+            undertime_h = timedelta_to_hours(data[0][2])
             work_holidays = data[1][0]
-            # overtime_holiday / undertime_holiday остаются в summary только
-            # для отчетности — в оплату не входят, т.к. total_worked_holiday
-            # уже содержит все фактически отработанные секунды. Добавление
-            # их сверху давало двойной учет переработки (2.25x) и отрицательную
-            # зарплату за короткие смены (1.5*worked - undertime < 0).
-            total_worked_holiday = data[1][3]
+            # overtime/undertime выходных в оплату не входят отдельно:
+            # total_worked_holiday уже содержит весь факт (иначе 2.25x / минусы).
+            worked_holiday_h = timedelta_to_hours(data[1][3])
             vacation_days = data[2]
-            money_for_milk = (work_weekdays + work_holidays) * MILK_ALLOWANCE_PER_DAY
+            money_for_milk = MILK_ALLOWANCE_PER_DAY * (work_weekdays + work_holidays)
             salary_weekdays = (rate * work_weekdays
-                               + OVERTIME_WEEKDAY_MULTIPLIER * rate_per_second * overtime_weekday.total_seconds()
-                               - rate_per_second * undertime_weekday.total_seconds())
-            salary_weekends = OVERTIME_WEEKEND_MULTIPLIER * rate_per_second * total_worked_holiday.total_seconds()
+                               + OVERTIME_WEEKDAY_MULTIPLIER * hourly * overtime_h
+                               - hourly * undertime_h)
+            salary_weekends = OVERTIME_WEEKEND_MULTIPLIER * hourly * worked_holiday_h
             salary_vacation = rate * vacation_days
-            total = round(salary_weekdays + salary_weekends + salary_vacation, 2)
-            total_with_milk = total + money_for_milk
-            result[emp_id] = (total, money_for_milk, total_with_milk)
+            total = quantize_money(salary_weekdays + salary_weekends + salary_vacation)
+            total_with_milk = quantize_money(total + money_for_milk)
+            result[emp_id] = (total, quantize_money(money_for_milk), total_with_milk)
+        elif emp.role_id == 2:
+            # Кладовщик: как обычный работник, но без оплаты переработок.
+            # Будни: ставка за дни минус недоработка (сверхурочные не плюсуются).
+            # Выходные: факт по одинарной ставке (без 1.5x). Отпуск/молоко — как у роли 1.
+            rate = _rate_for(rates, emp_id)
+            hourly = _hourly_fraction(rate)
+            work_weekdays = data[0][0]
+            undertime_h = timedelta_to_hours(data[0][2])
+            work_holidays = data[1][0]
+            worked_holiday_h = timedelta_to_hours(data[1][3])
+            vacation_days = data[2]
+            money_for_milk = MILK_ALLOWANCE_PER_DAY * (work_weekdays + work_holidays)
+            salary_weekdays = (rate * work_weekdays
+                               - hourly * undertime_h)
+            salary_weekends = hourly * worked_holiday_h
+            salary_vacation = rate * vacation_days
+            total = quantize_money(salary_weekdays + salary_weekends + salary_vacation)
+            total_with_milk = quantize_money(total + money_for_milk)
+            result[emp_id] = (total, quantize_money(money_for_milk), total_with_milk)
         elif emp.role_id == 3:
-            rate = rates.get(emp_id, 0)
-            total = (data[0][0] + data[1][0]) * rate
-            result[emp_id] = (total, 0, total)
+            rate = _rate_for(rates, emp_id)
+            total = quantize_money(rate * (data[0][0] + data[1][0]))
+            result[emp_id] = (total, Decimal('0.00'), total)
     return result
 
 

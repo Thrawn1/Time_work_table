@@ -223,12 +223,17 @@ def build_preview_rows(summary: dict, wages: dict) -> list[dict]:
     """Чистые строки предпросмотра расчета до записи файлов."""
     from core.config import EMPLOYEES
     from core.calculations import str_timedelta
+    from core.data_array import is_settlement_allowed
+    from core.money import as_decimal
+    from decimal import Decimal
 
     rows: list[dict] = []
     for emp_id, data in summary.items():
+        if not is_settlement_allowed(emp_id):
+            continue
         role = EMPLOYEES.get(emp_id)
         name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
-        salary, milk, total = wages.get(emp_id, (0, 0, 0))
+        salary, milk, total = wages.get(emp_id, (Decimal('0.00'), Decimal('0.00'), Decimal('0.00')))
         rows.append({
             'emp_id': emp_id,
             'name': name,
@@ -237,9 +242,9 @@ def build_preview_rows(summary: dict, wages: dict) -> list[dict]:
             'undertime': str_timedelta(data[0][2]),
             'weekend': data[1][0],
             'vacation': data[2],
-            'salary': salary,
-            'milk': milk,
-            'total': total,
+            'salary': as_decimal(salary),
+            'milk': as_decimal(milk),
+            'total': as_decimal(total),
         })
     return sorted(rows, key=lambda r: r['name'])
 
@@ -250,7 +255,7 @@ def print_preview(rows: list[dict], title: str = 'Предпросмотр ра�
         print(f'=== {title} ===')
         for r in rows:
             print(f"{r['name']}: будни={r['work']} (+{r['overtime']}/-{r['undertime']}) "
-                  f"вых={r['weekend']} отп={r['vacation']} итого={r['total']}")
+                  f"вых={r['weekend']} отп={r['vacation']} итого={r['total']:.2f}")
         return
     console = get_console()
     table = Table(title=title)
@@ -308,7 +313,7 @@ def print_salary_report(rows: list[dict], title: str = 'Итоги месяца'
         for r in rows:
             print(f"{r['name']}: будни={r['work']} (+{r['overtime']}/-{r['undertime']}) "
                   f"вых={r['weekend']} отп={r['vacation']} "
-                  f"оклад={r['salary']} молоко={r['milk']} итого={r['total']}")
+                  f"оклад={r['salary']:.2f} молоко={r['milk']:.2f} итого={r['total']:.2f}")
         return
     console = get_console()
     table = Table(title=title, show_lines=True)

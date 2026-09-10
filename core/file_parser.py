@@ -12,27 +12,58 @@ def parse_attlog_line(line: str) -> tuple[int, datetime] | None:
     match = DAT_LINE_PATTERN.match(line)
     if not match:
         return None
-    emp_id = int(match.group(1))
-    dt = datetime.strptime(match.group(2), '%Y-%m-%d %H:%M:%S')
+    try:
+        emp_id = int(match.group(1))
+    except (ValueError, TypeError):
+        return None
+    try:
+        dt = datetime.strptime(match.group(2), '%Y-%m-%d %H:%M:%S')
+    except ValueError:
+        # Невозможная дата (напр. 2026-02-30): пропускаем строку, а не роняем импорт.
+        return None
     return emp_id, dt
 
 
-def read_file_data(file_name: str, year: int, month: int) -> list[str]:
+def read_file_data_with_errors(file_name: str, year: int, month: int) -> tuple[list[str], list[str]]:
+    """Импорт с диагностикой: (строки за период, ошибки с номерами строк)."""
     file_path = path.join('data', file_name)
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
     except FileNotFoundError:
         print('Файл данных не найден:', file_path)
-        return []
-    result = []
-    for line in lines:
-        parsed = parse_attlog_line(line)
-        if parsed is None:
+        return [], [f'{file_path}: файл не найден']
+    result: list[str] = []
+    errors: list[str] = []
+    for lineno, line in enumerate(lines, 1):
+        if not line.strip():
             continue
-        _, dt = parsed
+        match = DAT_LINE_PATTERN.match(line)
+        if not match:
+            continue
+        try:
+            dt = datetime.strptime(match.group(2), '%Y-%m-%d %H:%M:%S')
+        except ValueError as e:
+            errors.append(f'строка {lineno}: невозможная дата {match.group(2)!r} ({e}) — пропущена')
+            continue
+        try:
+            int(match.group(1))
+        except (ValueError, TypeError):
+            errors.append(f'строка {lineno}: некорректный ID — пропущена')
+            continue
         if dt.year == year and dt.month == month:
             result.append(line.rstrip('\n'))
+    if errors:
+        print(f'ВНИМАНИЕ: пропущено строк импорта с ошибками: {len(errors)} (расчёт продолжен).')
+        for err in errors[:10]:
+            print(f'  - {err}')
+        if len(errors) > 10:
+            print(f'  ... и ещё {len(errors) - 10}')
+    return result, errors
+
+
+def read_file_data(file_name: str, year: int, month: int) -> list[str]:
+    result, _ = read_file_data_with_errors(file_name, year, month)
     return result
 
 

@@ -1,5 +1,8 @@
 from os import path
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+
+from core.money import quantize_rate, as_decimal
 
 DATA_DIR = 'data'
 VARIABLE_DATA_DIR = path.join(DATA_DIR, 'variable_data_for_app')
@@ -27,7 +30,7 @@ class EmployeeData:
     last_name: str
     role_id: int
     role_name: str
-    hourly_rate: float
+    daily_rate: Decimal  # руб/смена 8ч
 
 
 ROLES: dict[int, Role] = {}
@@ -73,17 +76,23 @@ def _load_employees() -> dict[int, EmployeeData]:
             role_name = ROLES[role_id].name if role_id in ROLES else ''
             employees[emp_id] = EmployeeData(
                 id=emp_id, first_name=first_name, last_name=last_name,
-                role_id=role_id, role_name=role_name, hourly_rate=0,
+                role_id=role_id, role_name=role_name, daily_rate=Decimal('0.00'),
             )
     rates = load_wage_rates()
     for emp_id, rate in rates.items():
         if emp_id in employees:
-            employees[emp_id].hourly_rate = rate
+            employees[emp_id].daily_rate = rate
     return employees
 
 
-def load_wage_rates() -> dict[int, float]:
-    rates: dict[int, float] = {}
+def load_wage_rates() -> dict[int, Decimal]:
+    """Ставки в руб/смена 8ч как Decimal (до копеек, HALF_UP).
+
+    Файл хранит переставленную запись 'коп.руб' -> расшифровка 'руб.коп'.
+    Раньше было round(float * key) до целых рублей — терялись копейки
+    и вносилась binary-ошибка float. Теперь Decimal со строковым парсингом.
+    """
+    rates: dict[int, Decimal] = {}
     key = _get_secret_key()
     with open(WAGE_RATES_FILE, 'r', encoding='utf-8') as f:
         for line in f:
@@ -94,8 +103,8 @@ def load_wage_rates() -> dict[int, float]:
             emp_id = int(parts[0])
             raw_rate = parts[1].strip('[]')
             rate_parts = raw_rate.split('.')
-            decrypted = float(rate_parts[1] + '.' + rate_parts[0])
-            rates[emp_id] = round(decrypted * key)
+            decrypted = Decimal(rate_parts[1] + '.' + rate_parts[0])
+            rates[emp_id] = quantize_rate(decrypted * key)
     return rates
 
 
@@ -109,14 +118,14 @@ def _load_settlement_exceptions() -> list[int]:
     return exceptions
 
 
-def _get_secret_key() -> float:
+def _get_secret_key() -> Decimal:
     try:
         with open('_secret_key.tmp', 'r') as f:
-            return float(f.read().strip())
-    except (FileNotFoundError, ValueError):
-        return 0.0
+            return as_decimal(f.read().strip())
+    except (FileNotFoundError, ValueError, InvalidOperation):
+        return Decimal('0.00')
 
 
-def set_secret_key(key: float) -> None:
+def set_secret_key(key: float | Decimal | str) -> None:
     with open('_secret_key.tmp', 'w') as f:
-        f.write(str(key))
+        f.write(str(as_decimal(key)))

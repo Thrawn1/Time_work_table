@@ -1,5 +1,6 @@
 import argparse
 import sys
+from decimal import Decimal
 from os.path import exists
 
 from core.config import load_config, set_secret_key
@@ -10,19 +11,20 @@ from core.calculations import calculate_hours_per_day, calculate_hours_per_month
 from core.excel_builder import build_excel
 from core.html_builder import build_html
 from core.constants import MONTHS_NAME_TO_RUSSIAN
-from core.session import load_session, session_exists, remove_session
+from core.session import load_session, session_exists, remove_session, backup_existing_session
 
 
-def parse_secret_key(key_input: str) -> tuple[float, bool, str | None]:
+def parse_secret_key(key_input: str) -> tuple[Decimal, bool, str | None]:
     """Разобрать -k. Возвращает (secret, salary_mode, warning|None).
 
     salary_mode=False: режим без зарплаты (t/0/мусор) — оклад будет нулевым.
+    Ключ — Decimal (точное деление на 100, без binary-ошибки float).
     """
     if key_input == 't' or key_input == '0':
-        return 0.0, False, None
+        return Decimal('0.00'), False, None
     if key_input.isdigit() and 2 < len(key_input) < 123:
-        return float(key_input) / 100, True, None
-    return 0.0, False, (
+        return Decimal(key_input) / Decimal('100'), True, None
+    return Decimal('0.00'), False, (
         f'ключ "{key_input}" не распознан (нужны только цифры, длина 3-122, '
         'или t для режима без зарплаты)'
     )
@@ -74,8 +76,14 @@ def main():
         session_state = 'resumed'
     else:
         if not args.resume and session_exists():
-            print(f'ВНИМАНИЕ: найден файл сессии. '
-                  'Он будет проигнорирован. Используйте --resume для восстановления.')
+            saved = backup_existing_session()
+            if saved:
+                print(f'ВНИМАНИЕ: найден файл сессии. '
+                      f'Он сохранён отдельно как {saved} и будет проигнорирован. '
+                      f'Используйте --resume для восстановления.')
+            else:
+                print(f'ВНИМАНИЕ: найден файл сессии. '
+                      'Он будет проигнорирован. Используйте --resume для восстановления.')
             session_state = 'ignored'
         else:
             session_state = 'fresh'
@@ -83,9 +91,20 @@ def main():
         month = args.month or int(input('Введите месяц: '))
         list_data = read_file_data(args.file, year, month)
         if not list_data:
-            print('Нет данных для обработки!')
-            sys.exit(1)
-        data_array = build_data_array(list_data)
+            from os.path import join as _join
+            _missing = not exists(_join('data', args.file))
+            if _missing:
+                print('Нет данных для обработки!')
+                sys.exit(1)
+            if args.include_empty:
+                print('ВНИМАНИЕ: за выбранный месяц отметок нет — '
+                      'начинаем с пустой таблицы (--include-empty).')
+                data_array = {}
+            else:
+                print('Нет данных для обработки!')
+                sys.exit(1)
+        else:
+            data_array = build_data_array(list_data)
 
     print(f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} год')
 
@@ -97,6 +116,11 @@ def main():
         if skipped:
             print(f'Без отметок за месяц пропущено сотрудников: {skipped} '
                   f'(см. второй блок сводки; для включения — --include-empty).')
+
+    # Единый состав участников расчёта: исключения — только в дашборде,
+    # в расчёт/превью/отчёты не попадают.
+    settlement_ids = [e for e in emp_ids if is_settlement_allowed(e)]
+    settlement_set = set(settlement_ids)
 
     from core.ui import (
         build_dashboard_rows,
@@ -114,13 +138,12 @@ def main():
     rows_read = len(list_data) if list_data else sum(len(day) for day in data_array.values())
     print_start_screen(build_start_info(
         args.file if session_state != 'resumed' else '(сессия)',
-        year, month, rows_read, len(emp_ids), session_state,
+        year, month, rows_read, len(settlement_ids), session_state,
     ))
 
     print_header('Проверка')
-    for emp_id in emp_ids:
-        if is_settlement_allowed(emp_id):
-            analyze_for_print(data_array, emp_id, year, month)
+    for emp_id in settlement_ids:
+        analyze_for_print(data_array, emp_id, year, month)
 
     print_dashboard(
         build_dashboard_rows(data_array, get_all_employees_in_data(data_array), year, month),
@@ -129,16 +152,19 @@ def main():
 
     if not args.no_edit:
         print_header('Правки')
-        for emp_id in emp_ids:
-            if is_settlement_allowed(emp_id):
-                analyze_for_edit(data_array, emp_id, year, month)
+        for emp_id in settlement_ids:
+            analyze_for_edit(data_array, emp_id, year, month)
 
-    for emp_id in emp_ids:
-        if is_settlement_allowed(emp_id):
-            analyze_for_print(data_array, emp_id, year, month)
+    for emp_id in settlement_ids:
+        analyze_for_print(data_array, emp_id, year, month)
 
     print_header('Расчет')
-    work_time = calculate_hours_per_day(data_array)
+    work_time_all = calculate_hours_per_day(data_array)
+    work_time = {
+        date_key: {emp_id: val for emp_id, val in emps.items() if emp_id in settlement_set}
+        for date_key, emps in work_time_all.items()
+    }
+    work_time = {d: e for d, e in work_time.items() if e}
     summary, restructured = calculate_hours_per_month(work_time)
     wages = calculate_wages(summary)
     from core.config import load_wage_rates
@@ -153,12 +179,11 @@ def main():
     print_header('Отчеты')
     build_excel(data_array, work_time, summary, wages)
 
-    for emp_id in emp_ids:
-        if is_settlement_allowed(emp_id):
-            if emp_id not in summary:
-                print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
-                continue
-            build_html(emp_id, data_array, work_time, summary, wages)
+    for emp_id in settlement_ids:
+        if emp_id not in summary:
+            print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
+            continue
+        build_html(emp_id, data_array, work_time, summary, wages)
 
     print_salary_report(build_preview_rows(summary, wages),
                         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — зарплата к начислению')

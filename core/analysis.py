@@ -9,7 +9,7 @@ def _get_marks_and_missed(time_table: dict, emp_id: int, year: int, month: int) 
     role = EMPLOYEES.get(emp_id)
     if role is None:
         return 0, 0
-    if role.role_id in (1, 4):
+    if role.role_id in (1, 2, 4):
         return search_missed_marks(time_table, emp_id, year, month), search_missed_work_days(time_table, emp_id, year, month)
     if role.role_id == 3:
         return 0, search_missed_work_days(time_table, emp_id, year, month)
