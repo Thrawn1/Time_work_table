@@ -8,6 +8,7 @@ from core.constants import (
     OVERTIME_WEEKEND_MULTIPLIER,
 )
 from core.money import as_decimal, quantize_money, timedelta_to_hours
+from core.roles import TIME_ACTUAL, TIME_FIXED_SHIFT, get_default_rule
 
 
 def str_timedelta(td: timedelta) -> str:
@@ -19,6 +20,13 @@ def str_timedelta(td: timedelta) -> str:
 
 
 def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
+    """Учёт времени по единым правилам ролей (core.roles), без решений по ID.
+
+    time_mode 'actual': факт = выход − вход, переработка/недоработка от 8 ч.
+    time_mode 'fixed_shift': 8 ч за рабочий выход независимо от отметок.
+    Роль вне участия (напр. 0) в результат не попадает — её состав
+    определяется фильтром участников до расчёта.
+    """
     result: dict[str, dict[int, tuple]] = {}
     for date_key, employees in time_table.items():
         result[date_key] = {}
@@ -26,7 +34,10 @@ def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
             emp = EMPLOYEES.get(emp_id)
             if emp is None:
                 continue
-            if emp.role_id in (1, 2, 4):
+            rule = get_default_rule(emp.role_id)
+            if not rule.participates:
+                continue
+            if rule.time_mode == TIME_ACTUAL:
                 worked = marks[0] - marks[1]
                 standard = timedelta(hours=WORKING_DAY_HOURS)
                 delta = worked - standard
@@ -34,7 +45,7 @@ def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
                 tag_overtime = 'переработка' if delta > timedelta(0) else 'недоработка'
                 tag_day = marks[2]
                 result[date_key][emp_id] = (abs_delta, worked, tag_overtime, tag_day)
-            elif emp.role_id == 3:
+            elif rule.time_mode == TIME_FIXED_SHIFT:
                 tag_day = marks[2]
                 if tag_day in ('vacation', 'truancy'):
                     result[date_key][emp_id] = (
