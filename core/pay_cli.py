@@ -11,7 +11,7 @@ import argparse
 import sys
 
 from core.pay_store import (
-    DEFAULT_DB_PATH, connect, get_pay_settings, get_role_rule,
+    DEFAULT_DB_PATH, DEFAULT_TRANSITION, connect, get_pay_settings, get_role_rule,
     get_seniority_scale, init_db, list_exceptions, migrate_from_dat,
     role_rule_history, seed_defaults,
 )
@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser('migrate', help='Перенести сотрудников/роли/исключения из .dat')
     _db_arg(p)
     p.add_argument('--dat-dir', default='data/variable_data_for_app')
-    p.add_argument('--from', dest='from_date', default='2026-09-01')
+    p.add_argument('--from', dest='from_date', default=DEFAULT_TRANSITION)
 
     p = sub.add_parser('template', help='Печать пустого TOML-шаблона')
     p.add_argument('--out', default=None, help='Файл (по умолчанию — stdout)')

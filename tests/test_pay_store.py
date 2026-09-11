@@ -128,7 +128,14 @@ def test_seed_defaults(db):
     for role_id in (0, 1, 2, 3, 4):
         assert get_role_rule(db, role_id, '2026-10-01') is not None
     assert get_role_rule(db, 0, '2026-10-01').participates is False
-    assert get_seniority_scale(db, '2026-10-01') == [(0, Decimal('0')), (5, Decimal('0.10'))]
+    # Шкала стажа не вносится (данные будут позже): бонус стажа 0.
+    assert get_seniority_scale(db, '2026-10-01') == []
+
+
+def test_seed_transition_is_january_2026(db):
+    seed_defaults(db)
+    assert get_pay_settings(db, '2026-01-01') is not None
+    assert get_pay_settings(db, '2025-12-31') is None
 
 
 def test_migrate_from_dat_counts():

@@ -25,9 +25,9 @@ SCHEMA_VERSION = 1
 
 DEFAULT_DB_PATH = 'data/pay_directory.db'
 
-#: Дата перехода на новую схему по умолчанию (из эскиза TOML-шаблона §4.3).
+#: Дата перехода на новую схему: январь 2026 (решение 2026-09-11).
 #: Периоды раньше неё считает старый режим (legacy-адаптер).
-DEFAULT_TRANSITION = '2026-09-01'
+DEFAULT_TRANSITION = '2026-01-01'
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS schema_meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -373,13 +373,13 @@ def is_excluded(con: sqlite3.Connection, emp_id: int) -> bool:
 
 # --- Первичный перенос и стартовые значения -------------------------------------
 
-#: Допущение шага 0: пока шкала не согласована — 0% до 5 лет, 10% от 5 лет.
-DEFAULT_SENIORITY_SCALE: list[tuple[int, Decimal]] = [(0, Decimal('0')), (5, Decimal('0.10'))]
-
-
 def seed_defaults(con: sqlite3.Connection,
                   effective_from: str = DEFAULT_TRANSITION) -> None:
-    """Стартовые условия: база 60 000, H_base 8, бонус 5 000, матрица ролей, шкала стажа."""
+    """Стартовые условия: база 60 000, H_base 8, бонус 5 000, матрица ролей.
+
+    Стажевая шкала НЕ вносится: данные по стажу будут даны позже, до этого
+    бонус стажа равен 0 (пустая шкала). См. set_seniority_scale / TOML-импорт.
+    """
     with con:
         con.execute(
             'INSERT OR IGNORE INTO pay_settings(effective_from, monthly_base_cents,'
@@ -399,11 +399,6 @@ def seed_defaults(con: sqlite3.Connection,
                  int(rule.check_single_mark), int(rule.participates), rule.exclude_reason,
                  int(rule.overtime_eligible), int(rule.full_month_eligible),
                  int(rule.seniority_eligible), str(rule.overtime_coef)),
-            )
-        for years, rate in DEFAULT_SENIORITY_SCALE:
-            con.execute(
-                'INSERT OR IGNORE INTO seniority_scale(effective_from, threshold_years, rate)'
-                ' VALUES(?,?,?)', (effective_from, years, str(rate)),
             )
 
 

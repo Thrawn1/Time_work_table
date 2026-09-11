@@ -135,7 +135,9 @@ def test_excluded_role0_not_in_results(paydb, emp_patch):
 
 
 def test_seniority_from_hire_date(paydb, emp_patch):
+    from core.pay_store import set_seniority_scale
     con = connect(paydb)
+    set_seniority_scale(con, '2026-01-01', [(0, Decimal('0')), (5, Decimal('0.10'))])
     con.execute("UPDATE employees SET hire_date='2015-01-01' WHERE id=1")
     con.commit()
     con.close()
@@ -151,9 +153,10 @@ def test_seniority_from_hire_date(paydb, emp_patch):
 
 
 def test_midmonth_assignment_warns(paydb, emp_patch):
+    from core.pay_store import DEFAULT_TRANSITION
     con = connect(paydb)
     con.execute("UPDATE assignments SET effective_to='2026-10-15'"
-                " WHERE emp_id=1 AND effective_from='2026-09-01'")
+                " WHERE emp_id=1 AND effective_from=?", (DEFAULT_TRANSITION,))
     con.commit()
     con.execute("INSERT INTO assignments(emp_id, role_id, effective_from, effective_to)"
                 " VALUES(1, 2, '2026-10-16', NULL)")
@@ -164,6 +167,15 @@ def test_midmonth_assignment_warns(paydb, emp_patch):
     bundle = build_bundle(data_array, work_time, summary, YEAR, MONTH, paydb)
     assert any('внутри месяца' in w for w in bundle.warnings)
     assert bundle.results[1].rule.role_id == 1  # правило на 1-е число
+
+
+def test_empty_scale_warns_and_zeroes_bonus(paydb, emp_patch):
+    """Шкала стажа не задана: предупреждение и бонус 0 (данные будут позже)."""
+    data_array, work_time = make_tables()
+    summary = make_summary(work_time)
+    bundle = build_bundle(data_array, work_time, summary, YEAR, MONTH, paydb)
+    assert bundle.results[1].result.seniority_bonus == Decimal('0.00')
+    assert any('стажевая шкала не задана' in w for w in bundle.warnings)
 
 
 def test_bundle_to_wages_and_snapshot(paydb, emp_patch, tmp_path):

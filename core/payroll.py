@@ -140,6 +140,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
         if mid:
             bundle.warnings.append('общие условия меняются внутри месяца: расчёт по версии '
                                    f'на {month_start}')
+        saw_seniority_eligible = False
         for emp_id in summary:
             reason = exclusion_reason(emp_id)
             if reason:
@@ -183,6 +184,8 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
             single_issue = bool(singles)
             hire_iso = emp_rows[emp_id]['hire_date'] if emp_id in emp_rows else None
             years = _service_years(hire_iso, first)
+            if rule.seniority_eligible:
+                saw_seniority_eligible = True
             if rule.seniority_eligible and years is not None:
                 sen_rate = seniority_rate_for_service(scale, years)
             else:
@@ -211,6 +214,9 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 emp_id=emp_id, name=get_name_employee(emp_id) or f'ID {emp_id}',
                 rule=rule, inputs=inputs, result=calculate_pay(inputs),
             )
+        if not scale and saw_seniority_eligible:
+            bundle.warnings.append('стажевая шкала не задана (данные будут позже): '
+                                   'бонус стажа 0 для всех')
         return bundle
     finally:
         con.close()
