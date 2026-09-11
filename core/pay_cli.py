@@ -23,7 +23,7 @@ def _db_arg(p: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Справочники оплаты (общая база 60 000 ₽)')
+    parser = argparse.ArgumentParser(description='Справочники оплаты (общая база 60 000 руб.)')
     sub = parser.add_subparsers(dest='cmd', required=True)
 
     p = sub.add_parser('init', help='Создать БД и внести стартовые условия')
@@ -119,9 +119,9 @@ def main(argv: list[str] | None = None) -> int:
             if settings is None:
                 print(f'На {args.date}: общие условия не заданы.')
                 return 1
-            print(f'На {args.date}: база {settings.monthly_base} ₽, '
+            print(f'На {args.date}: база {settings.monthly_base} руб., '
                   f'H_base {settings.base_day_hours} ч, '
-                  f'бонус полного месяца {settings.full_month_bonus} ₽ '
+                  f'бонус полного месяца {settings.full_month_bonus} руб. '
                   f'(с {settings.effective_from}).')
             for (rid,) in con.execute('SELECT id FROM roles ORDER BY id'):
                 rule = get_role_rule(con, rid, args.date)

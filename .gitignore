@@ -16,3 +16,5 @@ temporary.pickle
 _secret_key.tmp
 temporary.json
 *.tmp
+payroll_versions_*.json
+data/pay_directory.db

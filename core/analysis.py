@@ -6,14 +6,20 @@ from core.file_parser import definition_of_working_day
 
 
 def _get_marks_and_missed(time_table: dict, emp_id: int, year: int, month: int) -> tuple:
+    from core.roles import TIME_ACTUAL, get_default_rule
+
     role = EMPLOYEES.get(emp_id)
     if role is None:
         return 0, 0
-    if role.role_id in (1, 2, 4):
+    try:
+        rule = get_default_rule(role.role_id)
+    except KeyError:
+        return 0, 0
+    if not rule.participates:
+        return 0, 0
+    if rule.time_mode == TIME_ACTUAL and rule.check_single_mark:
         return search_missed_marks(time_table, emp_id, year, month), search_missed_work_days(time_table, emp_id, year, month)
-    if role.role_id == 3:
-        return 0, search_missed_work_days(time_table, emp_id, year, month)
-    return 0, 0
+    return 0, search_missed_work_days(time_table, emp_id, year, month)
 
 
 def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:

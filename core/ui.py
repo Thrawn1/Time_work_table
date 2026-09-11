@@ -57,6 +57,8 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
         single_count = len(list_marks) if isinstance(list_marks, list) else 0
         missed_count = len(list_missed) if isinstance(list_missed, list) else 0
         info = summarize_employee(single_count, missed_count, has_marks)
+        from core.data_array import exclusion_reason
+        reason = exclusion_reason(emp_id)
         rows.append({
             'emp_id': emp_id,
             'name': name,
@@ -65,18 +67,22 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
             'has_marks': has_marks,
             'status': info['status'],
             'style': info['style'],
+            'excluded': reason != '',
+            'reason': reason,
         })
     return rows
 
 
 def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
-    """Дашборд двумя блоками: в расчете — таблицей, без отметок — списком.
+    """Дашборд тремя блоками: в расчете — таблицей, без отметок — списком,
+    исключённые из начислений — списком с точной причиной.
 
     Сотрудники без единой отметки (бывшие, другие смены) не смешиваются
     с проблемами действующих — иначе их 15+ строк хоронят реальные пропуски.
     """
-    active = [r for r in rows if r['has_marks']]
-    inactive = [r for r in rows if not r['has_marks']]
+    active = [r for r in rows if r['has_marks'] and not r.get('excluded')]
+    inactive = [r for r in rows if not r['has_marks'] and not r.get('excluded')]
+    excluded = [r for r in rows if r.get('excluded')]
     if not HAS_RICH:
         print(f'=== {title}: в расчете ({len(active)}) ===')
         for r in active:
@@ -84,6 +90,9 @@ def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
         print(f'--- Без отметок за месяц ({len(inactive)}): в расчет не включены ---')
         for r in inactive:
             print(f"{r['name']} [Нет данных]")
+        print(f'--- Исключены из начислений ({len(excluded)}) ---')
+        for r in excluded:
+            print(f"{r['name']} [{r.get('reason', 'исключён')}]")
         return
     console = get_console()
     table = Table(title=f'{title}: в расчете ({len(active)})')
@@ -103,6 +112,9 @@ def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
         names = ', '.join(r['name'] for r in inactive)
         console.print(f'[dim]Без отметок за месяц ({len(inactive)}), '
                       f'в расчет не включены: {names}[/dim]')
+    if excluded:
+        names = ', '.join(f"{r['name']} ({r.get('reason', 'исключён')})" for r in excluded)
+        console.print(f'[red]Исключены из начислений ({len(excluded)}): {names}[/red]')
 
 
 def print_header(title: str) -> None:
@@ -217,6 +229,61 @@ def print_start_screen(info: dict) -> None:
         print(lines)
         return
     get_console().print(Panel(lines, title='Старт расчета', border_style='cyan'))
+
+
+def print_pay_details(bundle) -> None:
+    """Прозрачная ведомость новой модели: база, D, ставки, основания бонусов.
+
+    Все представления используют один результат расчёта (bundle) —
+    собственных формул здесь нет, только отображение.
+    """
+    from core.money import format_money
+
+    header = (f'Новая модель: база {format_money(bundle.monthly_base)} руб., '
+              f'рабочих дней {bundle.workdays}, H_base {bundle.base_day_hours} ч '
+              f'(условия с {bundle.settings_eff}).')
+    if not bundle.results:
+        info(header + ' Участников нет.')
+        return
+    first = next(iter(bundle.results.values())).result
+    # Точные ставки показываем округлённо, считает pay_calc по исходной точности.
+    header += (f' Ставки: день ~{format_money(first.rate_day)} руб., '
+               f'час ~{format_money(first.rate_hour)} руб.).')
+    if not HAS_RICH:
+        print(header)
+        for r in bundle.results.values():
+            res = r.result
+            print(f"{r.name}: норма {res.norm_hours} ч, факт {res.fact_hours} ч, "
+                  f"обычная {format_money(res.ordinary_pay)}, "
+                  f"переработка {res.overtime_hours} ч -> {format_money(res.overtime_bonus)}, "
+                  f"полный месяц {'+' if res.full_month_ok else '-'} "
+                  f"({res.full_month_reason}) -> {format_money(res.full_month_bonus)}, "
+                  f"стаж {res.seniority_rate * 100}% от {format_money(res.seniority_basis_exact)} "
+                  f"-> {format_money(res.seniority_bonus)}, "
+                  f"ИТОГО {format_money(res.total)}")
+        for w in bundle.warnings:
+            print(f'ВНИМАНИЕ: {w}')
+        return
+    console = get_console()
+    console.print(header)
+    table = Table(title='Ведомость (новая модель)')
+    for col in ('Сотрудник', 'Норма/факт, ч', 'Обычная', 'Переработка', 'Полный мес.',
+                'Стаж', 'Итого'):
+        table.add_column(col, justify='right' if col != 'Сотрудник' else 'left')
+    for r in bundle.results.values():
+        res = r.result
+        table.add_row(
+            r.name,
+            f'{res.norm_hours}/{res.fact_hours}',
+            format_money(res.ordinary_pay),
+            f'{res.overtime_hours} ч / {format_money(res.overtime_bonus)}',
+            f"{'+' if res.full_month_ok else '-'} / {format_money(res.full_month_bonus)}",
+            f'{res.seniority_rate * 100}% / {format_money(res.seniority_bonus)}',
+            format_money(res.total),
+        )
+    console.print(table)
+    for w in bundle.warnings:
+        console.print(f'[yellow]ВНИМАНИЕ: {w}[/yellow]')
 
 
 def build_preview_rows(summary: dict, wages: dict) -> list[dict]:

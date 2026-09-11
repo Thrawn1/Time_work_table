@@ -278,7 +278,7 @@ def assign_role(con: sqlite3.Connection, emp_id: int, role_id: int,
         if not (new_to < other_from or effective_from > other_to):
             raise ValueError(
                 f'Сотрудник {emp_id}: пересекающееся назначение '
-                f'[{effective_from}..{effective_to or "…"}] ∩ [{other_from}..{row["effective_to"] or "…"}]'
+                f'[{effective_from}..{effective_to or "..."}] ∩ [{other_from}..{row["effective_to"] or "..."}]'
             )
     con.execute(
         'INSERT INTO assignments(emp_id, role_id, effective_from, effective_to) VALUES(?,?,?,?)',

@@ -1,7 +1,7 @@
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, Alignment, Font
 from core.config import EMPLOYEES
-from core.data_array import get_name_employee, is_settlement_allowed
+from core.data_array import get_name_employee, is_included_in_settlement
 from core.constants import MONTHS_NAME_TO_RUSSIAN
 
 
@@ -66,7 +66,7 @@ def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
     count = 2
     for date_key in sorted(time_table.keys()):
         for emp_id in time_table[date_key]:
-            if not is_settlement_allowed(emp_id):
+            if not is_included_in_settlement(emp_id):
                 continue
             marks = time_table[date_key][emp_id]
             tag = marks[2]
@@ -111,7 +111,7 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
         ws.cell(column=i, row=count, value=topic).border = border
     count += 1
     for emp_id in summary:
-        if not is_settlement_allowed(emp_id):
+        if not is_included_in_settlement(emp_id):
             continue
         _set_cell(ws, count, 8, get_name_employee(emp_id), border)
         ws.cell(column=9, row=count, value=summary[emp_id][0][0]).border = border

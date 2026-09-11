@@ -63,3 +63,32 @@ def get_name_employee(emp_id: int) -> str:
 
 def is_settlement_allowed(emp_id: int) -> bool:
     return emp_id not in SETTLEMENT_EXCEPTIONS
+
+
+def exclusion_reason(emp_id: int) -> str:
+    """Точная причина неучастия в начислениях (для дашборда/отчётов).
+
+    Учитывает правила роли (напр. роль 0 «руководство — не участвует»)
+    и персональные исключения. Пустая строка — участвует.
+    """
+    from core.roles import get_default_rule
+
+    emp = EMPLOYEES.get(emp_id)
+    if emp is None:
+        return 'нет в справочнике сотрудников'
+    role_id = getattr(emp, 'role_id', None)
+    if role_id is not None:
+        try:
+            rule = get_default_rule(role_id)
+        except KeyError:
+            return f'неизвестная роль {role_id}'
+        if not rule.participates:
+            return rule.exclude_reason or f'роль {role_id} не участвует'
+    if emp_id in SETTLEMENT_EXCEPTIONS:
+        return 'персональное исключение'
+    return ''
+
+
+def is_included_in_settlement(emp_id: int) -> bool:
+    """Единый состав участников: анализ, правки и все строки отчётов."""
+    return exclusion_reason(emp_id) == ''

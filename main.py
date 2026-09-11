@@ -5,7 +5,7 @@ from os.path import exists
 
 from core.config import load_config, set_secret_key
 from core.file_parser import read_file_data
-from core.data_array import build_data_array, get_all_employees_in_data, get_employees_with_marks, is_settlement_allowed
+from core.data_array import build_data_array, get_all_employees_in_data, get_employees_with_marks, is_included_in_settlement
 from core.analysis import analyze_for_print, analyze_for_edit
 from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
 from core.excel_builder import build_excel
@@ -43,6 +43,9 @@ def main():
     parser.add_argument('--include-empty', action='store_true',
                         help='Включить в расчет сотрудников без единой отметки за месяц '
                              '(действующий, но отсутствовал весь месяц: отпуск/прогул)')
+    parser.add_argument('--pay-dir', default='data/pay_directory.db',
+                        help='SQLite-справочник новой модели оплаты '
+                             '(нет файла/условий на месяц — legacy-режим)')
     args = parser.parse_args()
 
     load_config()
@@ -117,9 +120,9 @@ def main():
             print(f'Без отметок за месяц пропущено сотрудников: {skipped} '
                   f'(см. второй блок сводки; для включения — --include-empty).')
 
-    # Единый состав участников расчёта: исключения — только в дашборде,
-    # в расчёт/превью/отчёты не попадают.
-    settlement_ids = [e for e in emp_ids if is_settlement_allowed(e)]
+    # Единый состав участников расчёта: роль вне участия и персональные
+    # исключения — только в дашборде (с причиной), в расчёт/превью/отчёты не попадают.
+    settlement_ids = [e for e in emp_ids if is_included_in_settlement(e)]
     settlement_set = set(settlement_ids)
 
     from core.ui import (
@@ -166,14 +169,33 @@ def main():
     }
     work_time = {d: e for d, e in work_time.items() if e}
     summary, restructured = calculate_hours_per_month(work_time)
-    wages = calculate_wages(summary)
+    # Режим оплаты: новая модель при действующих общих условиях на месяц,
+    # иначе legacy-режим (старая база к старым месяцам не применяется).
+    from core.payroll import PayrollError, build_bundle, bundle_to_wages, new_regime_available
+    pay_bundle = None
+    if new_regime_available(args.pay_dir, year, month) is not None:
+        try:
+            pay_bundle = build_bundle(data_array, work_time, summary, year, month, args.pay_dir)
+        except PayrollError as e:
+            print(f'ВНИМАНИЕ: новая модель недоступна ({e}). Расчет в legacy-режиме.')
+            pay_bundle = None
+    if pay_bundle is not None:
+        wages = bundle_to_wages(pay_bundle)
+        from core.ui import print_pay_details
+        print_pay_details(pay_bundle)
+        versions_file = f'payroll_versions_{year}_{month:02d}.json'
+        pay_bundle.save_versions(versions_file)
+        print(f'Версии условий и календарь сохранены: {versions_file}')
+    else:
+        wages = calculate_wages(summary)
     from core.config import load_wage_rates
     from core.data_array import get_name_employee
-    rates = load_wage_rates()
-    zero_rate = [e for e in summary if rates.get(e, 0) == 0]
-    for emp_id in zero_rate:
-        print(f'ВНИМАНИЕ: {get_name_employee(emp_id) or emp_id} — ставка 0 '
-              f'(нет в wage_rates.dat или неверный ключ -k). Оклад будет нулевым, только молоко.')
+    if pay_bundle is None:
+        rates = load_wage_rates()
+        zero_rate = [e for e in summary if rates.get(e, 0) == 0]
+        for emp_id in zero_rate:
+            print(f'ВНИМАНИЕ: {get_name_employee(emp_id) or emp_id} — ставка 0 '
+                  f'(нет в wage_rates.dat или неверный ключ -k). Оклад будет нулевым, только молоко.')
     print_preview(build_preview_rows(summary, wages))
 
     print_header('Отчеты')
