@@ -13,16 +13,16 @@ def _patch_role2(monkeypatch):
     from core.config import EmployeeData, Role
     from core import config, calculations, data_array, analysis
     roles = {
-        1: Role(id=1, name='Работник', work_shift=8, lost_tag_flag=1),
-        2: Role(id=2, name='Кладовщик', work_shift=8, lost_tag_flag=1),
-        3: Role(id=3, name='Окладник', work_shift=8, lost_tag_flag=1),
-        4: Role(id=4, name='Работник4', work_shift=8, lost_tag_flag=1),
+        1: Role(id=1, name='Работник'),
+        2: Role(id=2, name='Кладовщик'),
+        3: Role(id=3, name='Окладник'),
+        4: Role(id=4, name='Работник4'),
     }
     employees = {
         101: EmployeeData(id=101, first_name='Иван', last_name='Петров',
-                          role_id=1, role_name='Работник', daily_rate=Decimal('800.00')),
+                          role_id=1, role_name='Работник'),
         104: EmployeeData(id=104, first_name='Клавдий', last_name='Кладов',
-                          role_id=2, role_name='Кладовщик', daily_rate=Decimal('800.00')),
+                          role_id=2, role_name='Кладовщик'),
     }
     monkeypatch.setattr(config, 'ROLES', roles)
     monkeypatch.setattr(config, 'EMPLOYEES', employees)

@@ -19,10 +19,6 @@ SETTLEMENT_EXCEPTIONS_FILE = path.join(VARIABLE_DATA_DIR, 'settlement_exceptions
 class Role:
     id: int
     name: str
-    # DEPRECATED: не управляют расчётом (правила — в core.roles/БД).
-    # Оставлены ради совместимости тестов/старых вызовов.
-    work_shift: int = 8
-    lost_tag_flag: int = 1
 
 
 @dataclass
@@ -32,10 +28,6 @@ class EmployeeData:
     last_name: str
     role_id: int
     role_name: str
-    # DEPRECATED: не является источником ставок для расчёта.
-    # Расчёт берет rates из load_wage_rates() после set_secret_key и получает
-    # их явным параметром (см. calculate_wages). Поле оставлено ради тестов.
-    daily_rate: Decimal = Decimal('0.00')  # руб/смена 8ч
 
 
 ROLES: dict[int, Role] = {}
@@ -81,7 +73,7 @@ def _load_employees() -> dict[int, EmployeeData]:
             role_name = ROLES[role_id].name if role_id in ROLES else ''
             employees[emp_id] = EmployeeData(
                 id=emp_id, first_name=first_name, last_name=last_name,
-                role_id=role_id, role_name=role_name, daily_rate=Decimal('0.00'),
+                role_id=role_id, role_name=role_name,
             )
     # NOTE: ставки здесь НЕ подтягиваем: load_config() вызывается до
     # set_secret_key(), расшифровка дала бы stale-нули и лишний IO.

@@ -28,7 +28,7 @@ class TestExplicitDeps:
         # без явного справочника неизвестный ID пропускается
         assert 999 not in calculate_hours_per_day(tt, employees=setup_employees)[date_key]
         staff = dict(setup_employees)
-        staff[999] = EmployeeData(999, 'Н', 'Н', 1, 'Р', Decimal('0.00'))
+        staff[999] = EmployeeData(999, 'Н', 'Н', 1, 'Р')
         out = calculate_hours_per_day(tt, employees=staff)
         assert out[date_key][999].worked == timedelta(hours=8)
 
@@ -39,7 +39,7 @@ class TestExplicitDeps:
         assert build_data_array(lines, employees=setup_employees) == {}
         staff = dict(setup_employees)
         from core.config import EmployeeData
-        staff[999] = EmployeeData(999, 'Н', 'Н', 1, 'Р', Decimal('0.00'))
+        staff[999] = EmployeeData(999, 'Н', 'Н', 1, 'Р')
         assert '2026-07-06' in build_data_array(lines, employees=staff)
 
 
@@ -98,4 +98,5 @@ class TestStaleDailyRateGone:
         config.ROLES.clear()
         config.ROLES.update(config._load_roles())
         emps = config._load_employees()
-        assert emps[101].daily_rate == Decimal('0.00')
+        assert 101 in emps
+        assert not hasattr(emps[101], 'daily_rate')

@@ -92,7 +92,7 @@ class TestBuildDataArray:
         """Unknown employee ID is skipped with warning."""
         from core import config
         monkeypatch.setattr(config, 'EMPLOYEES', {
-            101: config.EmployeeData(101, 'И', 'П', 1, 'Р', 800),
+            101: config.EmployeeData(101, 'И', 'П', 1, 'Р'),
         })
         lines = [make_line(999, '2026-07-06', '08:00:00')]
         result = build_data_array(lines)

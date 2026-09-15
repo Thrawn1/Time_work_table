@@ -19,17 +19,17 @@ def setup_employees(monkeypatch):
     from core import excel_builder
 
     roles = {
-        1: Role(id=1, name='Работник', work_shift=8, lost_tag_flag=1),
-        3: Role(id=3, name='Окладник', work_shift=8, lost_tag_flag=1),
-        4: Role(id=4, name='Работник4', work_shift=8, lost_tag_flag=1),
+        1: Role(id=1, name='Работник'),
+        3: Role(id=3, name='Окладник'),
+        4: Role(id=4, name='Работник4'),
     }
     employees = {
         101: EmployeeData(id=101, first_name='Иван', last_name='Петров',
-                          role_id=1, role_name='Работник', daily_rate=Decimal('800.00')),
+                          role_id=1, role_name='Работник'),
         102: EmployeeData(id=102, first_name='Мария', last_name='Сидорова',
-                          role_id=3, role_name='Окладник', daily_rate=Decimal('800.00')),
+                          role_id=3, role_name='Окладник'),
         103: EmployeeData(id=103, first_name='Алексей', last_name='Козлов',
-                          role_id=4, role_name='Работник4', daily_rate=Decimal('800.00')),
+                          role_id=4, role_name='Работник4'),
     }
     exceptions = []
 

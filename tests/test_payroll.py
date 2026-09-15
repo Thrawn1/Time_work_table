@@ -31,11 +31,11 @@ def emp_patch(monkeypatch):
     from core import analysis, data_array
     emps = {
         1: EmployeeData(id=1, first_name='А', last_name='Цеховик',
-                        role_id=1, role_name='Работник цеха', daily_rate=Decimal('0.00')),
+                        role_id=1, role_name='Работник цеха'),
         2: EmployeeData(id=2, first_name='К', last_name='Кладовщик',
-                        role_id=2, role_name='Кладовщик', daily_rate=Decimal('0.00')),
+                        role_id=2, role_name='Кладовщик'),
         7: EmployeeData(id=7, first_name='Р', last_name='Руководитель',
-                        role_id=0, role_name='Руководитель', daily_rate=Decimal('0.00')),
+                        role_id=0, role_name='Руководитель'),
     }
     monkeypatch.setattr(data_array, 'EMPLOYEES', emps)
     monkeypatch.setattr(analysis, 'EMPLOYEES', emps)

@@ -34,7 +34,7 @@ class TestExplicitEmployeesReports:
         from core.ui import build_dashboard_rows, build_preview_rows
         from core.config import EmployeeData
         staff = dict(setup_employees)
-        staff[999] = EmployeeData(999, 'Н', 'Новичок', 1, 'Р', Decimal('0.00'))
+        staff[999] = EmployeeData(999, 'Н', 'Новичок', 1, 'Р')
         rows = build_dashboard_rows({}, [999], 2026, 7, employees=staff)
         assert rows[0]['name'] == 'Новичок Н'
         summary = {999: ((1, timedelta(0), timedelta(0)),
