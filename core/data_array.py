@@ -5,7 +5,14 @@ from core.file_parser import read_file_data, definition_of_working_day, parse_at
 from core.constants import WEEKDAYS_NAME, MONTHS_NAME_TO_RUSSIAN
 
 
-def build_data_array(list_month: list[str]) -> TimeTable:
+def build_data_array(list_month: list[str], employees: dict | None = None) -> TimeTable:
+    import core.data_array as _self
+
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
     time_table: TimeTable = {}
     for line in list_month:
         parsed = _parse_line(line)
@@ -13,7 +20,7 @@ def build_data_array(list_month: list[str]) -> TimeTable:
             continue
         emp_id, dt = parsed
         date_key = dt.strftime('%Y-%m-%d')
-        if emp_id not in EMPLOYEES:
+        if emp_id not in staff:
             print(f'Ошибка! Не указан id пользователя {emp_id} в файле!')
             continue
         if date_key not in time_table:

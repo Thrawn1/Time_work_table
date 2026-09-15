@@ -162,7 +162,8 @@ def main():
         analyze_for_print(data_array, emp_id, year, month)
 
     print_header('Расчет')
-    work_time_all = calculate_hours_per_day(data_array)
+    from core.config import EMPLOYEES as _STAFF
+    work_time_all = calculate_hours_per_day(data_array, employees=_STAFF)
     work_time = {
         date_key: {emp_id: val for emp_id, val in emps.items() if emp_id in settlement_set}
         for date_key, emps in work_time_all.items()
@@ -187,11 +188,13 @@ def main():
         pay_bundle.save_versions(versions_file)
         print(f'Версии условий и календарь сохранены: {versions_file}')
     else:
-        wages = calculate_wages(summary)
-    from core.config import load_wage_rates
+        from core.config import load_wage_rates as _load_rates
+        from core.data_array import get_name_employee as _get_name
+        # Одно чтение ставок за запуск: тот же dict идет в расчет и в предупреждения.
+        rates = _load_rates()
+        wages = calculate_wages(summary, rates=rates, employees=_STAFF)
     from core.data_array import get_name_employee
     if pay_bundle is None:
-        rates = load_wage_rates()
         zero_rate = [e for e in summary if rates.get(e, 0) == 0]
         for emp_id in zero_rate:
             print(f'ВНИМАНИЕ: {get_name_employee(emp_id) or emp_id} — ставка 0 '

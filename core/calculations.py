@@ -134,19 +134,31 @@ def str_timedelta(td: timedelta) -> str:
     return f'{h:02d}:{m:02d}:{s:02d}'
 
 
-def calculate_hours_per_day(time_table: TimeTable) -> WorkTime:
+def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None) -> WorkTime:
     """Учёт времени по единым правилам ролей (core.roles), без решений по ID.
 
     time_mode 'actual': факт = выход − вход, переработка/недоработка от 8 ч.
     time_mode 'fixed_shift': 8 ч за рабочий выход независимо от отметок.
     Роль вне участия (напр. 0) в результат не попадает — её состав
     определяется фильтром участников до расчёта.
+
+    employees=None — fallback к глобалу core.config.EMPLOYEES ради старых
+    тестов; новый код передает справочник явно.
     """
+    # NOTE: читаем модуль-глобал на каждый вызов (не кэшируем в аргументе),
+    # чтобы monkeypatch в тестах продолжал работать.
+    import core.calculations as _self
+
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
     result: WorkTime = {}
-    for date_key, employees in time_table.items():
+    for date_key, employees_in_day in time_table.items():
         result[date_key] = {}
-        for emp_id, marks in employees.items():
-            emp = EMPLOYEES.get(emp_id)
+        for emp_id, marks in employees_in_day.items():
+            emp = staff.get(emp_id)
             if emp is None:
                 continue
             rule = get_default_rule(emp.role_id)
@@ -254,7 +266,8 @@ def _hourly_fraction(daily_rate: Decimal) -> Decimal:
     return daily_rate / _shift_hours()
 
 
-def calculate_wages(summary: Summary) -> Wages:
+def calculate_wages(summary: Summary, rates: dict | None = None,
+                    employees: dict | None = None) -> Wages:
     """Начислить зарплату. Ставка — руб/смена 8ч (Decimal), итог — копейки HALF_UP.
 
     Роли 1,4: будни = rate*дни + 1.5*(rate/8)*переработка_ч - (rate/8)*недоработка_ч;
@@ -263,11 +276,22 @@ def calculate_wages(summary: Summary) -> Wages:
     Роль 3: rate*(будни+выходные), без молока.
     Молоко: 40.00 * (будни_дни + выходные_дни).
     Квантование только финального итога (промежуточное — полная точность).
+
+    rates/employees=None — fallback к глобалам ради старых тестов; новый код
+    (main.py) грузит ставки один раз после set_secret_key и передает явно.
     """
-    rates = load_wage_rates()
+    import core.calculations as _self
+
+    if rates is None:
+        rates = load_wage_rates()
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
     result: Wages = {}
     for emp_id, data in summary.items():
-        emp = EMPLOYEES.get(emp_id)
+        emp = staff.get(emp_id)
         if emp is None:
             continue
         work_days, overtime_wd, undertime_wd = _sum_work(data)

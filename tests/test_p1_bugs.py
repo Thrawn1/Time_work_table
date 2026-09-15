@@ -406,13 +406,13 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
         monkeypatch.setattr(main_mod, 'analyze_for_print', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'analyze_for_edit', lambda *a, **k: None)
-        monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt: {
+        monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt, *a, **k: {
             d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
                 for e in emps} for d, emps in tt.items()})
         monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
-                            lambda wt: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
+                            lambda wt, *a, **k: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
                                                 (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
-        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s: {101: (800, 40, 840)})
+        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
         monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
@@ -459,13 +459,13 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
         monkeypatch.setattr(main_mod, 'analyze_for_print', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'analyze_for_edit', lambda *a, **k: None)
-        monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt: {
+        monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt, *a, **k: {
             d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
                 for e in emps} for d, emps in tt.items()})
         monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
-                            lambda wt: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
+                            lambda wt, *a, **k: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
                                                 (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
-        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s: {101: (800, 40, 840)})
+        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
         monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})

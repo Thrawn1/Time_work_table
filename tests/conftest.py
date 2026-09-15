@@ -60,6 +60,24 @@ def mock_wage_rates(monkeypatch):
                         lambda: {101: Decimal('800.00'), 102: Decimal('800.00'), 103: Decimal('800.00')})
 
 
+@pytest.fixture(autouse=True)
+def _clear_calendar_cache():
+    """Изоляция тестов: сброс lru-кэша календаря до и после каждого теста."""
+    try:
+        from core import file_parser
+        if hasattr(file_parser, 'clear_calendar_cache'):
+            file_parser.clear_calendar_cache()
+    except ImportError:
+        pass
+    yield
+    try:
+        from core import file_parser
+        if hasattr(file_parser, 'clear_calendar_cache'):
+            file_parser.clear_calendar_cache()
+    except ImportError:
+        pass
+
+
 @pytest.fixture
 def mock_holidays_jan2026(monkeypatch):
     """Mock holiday loading for January 2026: only Jan 1 is a holiday."""

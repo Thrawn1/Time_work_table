@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from functools import lru_cache
 from os import path
 from core.config import HOLIDAYS_FILE, POSTPONED_DAYS_FILE
 
@@ -67,7 +68,8 @@ def read_file_data(file_name: str, year: int, month: int) -> list[str]:
     return result
 
 
-def load_holidays(year: int) -> list[str]:
+@lru_cache(maxsize=8)
+def load_holidays(year: int) -> tuple[str, ...]:
     holidays = []
     with open(HOLIDAYS_FILE, 'r', encoding='utf-8') as f:
         for line in f:
@@ -78,10 +80,11 @@ def load_holidays(year: int) -> list[str]:
             day_str = parts[0]
             month_str = parts[1]
             holidays.append(f'{year}-{month_str}-{day_str}')
-    return holidays
+    return tuple(holidays)
 
 
-def load_postponed_days(year: int) -> list[str]:
+@lru_cache(maxsize=8)
+def load_postponed_days(year: int) -> tuple[str, ...]:
     postponed = []
     with open(POSTPONED_DAYS_FILE, 'r', encoding='utf-8') as f:
         for line in f:
@@ -92,7 +95,16 @@ def load_postponed_days(year: int) -> list[str]:
             day_str = parts[0]
             month_str = parts[1]
             postponed.append(f'{year}-{month_str}-{day_str}')
-    return postponed
+    return tuple(postponed)
+
+
+def clear_calendar_cache() -> None:
+    """Сбросить кэш календаря (смена года/тесты с подменой файлов)."""
+    for fn in (load_holidays, load_postponed_days):
+        try:
+            fn.cache_clear()  # type: ignore[attr-defined]
+        except AttributeError:
+            pass  # подменено моком без кэша — нечего сбрасывать
 
 
 def definition_of_working_day(date_str: str) -> tuple[str, str]:
