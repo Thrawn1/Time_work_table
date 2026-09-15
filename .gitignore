@@ -15,6 +15,10 @@ temporary.pickle
 *.pickle
 _secret_key.tmp
 temporary.json
+temporary_*.json
 *.tmp
 payroll_versions_*.json
 data/pay_directory.db
+Time_table/
+Time_table.zip
+*.spec
