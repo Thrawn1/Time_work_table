@@ -17,7 +17,12 @@ def _set_cell(ws, row: int, column: int, value, border=None):
 
 
 def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
-                employees: dict | None = None) -> str:
+                employees: dict | None = None, bundle=None) -> str:
+    """Общая таблица + (при bundle) прозрачный блок новой модели.
+
+    bundle=None — legacy-режим без изменений. При bundle блок новой модели
+    только отображает bundle.results (собственных формул нет).
+    """
     if not time_table:
         print('Нет данных для общей таблицы, Excel не создан.')
         return ''
@@ -26,7 +31,9 @@ def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
     _setup_columns(ws)
     _write_header(ws)
     last_detail_row = _write_data_rows(ws, time_table, work_time, employees)
-    _write_summary_block(ws, work_time, summary, wages, employees)
+    next_row = _write_summary_block(ws, work_time, summary, wages, employees)
+    if bundle is not None:
+        _write_pay_block(ws, next_row, bundle)
     ws.auto_filter.ref = f'A1:G{max(last_detail_row, 1)}'
     list_dates = sorted(time_table.keys())
     month_num = int(list_dates[0][5:7])
@@ -107,7 +114,8 @@ def _write_data_rows(ws, time_table: dict, work_time: dict,
 
 
 def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
-                         employees: dict | None = None) -> None:
+                         employees: dict | None = None) -> int:
+    """Legacy-блок итогов. Возвращает первую свободную строку после блока."""
     border = _make_border()
     max_row = 1
     for row in ws.iter_rows(min_row=2, max_col=1):
@@ -148,6 +156,63 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
                 cell.border = border
                 cell.number_format = '0.00'
         count += 1
+    return count
+
+
+def _pay_header_text(bundle) -> str:
+    """Заголовок блока новой модели — те же числа, что в консоли (ui)."""
+    from core.payroll import pay_header_text
+
+    return pay_header_text(bundle)
+
+
+def _write_pay_block(ws, start_row: int, bundle) -> int:
+    """Прозрачный блок новой модели: только отображение bundle, без формул."""
+    from openpyxl.styles import Alignment
+    from core.money import format_money
+
+    border = _make_border()
+    row = start_row + 2
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+    title = ws.cell(column=1, row=row, value=_pay_header_text(bundle))
+    title.font = Font(name='Calibri', size=11, bold=True)
+    row += 1
+    topics = ['Сотрудник', 'Норма, ч', 'Факт, ч', 'Обычная, ₽',
+              'Переработка, ч', 'Переработка, ₽',
+              'Полный мес.', 'Причина', 'Полный бонус, ₽',
+              'Стаж, %', 'Основа стажа, ₽', 'Стаж бонус, ₽',
+              'Итого, ₽', 'Молоко, ₽', 'С молоком, ₽']
+    for i, topic in enumerate(topics, 1):
+        cell = ws.cell(column=i, row=row, value=topic)
+        cell.font = Font(name='Calibri', size=11, bold=True)
+        cell.border = border
+    row += 1
+    for r in bundle.results.values():
+        res = r.result
+        vals = [
+            r.name,
+            res.norm_hours, res.fact_hours, res.ordinary_pay,
+            res.overtime_hours, res.overtime_bonus,
+            '+' if res.full_month_ok else '-', res.full_month_reason,
+            res.full_month_bonus,
+            res.seniority_rate * 100, res.seniority_basis_exact, res.seniority_bonus,
+            res.total, res.milk_amount, res.total_with_milk,
+        ]
+        for i, val in enumerate(vals, 1):
+            cell = _set_cell(ws, row, i, val, border)
+            if i in (2, 3, 4, 5, 6, 9, 10, 11, 12, 13, 14, 15):
+                try:
+                    cell.number_format = '0.00'
+                except (AttributeError, ValueError):
+                    pass
+        row += 1
+    if bundle.warnings:
+        for w in bundle.warnings:
+            ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
+            c = _set_cell(ws, row, 1, f'ВНИМАНИЕ: {w}', None)
+            c.alignment = Alignment(horizontal='left')
+            row += 1
+    return row
 
 
 def _make_border() -> Border:

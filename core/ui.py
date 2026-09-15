@@ -244,17 +244,12 @@ def print_pay_details(bundle) -> None:
     собственных формул здесь нет, только отображение.
     """
     from core.money import format_money
+    from core.payroll import pay_header_text
 
-    header = (f'Новая модель: база {format_money(bundle.monthly_base)} руб., '
-              f'рабочих дней {bundle.workdays}, H_base {bundle.base_day_hours} ч '
-              f'(условия с {bundle.settings_eff}).')
+    header = pay_header_text(bundle)
     if not bundle.results:
-        info(header + ' Участников нет.')
+        info(header)
         return
-    first = next(iter(bundle.results.values())).result
-    # Точные ставки показываем округлённо, считает pay_calc по исходной точности.
-    header += (f' Ставки: день ~{format_money(first.rate_day)} руб., '
-               f'час ~{format_money(first.rate_hour)} руб.).')
     if not HAS_RICH:
         print(header)
         for r in bundle.results.values():

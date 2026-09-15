@@ -203,13 +203,13 @@ def main():
     print_preview(build_preview_rows(summary, wages, employees=_STAFF))
 
     print_header('Отчеты')
-    build_excel(data_array, work_time, summary, wages, employees=_STAFF)
+    build_excel(data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle)
 
     for emp_id in settlement_ids:
         if emp_id not in summary:
             print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
             continue
-        build_html(emp_id, data_array, work_time, summary, wages, employees=_STAFF)
+        build_html(emp_id, data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle)
 
     print_salary_report(build_preview_rows(summary, wages, employees=_STAFF),
                         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — зарплата к начислению')

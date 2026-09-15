@@ -235,3 +235,23 @@ def bundle_to_wages(bundle: PayrollBundle) -> dict[int, WageResult]:
         milk=r.result.milk_amount,
         total_with_milk=r.result.total_with_milk,
     ) for emp_id, r in bundle.results.items()}
+
+
+def pay_header_text(bundle) -> str:
+    """Единый заголовок блока новой модели для консоли/Excel/HTML.
+
+    Те же числа везде: база, D, H_base, условия, округлённые ставки.
+    Считает pay_calc, здесь только отображение.
+    """
+    from core.money import format_money
+
+    text = (f'Новая модель: база {format_money(bundle.monthly_base)} руб., '
+            f'рабочих дней {bundle.workdays}, H_base {bundle.base_day_hours} ч '
+            f'(условия с {bundle.settings_eff}).')
+    if bundle.results:
+        first = next(iter(bundle.results.values())).result
+        text += (f' Ставки: день ~{format_money(first.rate_day)} руб., '
+                 f'час ~{format_money(first.rate_hour)} руб.')
+    else:
+        text += ' Участников нет.'
+    return text
