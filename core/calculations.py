@@ -10,6 +10,13 @@ from core.constants import (
 from core.money import as_decimal, quantize_money, timedelta_to_hours
 from core.roles import TIME_ACTUAL, TIME_FIXED_SHIFT, get_default_rule
 from core.day_models import (
+    ATTENDANCE_TAGS,
+    NO_OVERTIME,
+    OVERTIME,
+    TAG_TRUANCY,
+    TAG_VACATION,
+    TAG_WORK,
+    UNDERTIME,
     DayWork,
     EmployeeMonth,
     HolidayGroup,
@@ -17,6 +24,7 @@ from core.day_models import (
     TimeTable,
     WageResult,
     Wages,
+    WEEKEND_TAGS,
     WorkGroup,
     WorkTime,
 )
@@ -169,7 +177,7 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
                 standard = timedelta(hours=WORKING_DAY_HOURS)
                 delta = worked - standard
                 abs_delta = abs(delta)
-                tag_overtime = 'переработка' if delta > timedelta(0) else 'недоработка'
+                tag_overtime = OVERTIME if delta > timedelta(0) else UNDERTIME
                 tag_day = _mark_tag(marks)
                 result[date_key][emp_id] = DayWork(
                     delta=abs_delta, worked=worked,
@@ -177,21 +185,21 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
                 )
             elif rule.time_mode == TIME_FIXED_SHIFT:
                 tag_day = _mark_tag(marks)
-                if tag_day in ('vacation', 'truancy'):
+                if tag_day in (TAG_VACATION, TAG_TRUANCY):
                     result[date_key][emp_id] = DayWork(
                         delta=timedelta(0), worked=timedelta(0),
-                        overtime_tag='', day_tag=tag_day,
+                        overtime_tag=NO_OVERTIME, day_tag=tag_day,
                     )
-                elif tag_day in ('work', 'weekend', 'holiday'):
+                elif tag_day in ATTENDANCE_TAGS:
                     result[date_key][emp_id] = DayWork(
                         delta=timedelta(0), worked=timedelta(hours=WORKING_DAY_HOURS),
-                        overtime_tag='', day_tag=tag_day,
+                        overtime_tag=NO_OVERTIME, day_tag=tag_day,
                     )
                 else:
                     # Неизвестный тег — не выдумываем рабочий день, сохраняем как есть с 0ч
                     result[date_key][emp_id] = DayWork(
                         delta=timedelta(0), worked=timedelta(0),
-                        overtime_tag='', day_tag=tag_day,
+                        overtime_tag=NO_OVERTIME, day_tag=tag_day,
                     )
     return result
 
@@ -203,16 +211,16 @@ def calculate_hours_per_month(work_time: WorkTime) -> tuple[Summary, dict]:
             if emp_id not in restructured:
                 restructured[emp_id] = [[], [], [], []]
             tag_day = _work_day_tag(data)
-            if tag_day == 'work':
+            if tag_day == TAG_WORK:
                 cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][0].append(cell)
-            elif tag_day in ('weekend', 'holiday'):
+            elif tag_day in WEEKEND_TAGS:
                 cell = (_work_delta(data), _work_overtime_tag(data), _work_worked(data), date_key)
                 restructured[emp_id][1].append(cell)
-            elif tag_day == 'vacation':
+            elif tag_day == TAG_VACATION:
                 cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][2].append(cell)
-            elif tag_day == 'truancy':
+            elif tag_day == TAG_TRUANCY:
                 cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][3].append(cell)
     summary: Summary = {}
@@ -226,7 +234,7 @@ def calculate_hours_per_month(work_time: WorkTime) -> tuple[Summary, dict]:
         overtime_weekday = timedelta(0)
         undertime_weekday = timedelta(0)
         for delta, tag, _ in work_days:
-            if tag == 'переработка':
+            if tag == OVERTIME:
                 overtime_weekday += delta
             else:
                 undertime_weekday += delta
@@ -235,7 +243,7 @@ def calculate_hours_per_month(work_time: WorkTime) -> tuple[Summary, dict]:
         total_worked_weekend = timedelta(0)
         for delta, tag, worked, _ in holiday_days:
             total_worked_weekend += worked
-            if tag == 'переработка':
+            if tag == OVERTIME:
                 overtime_weekend += delta
             else:
                 undertime_weekend += delta

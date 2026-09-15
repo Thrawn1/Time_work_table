@@ -18,6 +18,29 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+# --- Единые теги дня и переработки (п.2, без смены значений) -------------------
+# Новый код сравнивает/присваивает через эти константы вместо строковых
+# литералов, разбросанных по модулям. Значения заморожены: их же хранят
+# JSON-сессии и видят тесты, поэтому меняем только имена обращений.
+
+TAG_WORK = 'work'
+TAG_WEEKEND = 'weekend'
+TAG_HOLIDAY = 'holiday'
+TAG_VACATION = 'vacation'
+TAG_TRUANCY = 'truancy'
+
+OVERTIME = 'переработка'
+UNDERTIME = 'недоработка'
+NO_OVERTIME = ''
+
+WORK_TAGS: tuple[str, ...] = (TAG_WORK,)
+WEEKEND_TAGS: tuple[str, ...] = (TAG_WEEKEND, TAG_HOLIDAY)
+ATTENDANCE_TAGS: tuple[str, ...] = (TAG_WORK, TAG_WEEKEND, TAG_HOLIDAY)
+ABSENCE_TAGS: tuple[str, ...] = (TAG_VACATION, TAG_TRUANCY)
+ALLOWED_TAGS: frozenset[str] = frozenset(
+    (TAG_WORK, TAG_WEEKEND, TAG_HOLIDAY, TAG_VACATION, TAG_TRUANCY)
+)
+
 
 # --- Отметки дня: [go(уход), come(приход), tag] -------------------------------
 

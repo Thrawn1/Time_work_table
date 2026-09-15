@@ -16,7 +16,8 @@ def _set_cell(ws, row: int, column: int, value, border=None):
     return cell
 
 
-def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
+def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
+                employees: dict | None = None) -> str:
     if not time_table:
         print('Нет данных для общей таблицы, Excel не создан.')
         return ''
@@ -24,8 +25,8 @@ def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict) -
     ws = wb.active
     _setup_columns(ws)
     _write_header(ws)
-    last_detail_row = _write_data_rows(ws, time_table, work_time)
-    _write_summary_block(ws, work_time, summary, wages)
+    last_detail_row = _write_data_rows(ws, time_table, work_time, employees)
+    _write_summary_block(ws, work_time, summary, wages, employees)
     ws.auto_filter.ref = f'A1:G{max(last_detail_row, 1)}'
     list_dates = sorted(time_table.keys())
     month_num = int(list_dates[0][5:7])
@@ -60,8 +61,11 @@ def _write_header(ws) -> None:
     ws.cell(column=6, row=1).alignment = Alignment(horizontal='center')
 
 
-def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
+def _write_data_rows(ws, time_table: dict, work_time: dict,
+                      employees: dict | None = None) -> int:
     """Записать детализацию. Возвращает последнюю строку детализации (>=1)."""
+    from core.day_models import ATTENDANCE_TAGS, TAG_TRUANCY, TAG_VACATION
+
     border = _make_border()
     count = 2
     for date_key in sorted(time_table.keys()):
@@ -70,10 +74,10 @@ def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
                 continue
             marks = time_table[date_key][emp_id]
             tag = getattr(marks, 'tag', marks[2])
-            if tag in ('work', 'weekend', 'holiday'):
+            if tag in ATTENDANCE_TAGS:
                 if date_key not in work_time or emp_id not in work_time[date_key]:
                     continue
-                _set_cell(ws, count, 1, get_name_employee(emp_id), border)
+                _set_cell(ws, count, 1, get_name_employee(emp_id, employees), border)
                 _set_cell(ws, count, 2, date_key, border)
                 come = getattr(marks, 'come', marks[1])
                 go = getattr(marks, 'go', marks[0])
@@ -87,12 +91,12 @@ def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
                 ws.cell(column=7, row=count, value=delta).border = border
                 _set_cell(ws, count, 6, overtime_tag, border)
                 count += 1
-            elif tag in ('vacation', 'truancy'):
-                _set_cell(ws, count, 1, get_name_employee(emp_id), border)
+            elif tag in (TAG_VACATION, TAG_TRUANCY):
+                _set_cell(ws, count, 1, get_name_employee(emp_id, employees), border)
                 _set_cell(ws, count, 2, date_key, border)
                 _set_cell(ws, count, 3, None, border)
                 ws.merge_cells(start_row=count, start_column=3, end_row=count, end_column=7)
-                label = 'Отпуск' if tag == 'vacation' else 'Прогул'
+                label = 'Отпуск' if tag == TAG_VACATION else 'Прогул'
                 _set_cell(ws, count, 3, label, None).alignment = Alignment(horizontal='center')
                 ws.cell(column=3, row=count).border = border
                 count += 1
@@ -102,7 +106,8 @@ def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
     return count - 1
 
 
-def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> None:
+def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
+                         employees: dict | None = None) -> None:
     border = _make_border()
     max_row = 1
     for row in ws.iter_rows(min_row=2, max_col=1):
@@ -118,7 +123,7 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
     for emp_id in summary:
         if not is_included_in_settlement(emp_id):
             continue
-        _set_cell(ws, count, 8, get_name_employee(emp_id), border)
+        _set_cell(ws, count, 8, get_name_employee(emp_id, employees), border)
         entry = summary[emp_id]
         work = getattr(entry, 'work', entry[0])
         holiday = getattr(entry, 'holiday', entry[1])

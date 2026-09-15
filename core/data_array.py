@@ -62,9 +62,16 @@ def get_employees_with_marks(time_table: dict) -> list[int]:
     return [emp_id for emp_id in EMPLOYEES if emp_id in with_marks]
 
 
-def get_name_employee(emp_id: int) -> str:
-    if emp_id in EMPLOYEES:
-        emp = EMPLOYEES[emp_id]
+def get_name_employee(emp_id: int, employees: dict | None = None) -> str:
+    import core.data_array as _self
+
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    if emp_id in staff:
+        emp = staff[emp_id]
         return f'{emp.last_name} {emp.first_name}'.strip()
     return ''
 

@@ -171,12 +171,14 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 entry = emps.get(emp_id)
                 if entry is None:
                     continue
+                from core.day_models import TAG_WORK, WEEKEND_TAGS
+
                 tag_day = getattr(entry, 'day_tag', entry[3])
                 worked = getattr(entry, 'worked', entry[1])
-                if tag_day == 'work':
+                if tag_day == TAG_WORK:
                     present_work += 1
                     fact += timedelta_to_hours(worked)
-                elif tag_day in ('weekend', 'holiday'):
+                elif tag_day in WEEKEND_TAGS:
                     present_weekend += 1
                     fact += timedelta_to_hours(worked)
             data = summary[emp_id]

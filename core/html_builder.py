@@ -15,16 +15,17 @@ def sanitize_filename_part(text: str) -> str:
     return cleaned or 'ID'
 
 
-def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wages: dict) -> str:
-    family = get_name_employee(emp_id)
-    daily_data = _build_daily_data(emp_id, time_table, work_time)
+def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wages: dict,
+               employees: dict | None = None) -> str:
+    family = get_name_employee(emp_id, employees)
+    daily_data = _build_daily_data(emp_id, time_table, work_time, employees)
     if not daily_data:
         print(f'Пропущен {family or emp_id}: нет отметок за период, HTML не создан.')
         return ''
     if emp_id not in summary or emp_id not in wages:
         print(f'Пропущен {family or emp_id}: нет данных расчета (роль не поддерживается?), HTML не создан.')
         return ''
-    total_data = _build_total_data(emp_id, summary, wages)
+    total_data = _build_total_data(emp_id, summary, wages, employees)
     month_num = daily_data[0]['date'][5:7]
     year_str = daily_data[0]['date'][:4]
     safe_family = sanitize_filename_part(family or f'ID_{emp_id}')
@@ -34,8 +35,17 @@ def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wa
     return file_name
 
 
-def _build_daily_data(emp_id: int, time_table: dict, work_time: dict) -> list[dict]:
-    all_ids = {eid: get_name_employee(eid) for eid in EMPLOYEES}
+def _build_daily_data(emp_id: int, time_table: dict, work_time: dict,
+                      employees: dict | None = None) -> list[dict]:
+    from core.day_models import TAG_TRUANCY, TAG_VACATION
+
+    if employees is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    else:
+        staff = employees
+    all_ids = {eid: get_name_employee(eid, staff) for eid in staff}
     dates = sorted(time_table.keys())
     result = []
     for date_key in dates:
@@ -60,21 +70,22 @@ def _build_daily_data(emp_id: int, time_table: dict, work_time: dict) -> list[di
                 'overtime': str(delta),
                 'tag_day': tag,
             }
-            if tag == 'vacation':
+            if tag == TAG_VACATION:
                 entry['tag_day'] = 'Отпуск'
-            elif tag == 'truancy':
+            elif tag == TAG_TRUANCY:
                 entry['tag_day'] = 'Прогул'
             result.append(entry)
     return result
 
 
-def _build_total_data(emp_id: int, summary: dict, wages: dict) -> dict:
+def _build_total_data(emp_id: int, summary: dict, wages: dict,
+                      employees: dict | None = None) -> dict:
     data = summary[emp_id]
     work = getattr(data, 'work', data[0])
     holiday = getattr(data, 'holiday', data[1])
     wage = wages[emp_id]
     return {
-        'family': get_name_employee(emp_id),
+        'family': get_name_employee(emp_id, employees),
         'all_work_weekdays': getattr(work, 'days', work[0]),
         'weekdays_overtime': str_timedelta(getattr(work, 'overtime', work[1])),
         'weekdays_undertime': str_timedelta(getattr(work, 'undertime', work[2])),
@@ -131,13 +142,15 @@ def _gen_header(table_type: int) -> list[str]:
 
 
 def _gen_day_row(day: dict) -> list[str]:
+    from core.day_models import ATTENDANCE_TAGS
+
     tag = day['tag_day']
     family = html.escape(str(day.get('family', '')), quote=True)
     date = html.escape(str(day.get('date', '')), quote=True)
     row = [f'        <tr>\n']
     row.append(f'          <td>{family}</td>\n')
     row.append(f'          <td>{date}</td>\n')
-    if tag in ('work', 'weekend', 'holiday'):
+    if tag in ATTENDANCE_TAGS:
         time_begin = html.escape(str(day.get('time_begin', '')), quote=True)
         time_end = html.escape(str(day.get('time_end', '')), quote=True)
         delta = html.escape(str(day.get('delta_time', '')), quote=True)

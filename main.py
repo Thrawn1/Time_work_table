@@ -145,24 +145,25 @@ def main():
     ))
 
     print_header('Проверка')
+    from core.config import EMPLOYEES as _STAFF
     for emp_id in settlement_ids:
-        analyze_for_print(data_array, emp_id, year, month)
+        analyze_for_print(data_array, emp_id, year, month, employees=_STAFF)
 
     print_dashboard(
-        build_dashboard_rows(data_array, get_all_employees_in_data(data_array), year, month),
+        build_dashboard_rows(data_array, get_all_employees_in_data(data_array), year, month,
+                             employees=_STAFF),
         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
     )
 
     if not args.no_edit:
         print_header('Правки')
         for emp_id in settlement_ids:
-            analyze_for_edit(data_array, emp_id, year, month)
+            analyze_for_edit(data_array, emp_id, year, month, employees=_STAFF)
 
     for emp_id in settlement_ids:
-        analyze_for_print(data_array, emp_id, year, month)
+        analyze_for_print(data_array, emp_id, year, month, employees=_STAFF)
 
     print_header('Расчет')
-    from core.config import EMPLOYEES as _STAFF
     work_time_all = calculate_hours_per_day(data_array, employees=_STAFF)
     work_time = {
         date_key: {emp_id: val for emp_id, val in emps.items() if emp_id in settlement_set}
@@ -197,20 +198,20 @@ def main():
     if pay_bundle is None:
         zero_rate = [e for e in summary if rates.get(e, 0) == 0]
         for emp_id in zero_rate:
-            print(f'ВНИМАНИЕ: {get_name_employee(emp_id) or emp_id} — ставка 0 '
+            print(f'ВНИМАНИЕ: {get_name_employee(emp_id, _STAFF) or emp_id} — ставка 0 '
                   f'(нет в wage_rates.dat или неверный ключ -k). Оклад будет нулевым, только молоко.')
-    print_preview(build_preview_rows(summary, wages))
+    print_preview(build_preview_rows(summary, wages, employees=_STAFF))
 
     print_header('Отчеты')
-    build_excel(data_array, work_time, summary, wages)
+    build_excel(data_array, work_time, summary, wages, employees=_STAFF)
 
     for emp_id in settlement_ids:
         if emp_id not in summary:
             print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
             continue
-        build_html(emp_id, data_array, work_time, summary, wages)
+        build_html(emp_id, data_array, work_time, summary, wages, employees=_STAFF)
 
-    print_salary_report(build_preview_rows(summary, wages),
+    print_salary_report(build_preview_rows(summary, wages, employees=_STAFF),
                         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — зарплата к начислению')
 
     print_journal(get_journal())

@@ -110,6 +110,7 @@ def clear_calendar_cache() -> None:
 def definition_of_working_day(date_str: str) -> tuple[str, str]:
     from calendar import weekday
     from core.constants import WEEKDAYS_NAME
+    from core.day_models import TAG_HOLIDAY, TAG_WEEKEND, TAG_WORK
 
     year = int(date_str[0:4])
     month = int(date_str[5:7])
@@ -122,9 +123,9 @@ def definition_of_working_day(date_str: str) -> tuple[str, str]:
     weekday_name = WEEKDAYS_NAME[num_day]
 
     if date_str in holidays:
-        return ('holiday', weekday_name)
+        return (TAG_HOLIDAY, weekday_name)
     if date_str in postponed:
-        return ('work', weekday_name)
+        return (TAG_WORK, weekday_name)
     if num_day in (5, 6):
-        return ('weekend', weekday_name)
-    return ('work', weekday_name)
+        return (TAG_WEEKEND, weekday_name)
+    return (TAG_WORK, weekday_name)

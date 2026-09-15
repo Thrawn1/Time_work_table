@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import calendar as _calendar
 
+from core.day_models import TAG_WORK
 from core.file_parser import definition_of_working_day
 
 
 def classify_day(date_key: str) -> str:
-    """Классификация даты: 'work' | 'weekend' | 'holiday'."""
+    """Классификация даты: TAG_WORK | TAG_WEEKEND | TAG_HOLIDAY."""
     return definition_of_working_day(date_key)[0]
 
 
@@ -34,11 +35,11 @@ def working_days_in_month(year: int, month: int) -> int:
     """
     count = 0
     for date_key in month_date_keys(year, month):
-        if classify_day(date_key) == 'work':
+        if classify_day(date_key) == TAG_WORK:
             count += 1
     return count
 
 
 def workday_keys_in_month(year: int, month: int) -> list[str]:
     """Даты рабочих дней месяца (для проверки критерия полного месяца)."""
-    return [d for d in month_date_keys(year, month) if classify_day(d) == 'work']
+    return [d for d in month_date_keys(year, month) if classify_day(d) == TAG_WORK]

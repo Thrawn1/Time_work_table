@@ -43,14 +43,20 @@ def summarize_employee(single_count: int, missed_count: int, has_marks: bool) ->
     return {'status': 'Править', 'style': 'yellow'}
 
 
-def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month: int) -> list[dict]:
+def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month: int,
+                         employees: dict | None = None) -> list[dict]:
     """Собрать строки дашборда. Чистая агрегация, без печати."""
-    from core.config import EMPLOYEES
     from core.analysis import _get_marks_and_missed
 
+    if employees is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    else:
+        staff = employees
     rows: list[dict] = []
     for emp_id in emp_ids:
-        role = EMPLOYEES.get(emp_id)
+        role = staff.get(emp_id) if hasattr(staff, 'get') else None
         name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
         has_marks = any(emp_id in day for day in time_table.values())
         list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
@@ -286,20 +292,25 @@ def print_pay_details(bundle) -> None:
         console.print(f'[yellow]ВНИМАНИЕ: {w}[/yellow]')
 
 
-def build_preview_rows(summary: dict, wages: dict) -> list[dict]:
+def build_preview_rows(summary: dict, wages: dict, employees: dict | None = None) -> list[dict]:
     """Чистые строки предпросмотра расчета до записи файлов."""
-    from core.config import EMPLOYEES
     from core.calculations import str_timedelta
     from core.data_array import is_settlement_allowed
     from core.day_models import WageResult
     from core.money import as_decimal
     from decimal import Decimal
 
+    if employees is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    else:
+        staff = employees
     rows: list[dict] = []
     for emp_id, data in summary.items():
         if not is_settlement_allowed(emp_id):
             continue
-        role = EMPLOYEES.get(emp_id)
+        role = staff.get(emp_id) if hasattr(staff, 'get') else None
         name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
         wage = wages.get(emp_id, WageResult(Decimal('0.00'), Decimal('0.00'), Decimal('0.00')))
         salary = getattr(wage, 'salary', wage[0])

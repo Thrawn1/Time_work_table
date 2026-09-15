@@ -23,6 +23,8 @@ def _get_marks_and_missed(time_table: dict, emp_id: int, year: int, month: int) 
 
 
 def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:
+    from core.day_models import TAG_WORK
+
     last_day = monthrange(year, month)[1]
     work_days: list[str] = []
     non_work_days: list[str] = []
@@ -31,7 +33,7 @@ def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:
         month_str = f'{month:02d}'
         date_str = f'{year}-{month_str}-{day_str}'
         tag, _ = definition_of_working_day(date_str)
-        if tag == 'work':
+        if tag == TAG_WORK:
             work_days.append(date_str)
         else:
             non_work_days.append(date_str)
@@ -76,6 +78,8 @@ def _set_mark_go(marks, value) -> None:
 
 
 def search_missed_marks(time_table: dict, emp_id: int, year: int, month: int) -> list[list] | int:
+    from core.day_models import ATTENDANCE_TAGS
+
     result: list[list] = []
     last_day = monthrange(year, month)[1]
     first = datetime(year, month, 1)
@@ -85,7 +89,7 @@ def search_missed_marks(time_table: dict, emp_id: int, year: int, month: int) ->
         date_str = current.strftime('%Y-%m-%d')
         if date_str in time_table and emp_id in time_table[date_str]:
             cell = time_table[date_str][emp_id]
-            if _mark_go(cell) == _mark_come(cell) and _mark_tag(cell) in ('work', 'weekend', 'holiday'):
+            if _mark_go(cell) == _mark_come(cell) and _mark_tag(cell) in ATTENDANCE_TAGS:
                 result.append([date_str, _mark_come(cell)])
         current += timedelta(days=1)
     return result if result else 0
@@ -128,8 +132,15 @@ def format_range(days: list[str]) -> str:
             f'{days[-1][8:10]}.{days[-1][5:7]} ({len(days)} раб. дн.)')
 
 
-def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int) -> None:
-    role = EMPLOYEES.get(emp_id)
+def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int,
+                      employees: dict | None = None) -> None:
+    if employees is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    else:
+        staff = employees
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
     if role is None:
         return
     list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
@@ -284,7 +295,7 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
                      action: str, date_ref: str) -> bool:
     """Проверить, подтвердить и записать рабочие дни. True — записано."""
     from core import ui
-    from core.day_models import DayMark
+    from core.day_models import DayMark, TAG_WORK
 
     try:
         dt_b0, dt_e0 = _dt(days[0], t_begin), _dt(days[0], t_end)
@@ -304,21 +315,21 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
         ui.info('Не подтверждено. Введите заново или 0 для пропуска.')
         return False
     for day in days:
-        _set_mark(time_table, day, emp_id, DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag='work'))
+        _set_mark(time_table, day, emp_id, DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag=TAG_WORK))
     _save_session(time_table)
     ui.info(f'\nДанные за {date_ref} введены\n')
-    record_edit(emp_id, date_ref, action, None, DayMark(go=dt_e0, come=dt_b0, tag='work'), randomized=randomized)
+    record_edit(emp_id, date_ref, action, None, DayMark(go=dt_e0, come=dt_b0, tag=TAG_WORK), randomized=randomized)
     return True
 
 
 def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
                        action: str, date_ref: str, confirm_q: str) -> bool:
-    """Одно подтверждение на все дни. tag: 'vacation' | 'truancy'."""
-    from core.day_models import DayMark
+    """Одно подтверждение на все дни. tag: TAG_VACATION | TAG_TRUANCY."""
+    from core.day_models import DayMark, TAG_TRUANCY, TAG_VACATION, TAG_WORK
 
     if not _confirm_save(confirm_q):
         return False
-    mark_of = _dt_vac if tag == 'vacation' else _dt_truancy
+    mark_of = _dt_vac if tag == TAG_VACATION else _dt_truancy
     for day in days:
         mark = mark_of(day)
         _set_mark(time_table, day, emp_id, DayMark(go=mark, come=mark, tag=tag))
@@ -328,11 +339,18 @@ def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
     return True
 
 
-def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> None:
+def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
+                     employees: dict | None = None) -> None:
     from sys import stderr
     from core import ui
 
-    role = EMPLOYEES.get(emp_id)
+    if employees is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    else:
+        staff = employees
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
     if role is None:
         return
     list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
@@ -422,13 +440,17 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                             break
                     case '2':
                         date_ref = label if multi else group[0]
-                        if _apply_status_days(time_table, emp_id, group, 'vacation',
+                        from core.day_models import TAG_VACATION
+
+                        if _apply_status_days(time_table, emp_id, group, TAG_VACATION,
                                               f'отпуск x{len(group)}', date_ref,
                                               f'Отметить {date_ref} как отпуск?'):
                             break
                     case '3':
                         date_ref = label if multi else group[0]
-                        if _apply_status_days(time_table, emp_id, group, 'truancy',
+                        from core.day_models import TAG_TRUANCY
+
+                        if _apply_status_days(time_table, emp_id, group, TAG_TRUANCY,
                                               f'прогул x{len(group)}', date_ref,
                                               f'Отметить {date_ref} как прогул?'):
                             break
@@ -437,6 +459,7 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
 def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
     """Разобрать один день диапазона. Возвращает 'done' | 'skip'."""
     from core import ui
+    from core.day_models import TAG_TRUANCY, TAG_VACATION
 
     while True:
         match ui.ask_menu(f'{day}: [1] рабочий [2] отпуск [3] прогул [0] пропустить день:',
@@ -452,10 +475,10 @@ def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
                                     randomized, 'заполнен день', day):
                     return 'done'
             case '2':
-                if _apply_status_days(time_table, emp_id, [day], 'vacation',
+                if _apply_status_days(time_table, emp_id, [day], TAG_VACATION,
                                       'отпуск', day, f'Отметить {day} как отпуск?'):
                     return 'done'
             case '3':
-                if _apply_status_days(time_table, emp_id, [day], 'truancy',
+                if _apply_status_days(time_table, emp_id, [day], TAG_TRUANCY,
                                       'прогул', day, f'Отметить {day} как прогул?'):
                     return 'done'

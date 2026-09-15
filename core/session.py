@@ -23,7 +23,10 @@ SESSION_VERSION = 1
 SESSION_FILE = 'temporary.json'
 SESSION_FILE_LEGACY = 'temporary.pickle'
 
-ALLOWED_TAGS = {'work', 'weekend', 'holiday', 'vacation', 'truancy'}
+# Единый набор статусов — источник в core.day_models (значения те же).
+from core.day_models import ALLOWED_TAGS as _ALLOWED
+
+ALLOWED_TAGS = set(_ALLOWED)
 
 
 def _infer_period(time_table: dict) -> dict | None:
