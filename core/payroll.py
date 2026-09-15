@@ -171,15 +171,17 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 entry = emps.get(emp_id)
                 if entry is None:
                     continue
-                tag_day = entry[3]
+                tag_day = getattr(entry, 'day_tag', entry[3])
+                worked = getattr(entry, 'worked', entry[1])
                 if tag_day == 'work':
                     present_work += 1
-                    fact += timedelta_to_hours(entry[1])
+                    fact += timedelta_to_hours(worked)
                 elif tag_day in ('weekend', 'holiday'):
                     present_weekend += 1
-                    fact += timedelta_to_hours(entry[1])
+                    fact += timedelta_to_hours(worked)
             data = summary[emp_id]
-            vacation_days, truancy_days = data[2], data[3]
+            vacation_days = getattr(data, 'vacation_days', data[2])
+            truancy_days = getattr(data, 'truancy_days', data[3])
             singles, _missed = _get_marks_and_missed(data_array, emp_id, year, month)
             single_issue = bool(singles)
             hire_iso = emp_rows[emp_id]['hire_date'] if emp_id in emp_rows else None
@@ -222,7 +224,12 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
         con.close()
 
 
-def bundle_to_wages(bundle: PayrollBundle) -> dict[int, tuple[Decimal, Decimal, Decimal]]:
-    """Отображение итога в формат (оклад, молоко, с молоком) — один результат для всех отчётов."""
-    return {emp_id: (r.result.total, r.result.milk_amount, r.result.total_with_milk)
-            for emp_id, r in bundle.results.items()}
+def bundle_to_wages(bundle: PayrollBundle) -> dict[int, WageResult]:
+    """Отображение итога в WageResult — один результат для всех отчётов."""
+    from core.day_models import WageResult
+
+    return {emp_id: WageResult(
+        salary=r.result.total,
+        milk=r.result.milk_amount,
+        total_with_milk=r.result.total_with_milk,
+    ) for emp_id, r in bundle.results.items()}

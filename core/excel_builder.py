@@ -69,18 +69,23 @@ def _write_data_rows(ws, time_table: dict, work_time: dict) -> int:
             if not is_included_in_settlement(emp_id):
                 continue
             marks = time_table[date_key][emp_id]
-            tag = marks[2]
+            tag = getattr(marks, 'tag', marks[2])
             if tag in ('work', 'weekend', 'holiday'):
                 if date_key not in work_time or emp_id not in work_time[date_key]:
                     continue
                 _set_cell(ws, count, 1, get_name_employee(emp_id), border)
                 _set_cell(ws, count, 2, date_key, border)
-                ws.cell(column=3, row=count, value=marks[1].time()).border = border
-                ws.cell(column=4, row=count, value=marks[0].time()).border = border
+                come = getattr(marks, 'come', marks[1])
+                go = getattr(marks, 'go', marks[0])
+                ws.cell(column=3, row=count, value=come.time()).border = border
+                ws.cell(column=4, row=count, value=go.time()).border = border
                 wd = work_time[date_key][emp_id]
-                ws.cell(column=5, row=count, value=wd[1]).border = border
-                ws.cell(column=7, row=count, value=wd[0]).border = border
-                _set_cell(ws, count, 6, wd[2], border)
+                worked = getattr(wd, 'worked', wd[1])
+                delta = getattr(wd, 'delta', wd[0])
+                overtime_tag = getattr(wd, 'overtime_tag', wd[2])
+                ws.cell(column=5, row=count, value=worked).border = border
+                ws.cell(column=7, row=count, value=delta).border = border
+                _set_cell(ws, count, 6, overtime_tag, border)
                 count += 1
             elif tag in ('vacation', 'truancy'):
                 _set_cell(ws, count, 1, get_name_employee(emp_id), border)
@@ -114,17 +119,26 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict) -> Non
         if not is_included_in_settlement(emp_id):
             continue
         _set_cell(ws, count, 8, get_name_employee(emp_id), border)
-        ws.cell(column=9, row=count, value=summary[emp_id][0][0]).border = border
+        entry = summary[emp_id]
+        work = getattr(entry, 'work', entry[0])
+        holiday = getattr(entry, 'holiday', entry[1])
+        ws.cell(column=9, row=count, value=getattr(work, 'days', work[0])).border = border
         ws.cell(column=9, row=count).alignment = Alignment(horizontal='center')
-        ws.cell(column=10, row=count, value=summary[emp_id][0][1]).border = border
-        ws.cell(column=11, row=count, value=summary[emp_id][0][2]).border = border
-        ws.cell(column=12, row=count, value=summary[emp_id][1][0]).border = border
+        ws.cell(column=10, row=count, value=getattr(work, 'overtime', work[1])).border = border
+        ws.cell(column=11, row=count, value=getattr(work, 'undertime', work[2])).border = border
+        ws.cell(column=12, row=count, value=getattr(holiday, 'days', holiday[0])).border = border
         ws.cell(column=12, row=count).alignment = Alignment(horizontal='center')
-        ws.cell(column=13, row=count, value=summary[emp_id][1][1]).border = border
-        ws.cell(column=14, row=count, value=summary[emp_id][2]).border = border
+        ws.cell(column=13, row=count, value=getattr(holiday, 'overtime', holiday[1])).border = border
+        ws.cell(column=14, row=count, value=getattr(entry, 'vacation_days', entry[2])).border = border
         ws.cell(column=14, row=count).alignment = Alignment(horizontal='center')
         if emp_id in wages:
-            for col, val in ((15, wages[emp_id][0]), (16, wages[emp_id][1]), (17, wages[emp_id][2])):
+            wage = wages[emp_id]
+            vals = (
+                getattr(wage, 'salary', wage[0]),
+                getattr(wage, 'milk', wage[1]),
+                getattr(wage, 'total_with_milk', wage[2]),
+            )
+            for col, val in ((15, vals[0]), (16, vals[1]), (17, vals[2])):
                 cell = ws.cell(column=col, row=count, value=val)
                 cell.border = border
                 cell.number_format = '0.00'

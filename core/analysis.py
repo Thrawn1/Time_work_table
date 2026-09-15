@@ -49,6 +49,32 @@ def search_missed_work_days(time_table: dict, emp_id: int, year: int, month: int
     return missed if missed else 0
 
 
+def _mark_go(marks):
+    return getattr(marks, 'go', marks[0])
+
+
+def _mark_come(marks):
+    return getattr(marks, 'come', marks[1])
+
+
+def _mark_tag(marks):
+    return getattr(marks, 'tag', marks[2])
+
+
+def _set_mark_come(marks, value) -> None:
+    if hasattr(marks, 'come'):
+        marks.come = value
+    else:
+        marks[1] = value
+
+
+def _set_mark_go(marks, value) -> None:
+    if hasattr(marks, 'go'):
+        marks.go = value
+    else:
+        marks[0] = value
+
+
 def search_missed_marks(time_table: dict, emp_id: int, year: int, month: int) -> list[list] | int:
     result: list[list] = []
     last_day = monthrange(year, month)[1]
@@ -59,8 +85,8 @@ def search_missed_marks(time_table: dict, emp_id: int, year: int, month: int) ->
         date_str = current.strftime('%Y-%m-%d')
         if date_str in time_table and emp_id in time_table[date_str]:
             cell = time_table[date_str][emp_id]
-            if cell[0] == cell[1] and cell[2] in ('work', 'weekend', 'holiday'):
-                result.append([date_str, cell[1]])
+            if _mark_go(cell) == _mark_come(cell) and _mark_tag(cell) in ('work', 'weekend', 'holiday'):
+                result.append([date_str, _mark_come(cell)])
         current += timedelta(days=1)
     return result if result else 0
 
@@ -191,7 +217,7 @@ _JOURNAL: list[dict] = []
 def _marks_repr(marks: list) -> str:
     """Кратко: 'приход -> уход [тег]'."""
     try:
-        return f'{marks[1].time()} -> {marks[0].time()} [{marks[2]}]'
+        return f'{_mark_come(marks).time()} -> {_mark_go(marks).time()} [{_mark_tag(marks)}]'
     except (IndexError, AttributeError):
         return str(marks)
 
@@ -258,6 +284,7 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
                      action: str, date_ref: str) -> bool:
     """Проверить, подтвердить и записать рабочие дни. True — записано."""
     from core import ui
+    from core.day_models import DayMark
 
     try:
         dt_b0, dt_e0 = _dt(days[0], t_begin), _dt(days[0], t_end)
@@ -277,25 +304,27 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
         ui.info('Не подтверждено. Введите заново или 0 для пропуска.')
         return False
     for day in days:
-        _set_mark(time_table, day, emp_id, [_dt(day, t_end), _dt(day, t_begin), 'work'])
+        _set_mark(time_table, day, emp_id, DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag='work'))
     _save_session(time_table)
     ui.info(f'\nДанные за {date_ref} введены\n')
-    record_edit(emp_id, date_ref, action, None, [dt_e0, dt_b0, 'work'], randomized=randomized)
+    record_edit(emp_id, date_ref, action, None, DayMark(go=dt_e0, come=dt_b0, tag='work'), randomized=randomized)
     return True
 
 
 def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
                        action: str, date_ref: str, confirm_q: str) -> bool:
     """Одно подтверждение на все дни. tag: 'vacation' | 'truancy'."""
+    from core.day_models import DayMark
+
     if not _confirm_save(confirm_q):
         return False
     mark_of = _dt_vac if tag == 'vacation' else _dt_truancy
     for day in days:
         mark = mark_of(day)
-        _set_mark(time_table, day, emp_id, [mark, mark, tag])
+        _set_mark(time_table, day, emp_id, DayMark(go=mark, come=mark, tag=tag))
     _save_session(time_table)
     mark0 = mark_of(days[0])
-    record_edit(emp_id, date_ref, action, None, [mark0, mark0, tag])
+    record_edit(emp_id, date_ref, action, None, DayMark(go=mark0, come=mark0, tag=tag))
     return True
 
 
@@ -312,8 +341,12 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
         print(f"ПРЕДУПРЕЖДЕНИЕ! {name} имеет только одну отметку в рабочем дне!", file=stderr)
         for cell in list_marks:
             date_key = cell[0]
-            existing = time_table[date_key][emp_id][0]
-            before_single = list(time_table[date_key][emp_id])
+            existing = _mark_go(time_table[date_key][emp_id])
+            before_single = time_table[date_key][emp_id]
+            try:
+                before_snapshot = list(before_single)
+            except TypeError:
+                before_snapshot = before_single
             ui.print_day_card_single(name, date_key, existing)
             while True:
                 choice = ui.ask_menu('Выберете пункт меню:', ('1', '2'))
@@ -340,12 +373,12 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int) -> No
                         preview += ' (часть времени дополнена случайно — проверьте!)'
                     if _confirm_save(preview):
                         if choice == '1':
-                            time_table[date_key][emp_id][1] = dt_write
+                            _set_mark_come(time_table[date_key][emp_id], dt_write)
                         else:
-                            time_table[date_key][emp_id][0] = dt_write
+                            _set_mark_go(time_table[date_key][emp_id], dt_write)
                         _save_session(time_table)
                         record_edit(emp_id, date_key, 'одиночная метка',
-                                    before_single, list(time_table[date_key][emp_id]),
+                                    before_snapshot, time_table[date_key][emp_id],
                                     randomized=bool(randomized))
                         ui.info(f'Ввод данных об отметки подтвержден! {dt_write}')
                         break

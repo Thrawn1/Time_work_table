@@ -44,15 +44,20 @@ def _build_daily_data(emp_id: int, time_table: dict, work_time: dict) -> list[di
             if date_key not in work_time or emp_id not in work_time[date_key]:
                 continue
             wd = work_time[date_key][emp_id]
-            tag = marks[2]
+            tag = getattr(marks, 'tag', marks[2])
+            come = getattr(marks, 'come', marks[1])
+            go = getattr(marks, 'go', marks[0])
+            worked = getattr(wd, 'worked', wd[1])
+            overtime_tag = getattr(wd, 'overtime_tag', wd[2])
+            delta = getattr(wd, 'delta', wd[0])
             entry = {
                 'family': all_ids.get(emp_id, ''),
                 'date': date_key,
-                'time_begin': marks[1].time().isoformat(timespec='auto'),
-                'time_end': marks[0].time().isoformat(timespec='auto'),
-                'delta_time': str(wd[1]),
-                'tag_overtime': wd[2],
-                'overtime': str(wd[0]),
+                'time_begin': come.time().isoformat(timespec='auto'),
+                'time_end': go.time().isoformat(timespec='auto'),
+                'delta_time': str(worked),
+                'tag_overtime': overtime_tag,
+                'overtime': str(delta),
                 'tag_day': tag,
             }
             if tag == 'vacation':
@@ -65,17 +70,20 @@ def _build_daily_data(emp_id: int, time_table: dict, work_time: dict) -> list[di
 
 def _build_total_data(emp_id: int, summary: dict, wages: dict) -> dict:
     data = summary[emp_id]
+    work = getattr(data, 'work', data[0])
+    holiday = getattr(data, 'holiday', data[1])
+    wage = wages[emp_id]
     return {
         'family': get_name_employee(emp_id),
-        'all_work_weekdays': data[0][0],
-        'weekdays_overtime': str_timedelta(data[0][1]),
-        'weekdays_undertime': str_timedelta(data[0][2]),
-        'work_weekend': data[1][0],
-        'overtime_weekend': str_timedelta(data[1][1]),
-        'vacation': data[2],
-        'salary': format_money(wages[emp_id][0]),
-        'milk': format_money(wages[emp_id][1]),
-        'salary_whith_milk': format_money(wages[emp_id][2]),
+        'all_work_weekdays': getattr(work, 'days', work[0]),
+        'weekdays_overtime': str_timedelta(getattr(work, 'overtime', work[1])),
+        'weekdays_undertime': str_timedelta(getattr(work, 'undertime', work[2])),
+        'work_weekend': getattr(holiday, 'days', holiday[0]),
+        'overtime_weekend': str_timedelta(getattr(holiday, 'overtime', holiday[1])),
+        'vacation': getattr(data, 'vacation_days', data[2]),
+        'salary': format_money(getattr(wage, 'salary', wage[0])),
+        'milk': format_money(getattr(wage, 'milk', wage[1])),
+        'salary_whith_milk': format_money(getattr(wage, 'total_with_milk', wage[2])),
     }
 
 

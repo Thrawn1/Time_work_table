@@ -9,6 +9,121 @@ from core.constants import (
 )
 from core.money import as_decimal, quantize_money, timedelta_to_hours
 from core.roles import TIME_ACTUAL, TIME_FIXED_SHIFT, get_default_rule
+from core.day_models import (
+    DayWork,
+    EmployeeMonth,
+    HolidayGroup,
+    Summary,
+    TimeTable,
+    WageResult,
+    Wages,
+    WorkGroup,
+    WorkTime,
+)
+
+
+def _mark_go(marks):
+    return getattr(marks, 'go', marks[0])
+
+
+def _mark_come(marks):
+    return getattr(marks, 'come', marks[1])
+
+
+def _mark_tag(marks):
+    return getattr(marks, 'tag', marks[2])
+
+
+def _work_delta(entry):
+    return getattr(entry, 'delta', entry[0])
+
+
+def _work_worked(entry):
+    return getattr(entry, 'worked', entry[1])
+
+
+def _work_overtime_tag(entry):
+    return getattr(entry, 'overtime_tag', entry[2])
+
+
+def _work_day_tag(entry):
+    return getattr(entry, 'day_tag', entry[3])
+
+
+def _sum_work(entry):
+    work = getattr(entry, 'work', None)
+    if work is None:
+        try:
+            work = entry[0]
+        except (IndexError, KeyError, TypeError):
+            work = None
+    if work is None:
+        return 0, timedelta(0), timedelta(0)
+    if hasattr(work, 'days'):
+        return work.days, work.overtime, work.undertime
+    try:
+        days = work[0]
+    except (IndexError, KeyError, TypeError):
+        days = 0
+    try:
+        over = work[1]
+    except (IndexError, KeyError, TypeError):
+        over = timedelta(0)
+    try:
+        under = work[2]
+    except (IndexError, KeyError, TypeError):
+        under = timedelta(0)
+    return days, over, under
+
+
+def _sum_holiday(entry):
+    hol = getattr(entry, 'holiday', None)
+    if hol is None:
+        try:
+            hol = entry[1]
+        except (IndexError, KeyError, TypeError):
+            hol = None
+    if hol is None:
+        return 0, timedelta(0), timedelta(0), timedelta(0)
+    if hasattr(hol, 'days'):
+        return hol.days, hol.overtime, hol.undertime, hol.worked
+    try:
+        days = hol[0]
+    except (IndexError, KeyError, TypeError):
+        days = 0
+    try:
+        over = hol[1]
+    except (IndexError, KeyError, TypeError):
+        over = timedelta(0)
+    try:
+        under = hol[2]
+    except (IndexError, KeyError, TypeError):
+        under = timedelta(0)
+    try:
+        worked = hol[3]
+    except (IndexError, KeyError, TypeError):
+        worked = timedelta(0)
+    return days, over, under, worked
+
+
+def _sum_vacation(entry):
+    val = getattr(entry, 'vacation_days', None)
+    if val is not None:
+        return val
+    try:
+        return entry[2]
+    except (IndexError, KeyError, TypeError):
+        return 0
+
+
+def _sum_truancy(entry):
+    val = getattr(entry, 'truancy_days', None)
+    if val is not None:
+        return val
+    try:
+        return entry[3]
+    except (IndexError, KeyError, TypeError):
+        return 0
 
 
 def str_timedelta(td: timedelta) -> str:
@@ -19,7 +134,7 @@ def str_timedelta(td: timedelta) -> str:
     return f'{h:02d}:{m:02d}:{s:02d}'
 
 
-def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
+def calculate_hours_per_day(time_table: TimeTable) -> WorkTime:
     """Учёт времени по единым правилам ролей (core.roles), без решений по ID.
 
     time_mode 'actual': факт = выход − вход, переработка/недоработка от 8 ч.
@@ -27,7 +142,7 @@ def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
     Роль вне участия (напр. 0) в результат не попадает — её состав
     определяется фильтром участников до расчёта.
     """
-    result: dict[str, dict[int, tuple]] = {}
+    result: WorkTime = {}
     for date_key, employees in time_table.items():
         result[date_key] = {}
         for emp_id, marks in employees.items():
@@ -38,51 +153,57 @@ def calculate_hours_per_day(time_table: dict) -> dict[str, dict[int, tuple]]:
             if not rule.participates:
                 continue
             if rule.time_mode == TIME_ACTUAL:
-                worked = marks[0] - marks[1]
+                worked = _mark_go(marks) - _mark_come(marks)
                 standard = timedelta(hours=WORKING_DAY_HOURS)
                 delta = worked - standard
                 abs_delta = abs(delta)
                 tag_overtime = 'переработка' if delta > timedelta(0) else 'недоработка'
-                tag_day = marks[2]
-                result[date_key][emp_id] = (abs_delta, worked, tag_overtime, tag_day)
+                tag_day = _mark_tag(marks)
+                result[date_key][emp_id] = DayWork(
+                    delta=abs_delta, worked=worked,
+                    overtime_tag=tag_overtime, day_tag=tag_day,
+                )
             elif rule.time_mode == TIME_FIXED_SHIFT:
-                tag_day = marks[2]
+                tag_day = _mark_tag(marks)
                 if tag_day in ('vacation', 'truancy'):
-                    result[date_key][emp_id] = (
-                        timedelta(0), timedelta(0), '', tag_day
+                    result[date_key][emp_id] = DayWork(
+                        delta=timedelta(0), worked=timedelta(0),
+                        overtime_tag='', day_tag=tag_day,
                     )
                 elif tag_day in ('work', 'weekend', 'holiday'):
-                    result[date_key][emp_id] = (
-                        timedelta(0), timedelta(hours=WORKING_DAY_HOURS), '', tag_day
+                    result[date_key][emp_id] = DayWork(
+                        delta=timedelta(0), worked=timedelta(hours=WORKING_DAY_HOURS),
+                        overtime_tag='', day_tag=tag_day,
                     )
                 else:
                     # Неизвестный тег — не выдумываем рабочий день, сохраняем как есть с 0ч
-                    result[date_key][emp_id] = (
-                        timedelta(0), timedelta(0), '', tag_day
+                    result[date_key][emp_id] = DayWork(
+                        delta=timedelta(0), worked=timedelta(0),
+                        overtime_tag='', day_tag=tag_day,
                     )
     return result
 
 
-def calculate_hours_per_month(work_time: dict) -> tuple[dict[int, tuple], dict]:
+def calculate_hours_per_month(work_time: WorkTime) -> tuple[Summary, dict]:
     restructured: dict[int, list] = {}
     for date_key, employees in work_time.items():
         for emp_id, data in employees.items():
             if emp_id not in restructured:
                 restructured[emp_id] = [[], [], [], []]
-            tag_day = data[3]
+            tag_day = _work_day_tag(data)
             if tag_day == 'work':
-                cell = (data[0], data[2], date_key)
+                cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][0].append(cell)
             elif tag_day in ('weekend', 'holiday'):
-                cell = (data[0], data[2], data[1], date_key)
+                cell = (_work_delta(data), _work_overtime_tag(data), _work_worked(data), date_key)
                 restructured[emp_id][1].append(cell)
             elif tag_day == 'vacation':
-                cell = (data[0], data[2], date_key)
+                cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][2].append(cell)
             elif tag_day == 'truancy':
-                cell = (data[0], data[2], date_key)
+                cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][3].append(cell)
-    summary: dict[int, tuple] = {}
+    summary: Summary = {}
     for emp_id, groups in restructured.items():
         work_days = groups[0]
         holiday_days = groups[1]
@@ -106,11 +227,14 @@ def calculate_hours_per_month(work_time: dict) -> tuple[dict[int, tuple], dict]:
                 overtime_weekend += delta
             else:
                 undertime_weekend += delta
-        summary[emp_id] = (
-            (total_work, overtime_weekday, undertime_weekday),
-            (total_holiday, overtime_weekend, undertime_weekend, total_worked_weekend),
-            vacation_days,
-            truancy_days,
+        summary[emp_id] = EmployeeMonth(
+            work=WorkGroup(days=total_work, overtime=overtime_weekday, undertime=undertime_weekday),
+            holiday=HolidayGroup(
+                days=total_holiday, overtime=overtime_weekend,
+                undertime=undertime_weekend, worked=total_worked_weekend,
+            ),
+            vacation_days=vacation_days,
+            truancy_days=truancy_days,
         )
     return summary, restructured
 
@@ -130,7 +254,7 @@ def _hourly_fraction(daily_rate: Decimal) -> Decimal:
     return daily_rate / _shift_hours()
 
 
-def calculate_wages(summary: dict) -> dict[int, tuple[Decimal, Decimal, Decimal]]:
+def calculate_wages(summary: Summary) -> Wages:
     """Начислить зарплату. Ставка — руб/смена 8ч (Decimal), итог — копейки HALF_UP.
 
     Роли 1,4: будни = rate*дни + 1.5*(rate/8)*переработка_ч - (rate/8)*недоработка_ч;
@@ -141,22 +265,24 @@ def calculate_wages(summary: dict) -> dict[int, tuple[Decimal, Decimal, Decimal]
     Квантование только финального итога (промежуточное — полная точность).
     """
     rates = load_wage_rates()
-    result: dict[int, tuple[Decimal, Decimal, Decimal]] = {}
+    result: Wages = {}
     for emp_id, data in summary.items():
         emp = EMPLOYEES.get(emp_id)
         if emp is None:
             continue
+        work_days, overtime_wd, undertime_wd = _sum_work(data)
+        hol_days, _overtime_we, _undertime_we, hol_worked = _sum_holiday(data)
+        vacation_days = _sum_vacation(data)
         if emp.role_id in (1, 4):
             rate = _rate_for(rates, emp_id)
             hourly = _hourly_fraction(rate)
-            work_weekdays = data[0][0]
-            overtime_h = timedelta_to_hours(data[0][1])
-            undertime_h = timedelta_to_hours(data[0][2])
-            work_holidays = data[1][0]
+            work_weekdays = work_days
+            overtime_h = timedelta_to_hours(overtime_wd)
+            undertime_h = timedelta_to_hours(undertime_wd)
+            work_holidays = hol_days
             # overtime/undertime выходных в оплату не входят отдельно:
             # total_worked_holiday уже содержит весь факт (иначе 2.25x / минусы).
-            worked_holiday_h = timedelta_to_hours(data[1][3])
-            vacation_days = data[2]
+            worked_holiday_h = timedelta_to_hours(hol_worked)
             money_for_milk = MILK_ALLOWANCE_PER_DAY * (work_weekdays + work_holidays)
             salary_weekdays = (rate * work_weekdays
                                + OVERTIME_WEEKDAY_MULTIPLIER * hourly * overtime_h
@@ -165,18 +291,21 @@ def calculate_wages(summary: dict) -> dict[int, tuple[Decimal, Decimal, Decimal]
             salary_vacation = rate * vacation_days
             total = quantize_money(salary_weekdays + salary_weekends + salary_vacation)
             total_with_milk = quantize_money(total + money_for_milk)
-            result[emp_id] = (total, quantize_money(money_for_milk), total_with_milk)
+            result[emp_id] = WageResult(
+                salary=total,
+                milk=quantize_money(money_for_milk),
+                total_with_milk=total_with_milk,
+            )
         elif emp.role_id == 2:
             # Кладовщик: как обычный работник, но без оплаты переработок.
             # Будни: ставка за дни минус недоработка (сверхурочные не плюсуются).
             # Выходные: факт по одинарной ставке (без 1.5x). Отпуск/молоко — как у роли 1.
             rate = _rate_for(rates, emp_id)
             hourly = _hourly_fraction(rate)
-            work_weekdays = data[0][0]
-            undertime_h = timedelta_to_hours(data[0][2])
-            work_holidays = data[1][0]
-            worked_holiday_h = timedelta_to_hours(data[1][3])
-            vacation_days = data[2]
+            work_weekdays = work_days
+            undertime_h = timedelta_to_hours(undertime_wd)
+            work_holidays = hol_days
+            worked_holiday_h = timedelta_to_hours(hol_worked)
             money_for_milk = MILK_ALLOWANCE_PER_DAY * (work_weekdays + work_holidays)
             salary_weekdays = (rate * work_weekdays
                                - hourly * undertime_h)
@@ -184,11 +313,17 @@ def calculate_wages(summary: dict) -> dict[int, tuple[Decimal, Decimal, Decimal]
             salary_vacation = rate * vacation_days
             total = quantize_money(salary_weekdays + salary_weekends + salary_vacation)
             total_with_milk = quantize_money(total + money_for_milk)
-            result[emp_id] = (total, quantize_money(money_for_milk), total_with_milk)
+            result[emp_id] = WageResult(
+                salary=total,
+                milk=quantize_money(money_for_milk),
+                total_with_milk=total_with_milk,
+            )
         elif emp.role_id == 3:
             rate = _rate_for(rates, emp_id)
-            total = quantize_money(rate * (data[0][0] + data[1][0]))
-            result[emp_id] = (total, Decimal('0.00'), total)
+            total = quantize_money(rate * (work_days + hol_days))
+            result[emp_id] = WageResult(
+                salary=total, milk=Decimal('0.00'), total_with_milk=total,
+            )
     return result
 
 

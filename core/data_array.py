@@ -1,11 +1,12 @@
 from datetime import datetime
 from core.config import EMPLOYEES, SETTLEMENT_EXCEPTIONS
+from core.day_models import DayMark, TimeTable
 from core.file_parser import read_file_data, definition_of_working_day, parse_attlog_line
 from core.constants import WEEKDAYS_NAME, MONTHS_NAME_TO_RUSSIAN
 
 
-def build_data_array(list_month: list[str]) -> dict[str, dict[int, list]]:
-    time_table: dict[str, dict[int, list]] = {}
+def build_data_array(list_month: list[str]) -> TimeTable:
+    time_table: TimeTable = {}
     for line in list_month:
         parsed = _parse_line(line)
         if parsed is None:
@@ -19,13 +20,13 @@ def build_data_array(list_month: list[str]) -> dict[str, dict[int, list]]:
             time_table[date_key] = {}
         if emp_id in time_table[date_key]:
             existing = time_table[date_key][emp_id]
-            if existing[0] < dt:
-                existing[0] = dt
-            if existing[1] > dt:
-                existing[1] = dt
+            if existing.go < dt:
+                existing.go = dt
+            if existing.come > dt:
+                existing.come = dt
         else:
             tag_day = definition_of_working_day(date_key)[0]
-            time_table[date_key][emp_id] = [dt, dt, tag_day]
+            time_table[date_key][emp_id] = DayMark(go=dt, come=dt, tag=tag_day)
     return time_table
 
 

@@ -291,6 +291,7 @@ def build_preview_rows(summary: dict, wages: dict) -> list[dict]:
     from core.config import EMPLOYEES
     from core.calculations import str_timedelta
     from core.data_array import is_settlement_allowed
+    from core.day_models import WageResult
     from core.money import as_decimal
     from decimal import Decimal
 
@@ -300,15 +301,25 @@ def build_preview_rows(summary: dict, wages: dict) -> list[dict]:
             continue
         role = EMPLOYEES.get(emp_id)
         name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
-        salary, milk, total = wages.get(emp_id, (Decimal('0.00'), Decimal('0.00'), Decimal('0.00')))
+        wage = wages.get(emp_id, WageResult(Decimal('0.00'), Decimal('0.00'), Decimal('0.00')))
+        salary = getattr(wage, 'salary', wage[0])
+        milk = getattr(wage, 'milk', wage[1])
+        total = getattr(wage, 'total_with_milk', wage[2])
+        work = getattr(data, 'work', data[0])
+        holiday = getattr(data, 'holiday', data[1])
+        work_days = getattr(work, 'days', work[0])
+        overtime = getattr(work, 'overtime', work[1])
+        undertime = getattr(work, 'undertime', work[2])
+        weekend_days = getattr(holiday, 'days', holiday[0])
+        vacation = getattr(data, 'vacation_days', data[2])
         rows.append({
             'emp_id': emp_id,
             'name': name,
-            'work': data[0][0],
-            'overtime': str_timedelta(data[0][1]),
-            'undertime': str_timedelta(data[0][2]),
-            'weekend': data[1][0],
-            'vacation': data[2],
+            'work': work_days,
+            'overtime': str_timedelta(overtime),
+            'undertime': str_timedelta(undertime),
+            'weekend': weekend_days,
+            'vacation': vacation,
             'salary': as_decimal(salary),
             'milk': as_decimal(milk),
             'total': as_decimal(total),

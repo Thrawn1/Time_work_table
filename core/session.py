@@ -56,10 +56,13 @@ def save_session(time_table: dict, year: int | None = None, month: int | None = 
     for date_key, employees in time_table.items():
         data['entries'][date_key] = {}
         for emp_id, marks in employees.items():
+            go = getattr(marks, 'go', marks[0])
+            come = getattr(marks, 'come', marks[1])
+            tag = getattr(marks, 'tag', marks[2])
             data['entries'][date_key][str(emp_id)] = [
-                marks[0].isoformat(),
-                marks[1].isoformat(),
-                marks[2],
+                go.isoformat(),
+                come.isoformat(),
+                tag,
             ]
 
     dir_name = os.path.dirname(os.path.abspath(SESSION_FILE))
@@ -136,7 +139,9 @@ def validate_session_raw(raw: dict) -> tuple[dict | None, list[str]]:
             if dt_out.date().isoformat() != str(date_key) or dt_in.date().isoformat() != str(date_key):
                 errors.append(f'{where}: время не соответствует дате {date_key}')
                 continue
-            day[emp_id] = [dt_out, dt_in, tag]
+            from core.day_models import DayMark
+
+            day[emp_id] = DayMark(go=dt_out, come=dt_in, tag=tag)
         time_table[str(date_key)] = day
 
     if len(periods) > 1:
