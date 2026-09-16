@@ -125,6 +125,78 @@ def diagnose_roster_divergence(ctx: PayrollContext, dat_staff: dict,
     return warnings
 
 
+def combined_staff_for_import(dat_staff: dict, db_path: str,
+                               month_start: str) -> dict:
+    """Объединённый штат для импорта и состава в new-режиме (F02-union).
+
+    DAT-копия + SQLite-сотрудники вне DAT как EmployeeData. Для пересекающихся
+    ID роль берётся из SQLite-назначения на month_start (SQLite — источник
+    новой модели), имя — из SQLite-карточки. Без назначения — роль 1-заглушка
+    для сохранения отметок; отсутствие назначения затем фатально до правок.
+    Не пишет в БД; ошибки чтения — PayrollError.
+    """
+    import sqlite3 as _sqlite3
+
+    from pathlib import Path as _Path
+
+    from core.config import EmployeeData as _EmployeeData
+    from core.payroll import PayrollError
+
+    combined = dict(dat_staff or {})
+    if not _Path(db_path).exists():
+        return combined
+    from core.pay_store import connect, get_assignment
+
+    try:
+        con = connect(db_path)
+    except _sqlite3.Error as e:
+        raise PayrollError(f'{db_path}: не удалось открыть справочник ({e}).') from e
+    try:
+        try:
+            sqlite_emps = {r['id']: r for r in con.execute('SELECT * FROM employees')}
+            role_names = {r['id']: r['name'] for r in con.execute('SELECT id, name FROM roles')}
+        except _sqlite3.Error as e:
+            raise PayrollError(f'{db_path}: ошибка чтения ростера ({e}).') from e
+        for emp_id, row in sqlite_emps.items():
+            try:
+                assigned = get_assignment(con, emp_id, month_start)
+            except _sqlite3.Error as e:
+                raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
+            if emp_id in combined:
+                # SQLite — авторитет роли в new-режиме.
+                if assigned is not None:
+                    sqlite_role = int(assigned[0])
+                    cur = combined[emp_id]
+                    cur_role = getattr(cur, 'role_id', None)
+                    if cur_role is None or int(cur_role) != sqlite_role:
+                        combined[emp_id] = _EmployeeData(
+                            id=int(emp_id),
+                            first_name=row['first_name'] or getattr(cur, 'first_name', ''),
+                            last_name=row['last_name'] or getattr(cur, 'last_name', ''),
+                            role_id=sqlite_role,
+                            role_name=role_names.get(sqlite_role,
+                                                     getattr(cur, 'role_name', '')),
+                        )
+                continue
+            if assigned is not None:
+                role_id = int(assigned[0])
+            else:
+                role_id = 1
+            combined[int(emp_id)] = _EmployeeData(
+                id=int(emp_id),
+                first_name=row['first_name'] or '',
+                last_name=row['last_name'] or '',
+                role_id=role_id,
+                role_name=role_names.get(role_id, ''),
+            )
+        return combined
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+
 def sqlite_excluded_map(db_path: str, month_start: str) -> dict[int, str]:
     """{emp_id: причина} исключений новой модели: participates=False + exceptions.
 

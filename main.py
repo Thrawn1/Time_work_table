@@ -131,23 +131,11 @@ def main():
 
     print(f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} год')
 
-    if args.include_empty:
-        emp_ids = get_all_employees_in_data(data_array)
-    else:
-        emp_ids = get_employees_with_marks(data_array)
-        skipped = len(get_all_employees_in_data(data_array)) - len(emp_ids)
-        if skipped:
-            print(f'Без отметок за месяц пропущено сотрудников: {skipped} '
-                  f'(см. второй блок сводки; для включения — --include-empty).')
-
-    # Единый состав участников расчёта: роль вне участия и персональные
-    # исключения — только в дашборде (с причиной), в расчёт/превью/отчёты не попадают.
-    settlement_ids = [e for e in emp_ids if is_included_in_settlement(e)]
-    settlement_set = set(settlement_ids)
-
-    # Этап 3: единый контекст периода — до анализа и правок (F01/F02/F05).
+    # Этап 3 (+F02-union): единый контекст периода — до анализа и правок (F01/F02/F05).
+    from core.config import EMPLOYEES as _DAT_STAFF
     from core.payroll import PayrollError as _PayrollError
     from core.pay_context import (
+        combined_staff_for_import as _combined_staff,
         diagnose_roster_divergence as _diagnose_roster,
         resolve_context as _resolve_context,
         sqlite_excluded_map as _sqlite_excluded,
@@ -160,14 +148,50 @@ def main():
     sqlite_excluded: dict = {}
     if pay_ctx.mode == 'new':
         print('Режим модели: новая (SQLite-условия действуют на месяц). Ошибки настройки фатальны.')
-        from core.config import EMPLOYEES as _DAT_STAFF
-        for w in _diagnose_roster(pay_ctx, _DAT_STAFF, data_array):
-            print(f'ВНИМАНИЕ (состав): {w}')
+        try:
+            active_staff = _combined_staff(_DAT_STAFF, args.pay_dir, pay_ctx.month_start)
+        except _PayrollError as e:
+            print(f'ОШИБКА: справочник оплаты недоступен ({e}). Расчет прерван.')
+            sys.exit(1)
+        # Импорт на объединённом штате: SQLite-only отметки не отбрасываются (F02).
+        if session_state != 'resumed' and list_data:
+            data_array = build_data_array(list_data, employees=active_staff)
         try:
             sqlite_excluded = _sqlite_excluded(args.pay_dir, pay_ctx.month_start)
         except _PayrollError as e:
             print(f'ОШИБКА: справочник оплаты недоступен ({e}). Расчет прерван.')
             sys.exit(1)
+        for w in _diagnose_roster(pay_ctx, _DAT_STAFF, data_array):
+            print(f'ВНИМАНИЕ (состав): {w}')
+        if args.include_empty:
+            emp_ids = list(active_staff.keys())
+        else:
+            _with_marks = {e for day in data_array.values() for e in day}
+            emp_ids = [e for e in active_staff if e in _with_marks]
+            _skipped = len(active_staff) - len(emp_ids)
+            if _skipped:
+                print(f'Без отметок за месяц пропущено сотрудников: {_skipped} '
+                      f'(см. второй блок сводки; для включения — --include-empty).')
+        # Единый состав: DAT-правила на объединённом штате + SQLite-исключения.
+        settlement_ids = [e for e in emp_ids
+                          if is_included_in_settlement(e, active_staff)
+                          and e not in sqlite_excluded]
+    else:
+        print('Режим модели: legacy (действующих SQLite-условий на месяц нет).')
+        active_staff = _DAT_STAFF
+        if args.include_empty:
+            emp_ids = get_all_employees_in_data(data_array)
+        else:
+            emp_ids = get_employees_with_marks(data_array)
+            skipped = len(get_all_employees_in_data(data_array)) - len(emp_ids)
+            if skipped:
+                print(f'Без отметок за месяц пропущено сотрудников: {skipped} '
+                      f'(см. второй блок сводки; для включения — --include-empty).')
+        # Единый состав участников расчёта: роль вне участия и персональные
+        # исключения — только в дашборде (с причиной), в расчёт/превью/отчёты не попадают.
+        settlement_ids = [e for e in emp_ids if is_included_in_settlement(e)]
+    settlement_set = set(settlement_ids)
+    if pay_ctx.mode == 'new':
         # До правок: отсутствие обязательного назначения — фатально, без silent fallback.
         from core.pay_store import connect as _connect, get_assignment as _get_assign
         try:
@@ -189,12 +213,10 @@ def main():
             sys.exit(1)
         if _missing:
             from core.data_array import get_name_employee as _nm
-            _names = ', '.join(f'{_nm(e) or e}' for e in _missing)
+            _names = ', '.join(f'{_nm(e, active_staff) or e}' for e in _missing)
             print(f'ОШИБКА: новая модель должна применяться, но нет назначения SQLite '
                   f'на {pay_ctx.month_start} для: {_names}. Расчет прерван без fallback.')
             sys.exit(1)
-    else:
-        print('Режим модели: legacy (действующих SQLite-условий на месяц нет).')
 
     from core.ui import (
         build_dashboard_rows,
@@ -216,12 +238,14 @@ def main():
     ))
 
     print_header('Проверка')
-    from core.config import EMPLOYEES as _STAFF
+    _STAFF = active_staff
     for emp_id in settlement_ids:
         analyze_for_print(data_array, emp_id, year, month, employees=_STAFF)
 
+    _dashboard_ids = (list(active_staff.keys()) if pay_ctx.mode == 'new'
+                      else get_all_employees_in_data(data_array))
     print_dashboard(
-        build_dashboard_rows(data_array, get_all_employees_in_data(data_array), year, month,
+        build_dashboard_rows(data_array, _dashboard_ids, year, month,
                              employees=_STAFF, extra_excluded=sqlite_excluded or None),
         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
     )
@@ -249,7 +273,8 @@ def main():
     if pay_ctx.mode == 'new':
         try:
             pay_bundle = build_bundle(data_array, work_time, summary, year, month,
-                                      args.pay_dir, salary_mode=salary_mode)
+                                      args.pay_dir, salary_mode=salary_mode,
+                                      employees=active_staff)
         except PayrollError as e:
             print(f'ОШИБКА: новая модель должна применяться, но настройка ошибочна ({e}). '
                   f'Расчет прерван без fallback в legacy.')

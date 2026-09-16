@@ -80,15 +80,24 @@ def is_settlement_allowed(emp_id: int) -> bool:
     return emp_id not in SETTLEMENT_EXCEPTIONS
 
 
-def exclusion_reason(emp_id: int) -> str:
+def exclusion_reason(emp_id: int, employees: dict | None = None) -> str:
     """Точная причина неучастия в начислениях (для дашборда/отчётов).
 
     Учитывает правила роли (напр. роль 0 «руководство — не участвует»)
     и персональные исключения. Пустая строка — участвует.
+    employees=None — глобальный DAT-справочник (legacy); переданный словарь
+    (напр. объединённый DAT+SQLite) используется для поиска карточки (F02-union).
     """
     from core.roles import get_default_rule
 
-    emp = EMPLOYEES.get(emp_id)
+    import core.data_array as _self
+
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
+    emp = staff.get(emp_id) if hasattr(staff, 'get') else None
     if emp is None:
         return 'нет в справочнике сотрудников'
     role_id = getattr(emp, 'role_id', None)
@@ -104,6 +113,6 @@ def exclusion_reason(emp_id: int) -> str:
     return ''
 
 
-def is_included_in_settlement(emp_id: int) -> bool:
+def is_included_in_settlement(emp_id: int, employees: dict | None = None) -> bool:
     """Единый состав участников: анализ, правки и все строки отчётов."""
-    return exclusion_reason(emp_id) == ''
+    return exclusion_reason(emp_id, employees) == ''

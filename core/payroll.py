@@ -156,12 +156,15 @@ def _zeroed_for_no_salary(result) -> object:
 
 
 def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, month: int,
-                 db_path: str, salary_mode: bool = True) -> PayrollBundle:
+                 db_path: str, salary_mode: bool = True,
+                 employees: dict | None = None) -> PayrollBundle:
     """Собрать месячный пакет. Кидает PayrollError при неполной настройке.
 
     salary_mode=False (ключи t/0/мусор): денежные начисления обнуляются,
     молоко сохраняется — одинаково для новой и legacy-модели (F01).
     Правило SQLite с participates=False исключает сотрудника из начислений (F02).
+    employees — справочник для DAT-исключений/имён (F02-union): объединённый
+    DAT+SQLite в new-режиме, иначе глобальный DAT (legacy-совместимость).
     """
     from core.analysis import _get_marks_and_missed
     from core.data_array import exclusion_reason, get_name_employee
@@ -219,7 +222,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                                    f'на {month_start}')
         saw_seniority_eligible = False
         for emp_id in summary:
-            reason = exclusion_reason(emp_id)
+            reason = exclusion_reason(emp_id, employees)
             if reason:
                 continue  # не участник — только дашборд
             if emp_id in exceptions:
@@ -307,7 +310,8 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
             if not salary_mode:
                 _result = _zeroed_for_no_salary(_result)
             bundle.results[emp_id] = PayEmployeeResult(
-                emp_id=emp_id, name=get_name_employee(emp_id) or f'ID {emp_id}',
+                emp_id=emp_id,
+                name=get_name_employee(emp_id, employees) or f'ID {emp_id}',
                 rule=rule, inputs=inputs, result=_result,
             )
         if not scale and saw_seniority_eligible:

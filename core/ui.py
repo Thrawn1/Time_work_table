@@ -70,7 +70,7 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
         missed_count = len(list_missed) if isinstance(list_missed, list) else 0
         info = summarize_employee(single_count, missed_count, has_marks)
         from core.data_array import exclusion_reason
-        reason = exclusion_reason(emp_id)
+        reason = exclusion_reason(emp_id, staff)
         if extra_excluded and emp_id in extra_excluded:
             _sqlite_reason = extra_excluded[emp_id] or 'исключён SQLite'
             reason = _sqlite_reason if not reason else f'{reason}; {_sqlite_reason}'
