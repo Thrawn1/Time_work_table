@@ -23,6 +23,14 @@ SESSION_VERSION = 1
 SESSION_FILE = 'temporary.json'
 SESSION_FILE_LEGACY = 'temporary.pickle'
 
+
+class SessionBackupError(RuntimeError):
+    """Не удалось сохранить существующую сессию перед новым расчётом.
+
+    Выбрасывается вместо молчаливого None, чтобы вызывающий код
+    не начинал новый расчёт поверх несохранённой сессии.
+    """
+
 # Единый набор статусов — источник в core.day_models (значения те же).
 from core.day_models import ALLOWED_TAGS as _ALLOWED
 
@@ -99,7 +107,21 @@ def validate_session_raw(raw: dict) -> tuple[dict | None, list[str]]:
     if not isinstance(entries, dict):
         return None, ['поле entries должно быть объектом {дата: {id: метки}}']
     if not entries:
-        return {}, []
+        # Пустая таблица допустима только с явным периодом в заголовке
+        # (месяц без отметок, восстановленный по метаданным).
+        period_meta = raw.get('period')
+        if isinstance(period_meta, dict) and 'year' in period_meta and 'month' in period_meta:
+            try:
+                _y = int(period_meta['year'])
+                _m = int(period_meta['month'])
+                if 1900 <= _y <= 2100 and 1 <= _m <= 12:
+                    return {}, []
+                errors.append(f'период {period_meta!r} в заголовке пустой сессии вне диапазона')
+                return None, errors
+            except (ValueError, TypeError):
+                return None, ['некорректное поле period в заголовке пустой сессии']
+        return None, ['пустая сессия без периода: нет entries и нет поля period '
+                      '(невозможно определить месяц расчёта)']
 
     time_table: dict = {}
     periods: set[str] = set()
@@ -134,7 +156,18 @@ def validate_session_raw(raw: dict) -> tuple[dict | None, list[str]]:
             if tag not in ALLOWED_TAGS:
                 errors.append(f'{where}: недопустимый статус {tag!r} (нужен один из {sorted(ALLOWED_TAGS)})')
                 continue
-            if dt_out < dt_in:
+            if dt_out.tzinfo is not None or dt_in.tzinfo is not None:
+                errors.append(
+                    f'{where}: часовые пояса не поддерживаются — '
+                    'используйте наивное локальное время без смещения'
+                )
+                continue
+            try:
+                inverted = dt_out < dt_in
+            except TypeError:
+                errors.append(f'{where}: несравнимые отметки (смешанные часовые пояса?)')
+                continue
+            if inverted:
                 errors.append(
                     f'{where}: приход {dt_in.time()} позже ухода {dt_out.time()} — так нельзя'
                 )
@@ -234,13 +267,36 @@ def _peek_period(path: str) -> tuple[int, int] | None:
     return None
 
 
+def _unique_backup_path(base: str) -> str:
+    """Подобрать несуществующий путь бэкапа: base свободен — он, иначе с суффиксом.
+
+    Суффикс из time_ns + uuid гарантирует уникальность повторных бэкапов
+    одного периода в одну секунду (см. F09).
+    """
+    import time
+    import uuid
+
+    if not os.path.exists(base):
+        return base
+    root, ext = os.path.splitext(base)
+    for _ in range(1000):
+        candidate = f'{root}_{time.time_ns()}_{uuid.uuid4().hex[:8]}{ext}'
+        if not os.path.exists(candidate):
+            return candidate
+    raise SessionBackupError(f'не удалось подобрать уникальное имя для {base!r}')
+
+
 def backup_existing_session() -> str | None:
     """Сохранить игнорируемую сессию отдельно, чтобы новый расчёт её не затёр.
 
     Возвращает путь бэкапа или None, если сохранять нечего.
-    Имя — temporary_YYYY_MM.json (период из сессии) либо с меткой времени.
+    При ошибке перемещения бросает SessionBackupError — вызывающий код
+    обязан прервать новый расчёт и не удалять исходную сессию.
+    Имя — temporary_YYYY_MM.json (период из сессии) либо с меткой времени;
+    повторные бэкапы получают уникальный суффикс и не перезаписывают друг друга.
     """
     import time
+    import uuid
 
     if not os.path.exists(SESSION_FILE) and not os.path.exists(SESSION_FILE_LEGACY):
         return None
@@ -249,26 +305,31 @@ def backup_existing_session() -> str | None:
         period = _peek_period(SESSION_FILE)
         if period is not None:
             candidate = f'temporary_{period[0]:04d}_{period[1]:02d}.json'
-            if os.path.abspath(candidate) != os.path.abspath(SESSION_FILE):
-                if not os.path.exists(candidate):
-                    backup = candidate
-                else:
-                    backup = f'temporary_{period[0]:04d}_{period[1]:02d}_{int(time.time())}.json'
+            if os.path.abspath(candidate) == os.path.abspath(SESSION_FILE):
+                candidate = (f'temporary_backup_{period[0]:04d}_{period[1]:02d}_'
+                             f'{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
             else:
-                backup = f'temporary_backup_{int(time.time())}.json'
+                candidate = _unique_backup_path(candidate)
+            backup = candidate
         else:
-            backup = f'temporary_backup_{int(time.time())}.json'
+            backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
+            while os.path.exists(backup):
+                backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
         try:
             os.replace(SESSION_FILE, backup)
-        except OSError:
-            return None
+        except OSError as e:
+            raise SessionBackupError(f'не удалось сохранить {SESSION_FILE}: {e}') from e
     if os.path.exists(SESSION_FILE_LEGACY):
-        legacy_backup = (backup + '.pickle_legacy' if backup
-                         else f'temporary_backup_{int(time.time())}.pickle')
+        if backup is not None:
+            legacy_backup = _unique_backup_path(backup + '.pickle_legacy')
+        else:
+            legacy_backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.pickle')
+            while os.path.exists(legacy_backup):
+                legacy_backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.pickle')
         try:
             os.replace(SESSION_FILE_LEGACY, legacy_backup)
             if backup is None:
                 backup = legacy_backup
-        except OSError:
-            pass
+        except OSError as e:
+            raise SessionBackupError(f'не удалось сохранить {SESSION_FILE_LEGACY}: {e}') from e
     return backup

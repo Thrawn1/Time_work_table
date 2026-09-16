@@ -11,7 +11,13 @@ from core.calculations import calculate_hours_per_day, calculate_hours_per_month
 from core.excel_builder import build_excel
 from core.html_builder import build_html
 from core.constants import MONTHS_NAME_TO_RUSSIAN
-from core.session import load_session, session_exists, remove_session, backup_existing_session
+from core.session import (
+    SessionBackupError,
+    load_session,
+    session_exists,
+    remove_session,
+    backup_existing_session,
+)
 
 
 def parse_secret_key(key_input: str) -> tuple[Decimal, bool, str | None]:
@@ -39,7 +45,7 @@ def main():
     parser.add_argument('-m', '--month', type=int, help='Месяц (1-12)')
     parser.add_argument('-k', '--key', default='0', help='Секретный ключ (или t для без зарплаты)')
     parser.add_argument('--no-edit', action='store_true', help='Пропустить интерактивное редактирование')
-    parser.add_argument('--resume', action='store_true', help='Восстановить сохраненную сессию из temporary.pickle')
+    parser.add_argument('--resume', action='store_true', help='Восстановить сохраненную сессию из temporary.json')
     parser.add_argument('--include-empty', action='store_true',
                         help='Включить в расчет сотрудников без единой отметки за месяц '
                              '(действующий, но отсутствовал весь месяц: отпуск/прогул)')
@@ -73,13 +79,27 @@ def main():
         if data_array is None:
             print('Не удалось восстановить сессию!')
             sys.exit(1)
-        first_date = list(data_array.keys())[0]
-        year = int(first_date[:4])
-        month = int(first_date[5:7])
+        if not data_array:
+            # Пустой месяц, восстановленный по периоду из заголовка сессии.
+            from core.session import _peek_period as _peek_resume_period
+            _period = _peek_resume_period(json_path) if exists(json_path) else None
+            if _period is None:
+                print('Не удалось восстановить сессию: пустая сессия без периода!')
+                sys.exit(1)
+            year, month = _period
+        else:
+            first_date = list(data_array.keys())[0]
+            year = int(first_date[:4])
+            month = int(first_date[5:7])
         session_state = 'resumed'
     else:
         if not args.resume and session_exists():
-            saved = backup_existing_session()
+            try:
+                saved = backup_existing_session()
+            except SessionBackupError as _be:
+                print(f'ОШИБКА: не удалось сохранить существующую сессию ({_be}). '
+                      f'Новый расчёт не начат, исходная сессия сохранена.')
+                sys.exit(1)
             if saved:
                 print(f'ВНИМАНИЕ: найден файл сессии. '
                       f'Он сохранён отдельно как {saved} и будет проигнорирован. '

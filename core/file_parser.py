@@ -5,7 +5,7 @@ from os import path
 from core.config import HOLIDAYS_FILE, POSTPONED_DAYS_FILE
 
 DAT_LINE_PATTERN = re.compile(
-    r'^\s*(\d+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+'
+    r'^\s*(\d+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s|$)'
 )
 
 
@@ -41,6 +41,10 @@ def read_file_data_with_errors(file_name: str, year: int, month: int) -> tuple[l
             continue
         match = DAT_LINE_PATTERN.match(line)
         if not match:
+            errors.append(
+                f'строка {lineno}: не распознана '
+                f'(ожидался формат "<ID> YYYY-MM-DD HH:MM:SS...") — пропущена'
+            )
             continue
         try:
             dt = datetime.strptime(match.group(2), '%Y-%m-%d %H:%M:%S')
@@ -53,7 +57,7 @@ def read_file_data_with_errors(file_name: str, year: int, month: int) -> tuple[l
             errors.append(f'строка {lineno}: некорректный ID — пропущена')
             continue
         if dt.year == year and dt.month == month:
-            result.append(line.rstrip('\n'))
+            result.append(line.rstrip('\r\n'))
     if errors:
         print(f'ВНИМАНИЕ: пропущено строк импорта с ошибками: {len(errors)} (расчёт продолжен).')
         for err in errors[:10]:
