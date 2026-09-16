@@ -31,7 +31,7 @@ def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
     _setup_columns(ws)
     _write_header(ws)
     last_detail_row = _write_data_rows(ws, time_table, work_time, employees)
-    next_row = _write_summary_block(ws, work_time, summary, wages, employees)
+    next_row = _write_summary_block(ws, work_time, summary, wages, employees, bundle=bundle)
     if bundle is not None:
         _write_pay_block(ws, next_row, bundle)
     ws.auto_filter.ref = f'A1:G{max(last_detail_row, 1)}'
@@ -114,8 +114,12 @@ def _write_data_rows(ws, time_table: dict, work_time: dict,
 
 
 def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
-                         employees: dict | None = None) -> int:
-    """Legacy-блок итогов. Возвращает первую свободную строку после блока."""
+                         employees: dict | None = None, bundle=None) -> int:
+    """Legacy-блок итогов. Возвращает первую свободную строку после блока.
+
+    При bundle (новая модель) строки вне bundle.results пропускаются,
+    чтобы состав совпадал с превью/ведомостью (F02).
+    """
     border = _make_border()
     max_row = 1
     for row in ws.iter_rows(min_row=2, max_col=1):
@@ -130,6 +134,8 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
     count += 1
     for emp_id in summary:
         if not is_included_in_settlement(emp_id):
+            continue
+        if bundle is not None and emp_id not in bundle.results:
             continue
         _set_cell(ws, count, 8, get_name_employee(emp_id, employees), border)
         entry = summary[emp_id]

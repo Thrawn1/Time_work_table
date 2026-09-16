@@ -44,8 +44,14 @@ def summarize_employee(single_count: int, missed_count: int, has_marks: bool) ->
 
 
 def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month: int,
-                         employees: dict | None = None) -> list[dict]:
-    """Собрать строки дашборда. Чистая агрегация, без печати."""
+                         employees: dict | None = None,
+                         extra_excluded: dict | None = None) -> list[dict]:
+    """Собрать строки дашборда. Чистая агрегация, без печати.
+
+    extra_excluded: {emp_id: причина} из SQLite (participates=False,
+    персональные исключения) — объединяется с DAT-причиной, чтобы дашборд
+    показывал единый состав с bundle (F02).
+    """
     from core.analysis import _get_marks_and_missed
 
     if employees is None:
@@ -65,6 +71,9 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
         info = summarize_employee(single_count, missed_count, has_marks)
         from core.data_array import exclusion_reason
         reason = exclusion_reason(emp_id)
+        if extra_excluded and emp_id in extra_excluded:
+            _sqlite_reason = extra_excluded[emp_id] or 'исключён SQLite'
+            reason = _sqlite_reason if not reason else f'{reason}; {_sqlite_reason}'
         rows.append({
             'emp_id': emp_id,
             'name': name,
@@ -287,8 +296,13 @@ def print_pay_details(bundle) -> None:
         console.print(f'[yellow]ВНИМАНИЕ: {w}[/yellow]')
 
 
-def build_preview_rows(summary: dict, wages: dict, employees: dict | None = None) -> list[dict]:
-    """Чистые строки предпросмотра расчета до записи файлов."""
+def build_preview_rows(summary: dict, wages: dict, employees: dict | None = None,
+                        bundle=None) -> list[dict]:
+    """Чистые строки предпросмотра расчета до записи файлов.
+
+    При bundle (новая модель) показываем только его участников:
+    emp вне bundle.results пропускается, а не выводится с нулевой зарплатой (F02).
+    """
     from core.calculations import str_timedelta
     from core.data_array import is_settlement_allowed
     from core.day_models import WageResult
@@ -304,6 +318,8 @@ def build_preview_rows(summary: dict, wages: dict, employees: dict | None = None
     rows: list[dict] = []
     for emp_id, data in summary.items():
         if not is_settlement_allowed(emp_id):
+            continue
+        if bundle is not None and emp_id not in bundle.results:
             continue
         role = staff.get(emp_id) if hasattr(staff, 'get') else None
         name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'

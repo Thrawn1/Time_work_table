@@ -58,6 +58,7 @@ class PayrollBundle:
     rule_versions: dict[int, str]
     results: dict[int, PayEmployeeResult] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    salary_mode: bool = True
 
     def versions_snapshot(self) -> dict:
         return {
@@ -81,16 +82,51 @@ class PayrollBundle:
 
 
 def new_regime_available(db_path: str, year: int, month: int):
-    """Действующие общие условия на начало месяца или None (тогда legacy-режим)."""
-    from core.pay_store import connect, get_pay_settings
+    """Действующие общие условия на начало месяца или None (тогда legacy-режим).
 
+    Граница перехода — кодом, а не seed-данными: периоды раньше
+    DEFAULT_TRANSITION всегда legacy, даже при случайной записи условий
+    на прошлые даты (F05). Ошибки чтения/схемы БД — PayrollError
+    с путём и причиной, а не raw sqlite3.OperationalError.
+    """
+    import sqlite3
+
+    from core.pay_store import DEFAULT_TRANSITION, connect, get_pay_settings
+
+    month_start = f'{year:04d}-{month:02d}-01'
+    if month_start < DEFAULT_TRANSITION:
+        return None
     if not Path(db_path).exists():
         return None
-    con = connect(db_path)
     try:
-        return get_pay_settings(con, f'{year:04d}-{month:02d}-01')
+        con = connect(db_path)
+    except sqlite3.Error as e:
+        raise PayrollError(f'{db_path}: не удалось открыть справочник ({e}).') from e
+    try:
+        try:
+            return get_pay_settings(con, month_start)
+        except ValueError as e:
+            raise PayrollError(f'{db_path}: некорректный запрос условий ({e}).') from e
+        except sqlite3.Error as e:
+            raise PayrollError(
+                f'{db_path}: ошибка чтения справочника (нет таблиц/повреждена схема?): {e}.'
+            ) from e
     finally:
-        con.close()
+        try:
+            con.close()
+        except Exception:
+            pass
+
+
+def resolve_pay_mode(db_path: str, year: int, month: int) -> str:
+    """Режим периода до правок и отчётов: 'new' или 'legacy'.
+
+    'new' — есть действующие общие условия и период не раньше перехода:
+    новая модель обязана применяться, её ошибки настройки фатальны
+    (без silent fallback в legacy). 'legacy' — новая модель к периоду
+    не применяется. Ошибки чтения БД — PayrollError.
+    """
+    return 'new' if new_regime_available(db_path, year, month) is not None else 'legacy'
 
 
 def _service_years(hire_iso: str | None, on: date) -> Decimal | None:
@@ -100,9 +136,33 @@ def _service_years(hire_iso: str | None, on: date) -> Decimal | None:
     return as_decimal((on - hire).days) / Decimal('365.25')
 
 
+def _zeroed_for_no_salary(result) -> object:
+    """Обнулить денежные компоненты при salary_mode=False; молоко сохранить."""
+    from core.money import quantize_money
+    from core.pay_calc import PayResult as _PayResult
+
+    milk = quantize_money(result.milk_amount)
+    return _PayResult(
+        rate_day=result.rate_day, rate_hour=result.rate_hour,
+        norm_hours=result.norm_hours, fact_hours=result.fact_hours,
+        ordinary_hours=result.ordinary_hours, ordinary_pay=Decimal('0.00'),
+        overtime_hours=result.overtime_hours, overtime_bonus=Decimal('0.00'),
+        full_month_bonus=Decimal('0.00'), full_month_ok=False,
+        full_month_reason='режим без зарплаты: оклады обнулены',
+        seniority_rate=Decimal('0'), seniority_basis_exact=Decimal('0'),
+        seniority_bonus=Decimal('0.00'), total=Decimal('0.00'),
+        milk_amount=milk, total_with_milk=milk,
+    )
+
+
 def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, month: int,
-                 db_path: str) -> PayrollBundle:
-    """Собрать месячный пакет. Кидает PayrollError при неполной настройке."""
+                 db_path: str, salary_mode: bool = True) -> PayrollBundle:
+    """Собрать месячный пакет. Кидает PayrollError при неполной настройке.
+
+    salary_mode=False (ключи t/0/мусор): денежные начисления обнуляются,
+    молоко сохраняется — одинаково для новой и legacy-модели (F01).
+    Правило SQLite с participates=False исключает сотрудника из начислений (F02).
+    """
     from core.analysis import _get_marks_and_missed
     from core.data_array import exclusion_reason, get_name_employee
     from core.pay_store import (
@@ -118,25 +178,42 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
     if workdays == 0:
         raise PayrollError(f'{year}-{month:02d}: D=0 — пустой производственный календарь.')
 
-    con = connect(db_path)
+    import sqlite3 as _sqlite3
+
     try:
-        settings = get_pay_settings(con, month_start)
+        con = connect(db_path)
+    except _sqlite3.Error as e:
+        raise PayrollError(f'{db_path}: не удалось открыть справочник ({e}).') from e
+    try:
+        try:
+            settings = get_pay_settings(con, month_start)
+        except _sqlite3.Error as e:
+            raise PayrollError(
+                f'{db_path}: ошибка чтения общих условий (нет таблиц/повреждена схема?): {e}.'
+            ) from e
         if settings is None:
             raise PayrollError(f'{year}-{month:02d}: нет действующих общих условий.')
-        scale = get_seniority_scale(con, month_start)
-        emp_rows = {r['id']: r for r in con.execute('SELECT * FROM employees')}
-        exceptions = {r['emp_id'] for r in con.execute('SELECT emp_id FROM settlement_exceptions')}
+        try:
+            scale = get_seniority_scale(con, month_start)
+            emp_rows = {r['id']: r for r in con.execute('SELECT * FROM employees')}
+            exceptions = {r['emp_id'] for r in con.execute('SELECT emp_id FROM settlement_exceptions')}
+        except _sqlite3.Error as e:
+            raise PayrollError(f'{db_path}: ошибка чтения справочника ({e}).') from e
         bundle = PayrollBundle(
             year=year, month=month, workdays=workdays,
             settings_eff=settings.effective_from, monthly_base=settings.monthly_base,
             base_day_hours=settings.base_day_hours,
             full_month_bonus=settings.full_month_bonus,
             seniority_scale=scale, rule_versions={},
+            salary_mode=bool(salary_mode),
         )
         # Предупреждение о смене условий внутри месяца.
-        mid = con.execute(
-            'SELECT COUNT(*) c FROM pay_settings WHERE effective_from > ? AND effective_from <= ?',
-            (month_start, month_end)).fetchone()['c']
+        try:
+            mid = con.execute(
+                'SELECT COUNT(*) c FROM pay_settings WHERE effective_from > ? AND effective_from <= ?',
+                (month_start, month_end)).fetchone()['c']
+        except _sqlite3.Error as e:
+            raise PayrollError(f'{db_path}: ошибка чтения версий условий ({e}).') from e
         if mid:
             bundle.warnings.append('общие условия меняются внутри месяца: расчёт по версии '
                                    f'на {month_start}')
@@ -147,17 +224,29 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 continue  # не участник — только дашборд
             if emp_id in exceptions:
                 continue
-            assigned = get_assignment(con, emp_id, month_start)
+            try:
+                assigned = get_assignment(con, emp_id, month_start)
+            except _sqlite3.Error as e:
+                raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
             if assigned is None:
                 raise PayrollError(f'ID {emp_id}: нет назначения роли на {month_start}.')
             role_id, assign_to = assigned
-            rule = get_role_rule(con, role_id, month_start)
+            try:
+                rule = get_role_rule(con, role_id, month_start)
+            except _sqlite3.Error as e:
+                raise PayrollError(f'{db_path}: ошибка чтения правил ролей ({e}).') from e
             if rule is None:
                 raise PayrollError(f'ID {emp_id}: нет версии правил роли {role_id} на {month_start}.')
+            if not rule.participates:
+                # SQLite-правило исключает из начислений (F02): только дашборд с причиной.
+                continue
             bundle.rule_versions[role_id] = month_start
-            later = con.execute(
-                'SELECT effective_from FROM assignments WHERE emp_id=? AND effective_from > ?'
-                ' AND effective_from <= ?', (emp_id, month_start, month_end)).fetchone()
+            try:
+                later = con.execute(
+                    'SELECT effective_from FROM assignments WHERE emp_id=? AND effective_from > ?'
+                    ' AND effective_from <= ?', (emp_id, month_start, month_end)).fetchone()
+            except _sqlite3.Error as e:
+                raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
             if later or (assign_to is not None and assign_to < month_end):
                 bundle.warnings.append(
                     f'ID {emp_id}: назначение меняется внутри месяца '
@@ -214,22 +303,46 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 overtime_coef=rule.overtime_coef, seniority_rate=sen_rate,
                 milk_amount=milk,
             )
+            _result = calculate_pay(inputs)
+            if not salary_mode:
+                _result = _zeroed_for_no_salary(_result)
             bundle.results[emp_id] = PayEmployeeResult(
                 emp_id=emp_id, name=get_name_employee(emp_id) or f'ID {emp_id}',
-                rule=rule, inputs=inputs, result=calculate_pay(inputs),
+                rule=rule, inputs=inputs, result=_result,
             )
         if not scale and saw_seniority_eligible:
             bundle.warnings.append('стажевая шкала не задана (данные будут позже): '
                                    'бонус стажа 0 для всех')
+        if not salary_mode:
+            bundle.warnings.append('режим без зарплаты: оклады обнулены, молоко сохранено')
         return bundle
+    except PayrollError:
+        raise
+    except _sqlite3.Error as e:
+        raise PayrollError(f'{db_path}: ошибка чтения справочника ({e}).') from e
     finally:
-        con.close()
+        try:
+            con.close()
+        except Exception:
+            pass
 
 
 def bundle_to_wages(bundle: PayrollBundle) -> dict[int, WageResult]:
-    """Отображение итога в WageResult — один результат для всех отчётов."""
+    """Отображение итога в WageResult — один результат для всех отчётов.
+
+    При salary_mode=False оклады уже обнулены в build_bundle; для вручную
+    собранных bundle с salary_mode=False — обнуляем здесь, молоко сохраняем.
+    """
     from core.day_models import WageResult
 
+    if getattr(bundle, 'salary_mode', True) is False:
+        from decimal import Decimal as _Decimal
+
+        return {emp_id: WageResult(
+            salary=_Decimal('0.00'),
+            milk=r.result.milk_amount,
+            total_with_milk=r.result.milk_amount,
+        ) for emp_id, r in bundle.results.items()}
     return {emp_id: WageResult(
         salary=r.result.total,
         milk=r.result.milk_amount,
@@ -248,6 +361,8 @@ def pay_header_text(bundle) -> str:
     text = (f'Новая модель: база {format_money(bundle.monthly_base)} руб., '
             f'рабочих дней {bundle.workdays}, H_base {bundle.base_day_hours} ч '
             f'(условия с {bundle.settings_eff}).')
+    if getattr(bundle, 'salary_mode', True) is False:
+        text += ' Режим без зарплаты: оклады обнулены, молоко сохранено.'
     if bundle.results:
         first = next(iter(bundle.results.values())).result
         text += (f' Ставки: день ~{format_money(first.rate_day)} руб., '

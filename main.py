@@ -145,6 +145,57 @@ def main():
     settlement_ids = [e for e in emp_ids if is_included_in_settlement(e)]
     settlement_set = set(settlement_ids)
 
+    # Этап 3: единый контекст периода — до анализа и правок (F01/F02/F05).
+    from core.payroll import PayrollError as _PayrollError
+    from core.pay_context import (
+        diagnose_roster_divergence as _diagnose_roster,
+        resolve_context as _resolve_context,
+        sqlite_excluded_map as _sqlite_excluded,
+    )
+    try:
+        pay_ctx = _resolve_context(args.pay_dir, year, month, salary_mode)
+    except _PayrollError as e:
+        print(f'ОШИБКА: справочник оплаты недоступен ({e}). Расчет прерван.')
+        sys.exit(1)
+    sqlite_excluded: dict = {}
+    if pay_ctx.mode == 'new':
+        print('Режим модели: новая (SQLite-условия действуют на месяц). Ошибки настройки фатальны.')
+        from core.config import EMPLOYEES as _DAT_STAFF
+        for w in _diagnose_roster(pay_ctx, _DAT_STAFF, data_array):
+            print(f'ВНИМАНИЕ (состав): {w}')
+        try:
+            sqlite_excluded = _sqlite_excluded(args.pay_dir, pay_ctx.month_start)
+        except _PayrollError as e:
+            print(f'ОШИБКА: справочник оплаты недоступен ({e}). Расчет прерван.')
+            sys.exit(1)
+        # До правок: отсутствие обязательного назначения — фатально, без silent fallback.
+        from core.pay_store import connect as _connect, get_assignment as _get_assign
+        try:
+            _con = _connect(args.pay_dir)
+            try:
+                _missing = []
+                for emp_id in settlement_ids:
+                    if emp_id in sqlite_excluded:
+                        continue
+                    if _get_assign(_con, emp_id, pay_ctx.month_start) is None:
+                        _missing.append(emp_id)
+            finally:
+                try:
+                    _con.close()
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f'ОШИБКА: справочник оплаты недоступен ({e}). Расчет прерван.')
+            sys.exit(1)
+        if _missing:
+            from core.data_array import get_name_employee as _nm
+            _names = ', '.join(f'{_nm(e) or e}' for e in _missing)
+            print(f'ОШИБКА: новая модель должна применяться, но нет назначения SQLite '
+                  f'на {pay_ctx.month_start} для: {_names}. Расчет прерван без fallback.')
+            sys.exit(1)
+    else:
+        print('Режим модели: legacy (действующих SQLite-условий на месяц нет).')
+
     from core.ui import (
         build_dashboard_rows,
         build_preview_rows,
@@ -171,7 +222,7 @@ def main():
 
     print_dashboard(
         build_dashboard_rows(data_array, get_all_employees_in_data(data_array), year, month,
-                             employees=_STAFF),
+                             employees=_STAFF, extra_excluded=sqlite_excluded or None),
         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
     )
 
@@ -191,16 +242,18 @@ def main():
     }
     work_time = {d: e for d, e in work_time.items() if e}
     summary, restructured = calculate_hours_per_month(work_time)
-    # Режим оплаты: новая модель при действующих общих условиях на месяц,
-    # иначе legacy-режим (старая база к старым месяцам не применяется).
-    from core.payroll import PayrollError, build_bundle, bundle_to_wages, new_regime_available
+    # Режим уже выбран до правок (pay_ctx): new — обязателен и фатален
+    # при ошибках настройки, legacy — старый адаптер. Silent fallback запрещён (F05).
+    from core.payroll import PayrollError, build_bundle, bundle_to_wages
     pay_bundle = None
-    if new_regime_available(args.pay_dir, year, month) is not None:
+    if pay_ctx.mode == 'new':
         try:
-            pay_bundle = build_bundle(data_array, work_time, summary, year, month, args.pay_dir)
+            pay_bundle = build_bundle(data_array, work_time, summary, year, month,
+                                      args.pay_dir, salary_mode=salary_mode)
         except PayrollError as e:
-            print(f'ВНИМАНИЕ: новая модель недоступна ({e}). Расчет в legacy-режиме.')
-            pay_bundle = None
+            print(f'ОШИБКА: новая модель должна применяться, но настройка ошибочна ({e}). '
+                  f'Расчет прерван без fallback в legacy.')
+            sys.exit(1)
     if pay_bundle is not None:
         wages = bundle_to_wages(pay_bundle)
         from core.ui import print_pay_details
@@ -220,7 +273,7 @@ def main():
         for emp_id in zero_rate:
             print(f'ВНИМАНИЕ: {get_name_employee(emp_id, _STAFF) or emp_id} — ставка 0 '
                   f'(нет в wage_rates.dat или неверный ключ -k). Оклад будет нулевым, только молоко.')
-    print_preview(build_preview_rows(summary, wages, employees=_STAFF))
+    print_preview(build_preview_rows(summary, wages, employees=_STAFF, bundle=pay_bundle))
 
     print_header('Отчеты')
     build_excel(data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle)
@@ -229,9 +282,12 @@ def main():
         if emp_id not in summary:
             print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
             continue
+        if pay_bundle is not None and emp_id not in pay_bundle.results:
+            print(f'Пропущен ID {emp_id}: исключён новой моделью (см. сводку причин).')
+            continue
         build_html(emp_id, data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle)
 
-    print_salary_report(build_preview_rows(summary, wages, employees=_STAFF),
+    print_salary_report(build_preview_rows(summary, wages, employees=_STAFF, bundle=pay_bundle),
                         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — зарплата к начислению')
 
     print_journal(get_journal())
