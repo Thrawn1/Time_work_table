@@ -204,7 +204,8 @@ def print_missed_day_card(name: str, missed_day: str) -> None:
 
 
 def build_start_info(file: str, year: int, month: int, rows_read: int,
-                     employees_total: int, session_state: str) -> dict:
+                     employees_total: int, session_state: str,
+                     output_dir: str = 'result', data_dir: str = 'data') -> dict:
     """Чистые данные стартового экрана. session_state: resumed|ignored|none|fresh."""
     labels = {
         'resumed': 'сессия восстановлена (--resume)',
@@ -220,16 +221,20 @@ def build_start_info(file: str, year: int, month: int, rows_read: int,
         'employees_total': employees_total,
         'session_state': session_state,
         'session_label': labels.get(session_state, session_state),
+        'output_dir': output_dir,
+        'data_dir': data_dir,
     }
 
 
 def print_start_screen(info: dict) -> None:
-    """Стартовый экран: источник, период, объем, сессия."""
+    """Стартовый экран: источник, период, объем, сессия, каталоги."""
     lines = (f"Файл: {info['file']}\n"
              f"Период: {info['month']:02d}.{info['year']}\n"
              f"Строк данных: {info['rows_read']}\n"
              f"Сотрудников в расчете: {info['employees_total']}\n"
-             f"Сессия: {info['session_label']}")
+             f"Сессия: {info['session_label']}\n"
+             f"Данные: {info.get('data_dir', 'data')}\n"
+             f"Результаты: {info.get('output_dir', 'result')}")
     if not HAS_RICH:
         print('=== Старт ===')
         print(lines)

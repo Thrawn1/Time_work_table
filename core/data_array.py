@@ -80,7 +80,7 @@ def is_settlement_allowed(emp_id: int) -> bool:
     return emp_id not in SETTLEMENT_EXCEPTIONS
 
 
-def exclusion_reason(emp_id: int) -> str:
+def exclusion_reason(emp_id: int, employees: dict | None = None) -> str:
     """Точная причина неучастия в начислениях (для дашборда/отчётов).
 
     Учитывает правила роли (напр. роль 0 «руководство — не участвует»)
@@ -88,7 +88,8 @@ def exclusion_reason(emp_id: int) -> str:
     """
     from core.roles import get_default_rule
 
-    emp = EMPLOYEES.get(emp_id)
+    staff = EMPLOYEES if employees is None else employees
+    emp = staff.get(emp_id)
     if emp is None:
         return 'нет в справочнике сотрудников'
     role_id = getattr(emp, 'role_id', None)

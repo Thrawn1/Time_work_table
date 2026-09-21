@@ -30,20 +30,86 @@ class TestStrTimedelta:
     def test_negative_30min(self):
         td = timedelta(minutes=-30)
         result = str_timedelta(td)
-        # -1800с -> -1ч +3599с? Текущий формат даёт '-1:30:00' через floor-деление.
-        # Проверяем именно возвращаемую строку, а не исходный timedelta.
-        assert result == '-1:30:00'
+        # Знак отдельно, magnitude по абсолютному значению.
+        assert result == '-00:30:00'
 
     def test_negative_1h30m(self):
         td = timedelta(hours=-1, minutes=-30)
         result = str_timedelta(td)
-        assert result == '-2:30:00'
+        assert result == '-01:30:00'
+
+    def test_negative_seconds(self):
+        assert str_timedelta(timedelta(seconds=-45)) == '-00:00:45'
+
+    def test_negative_complex(self):
+        assert str_timedelta(timedelta(hours=-10, minutes=-5, seconds=-7)) == '-10:05:07'
 
     def test_one_minute(self):
         assert str_timedelta(timedelta(minutes=1)) == '00:01:00'
 
     def test_seconds_only(self):
         assert str_timedelta(timedelta(seconds=45)) == '00:00:45'
+
+    # --- границы часов/минут/секунд ---
+    def test_second_boundaries(self):
+        assert str_timedelta(timedelta(seconds=59)) == '00:00:59'
+        assert str_timedelta(timedelta(seconds=60)) == '00:01:00'
+        assert str_timedelta(timedelta(seconds=3599)) == '00:59:59'
+        assert str_timedelta(timedelta(seconds=3600)) == '01:00:00'
+
+    def test_day_boundaries(self):
+        assert str_timedelta(timedelta(seconds=86399)) == '23:59:59'
+        assert str_timedelta(timedelta(seconds=86400)) == '24:00:00'
+
+    # --- компонент days у timedelta ---
+    def test_days_positive(self):
+        assert str_timedelta(timedelta(days=1)) == '24:00:00'
+
+    def test_days_complex(self):
+        # 2 сут + 3ч 4м 5с = 51:04:05
+        assert str_timedelta(timedelta(days=2, hours=3, minutes=4, seconds=5)) == '51:04:05'
+
+    def test_days_negative(self):
+        assert str_timedelta(timedelta(days=-1)) == '-24:00:00'
+
+    def test_days_negative_complex(self):
+        assert str_timedelta(timedelta(days=-2, hours=-3, minutes=-4, seconds=-5)) == '-51:04:05'
+
+    # --- микросекунды отбрасываются (int, не округление) ---
+    def test_microseconds_truncated_positive(self):
+        assert str_timedelta(timedelta(seconds=1, microseconds=900000)) == '00:00:01'
+        assert str_timedelta(timedelta(microseconds=999999)) == '00:00:00'
+
+    def test_microseconds_truncated_negative(self):
+        # int(-1.5) == -1 (усечение к нулю), не -2
+        assert str_timedelta(timedelta(seconds=-1, microseconds=-500000)) == '-00:00:01'
+
+    def test_negative_subsecond_has_no_minus(self):
+        # int(-0.0005) == 0 -> знака нет, фиксируем поведение
+        assert str_timedelta(timedelta(microseconds=-500)) == '00:00:00'
+
+    # --- большой негатив симметрично test_large ---
+    def test_large_negative(self):
+        assert str_timedelta(timedelta(hours=-100, minutes=-5, seconds=-59)) == '-100:05:59'
+
+    # --- свойства формата ---
+    def test_symmetry(self):
+        cases = [
+            timedelta(hours=8),
+            timedelta(hours=10, minutes=30, seconds=15),
+            timedelta(days=1, hours=2, minutes=3, seconds=4),
+            timedelta(seconds=45),
+            timedelta(hours=100, minutes=5, seconds=59),
+        ]
+        for td in cases:
+            assert str_timedelta(-td) == '-' + str_timedelta(td)
+
+    def test_format_shape(self):
+        import re
+        pattern = re.compile(r'^-?\d{2,}:\d{2}:\d{2}$')
+        for td in [timedelta(0), timedelta(seconds=5), timedelta(minutes=-7),
+                   timedelta(days=3), timedelta(days=-3)]:
+            assert pattern.match(str_timedelta(td)), str_timedelta(td)
 
 
 # --- calculate_hours_per_day ---

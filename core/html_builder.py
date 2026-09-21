@@ -16,12 +16,16 @@ def sanitize_filename_part(text: str) -> str:
 
 
 def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wages: dict,
-               employees: dict | None = None, bundle=None) -> str:
+               employees: dict | None = None, bundle=None,
+               output_dir: str | None = None) -> str:
     """Персональный отчет + (при bundle) прозрачный блок новой модели.
 
     bundle=None — legacy-режим без изменений. При bundle добавляется общий
     заголовок (база/D/ставки) и строка оснований именно этого сотрудника.
+    output_dir=None — текущий каталог (прежнее поведение); иначе файл
+    пишется в каталог (создаётся при отсутствии), возвращается полный путь.
     """
+    import os
     family = get_name_employee(emp_id, employees)
     daily_data = _build_daily_data(emp_id, time_table, work_time, employees)
     if not daily_data:
@@ -35,6 +39,9 @@ def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wa
     year_str = daily_data[0]['date'][:4]
     safe_family = sanitize_filename_part(family or f'ID_{emp_id}')
     file_name = f'{safe_family}_{emp_id}_{month_num}_{year_str}.html'
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        file_name = os.path.join(output_dir, file_name)
     pay_lines = _gen_pay_section(emp_id, bundle) if bundle is not None else []
     _write_html_file(file_name, daily_data, total_data, pay_lines)
     print(f'Файл готов: {file_name}')

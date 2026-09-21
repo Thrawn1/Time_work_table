@@ -1,59 +1,50 @@
-import argparse
+import os
 import sys
-from decimal import Decimal
-from os.path import exists
+from argparse import ArgumentParser, Namespace
+from os.path import exists, join as _join
 
-from core.config import load_config, set_secret_key
+from core.cli import build_parser, resolve_period, resolve_secret_key
+from core.cli import parse_secret_key as parse_secret_key  # совместимость прежнего API main
+from core.config import load_config, preserve_config, set_secret_key, set_data_dir, set_secret_file
 from core.file_parser import read_file_data
-from core.data_array import build_data_array, get_all_employees_in_data, get_employees_with_marks, is_included_in_settlement
+from core.data_array import (
+    build_data_array, get_all_employees_in_data, get_employees_with_marks, is_included_in_settlement,
+)
+from core.day_models import TimeTable
 from core.analysis import analyze_for_print, analyze_for_edit
-from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
+from core.calculations import calculate_hours_per_day, calculate_hours_per_month
+from core.payroll_service import calculate_payroll
 from core.excel_builder import build_excel
 from core.html_builder import build_html
 from core.constants import MONTHS_NAME_TO_RUSSIAN
-from core.session import load_session, session_exists, remove_session, backup_existing_session
+from core.session import (load_session, session_exists, remove_session,
+                          backup_existing_session, set_session_dir, adopt_cwd_session,
+                          preserve_session_paths)
 
 
-def parse_secret_key(key_input: str) -> tuple[Decimal, bool, str | None]:
-    """Разобрать -k. Возвращает (secret, salary_mode, warning|None).
-
-    salary_mode=False: режим без зарплаты (t/0/мусор) — оклад будет нулевым.
-    Ключ — Decimal (точное деление на 100, без binary-ошибки float).
-    """
-    if key_input == 't' or key_input == '0':
-        return Decimal('0.00'), False, None
-    if key_input.isdigit() and 2 < len(key_input) < 123:
-        return Decimal(key_input) / Decimal('100'), True, None
-    return Decimal('0.00'), False, (
-        f'ключ "{key_input}" не распознан (нужны только цифры, длина 3-122, '
-        'или t для режима без зарплаты)'
-    )
+def main(argv: list[str] | None = None) -> None:
+    """Точка входа; каждый запуск изолирован от предыдущих вызовов в процессе."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    with preserve_config(), preserve_session_paths():
+        _run(args, parser)
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description='Система расчета заработной платы и учета рабочего времени'
-    )
-    parser.add_argument('-f', '--file', default='1_attlog.dat', help='Файл данных')
-    parser.add_argument('-y', '--year', type=int, help='Год')
-    parser.add_argument('-m', '--month', type=int, help='Месяц (1-12)')
-    parser.add_argument('-k', '--key', default='0', help='Секретный ключ (или t для без зарплаты)')
-    parser.add_argument('--no-edit', action='store_true', help='Пропустить интерактивное редактирование')
-    parser.add_argument('--resume', action='store_true', help='Восстановить сохраненную сессию из temporary.pickle')
-    parser.add_argument('--include-empty', action='store_true',
-                        help='Включить в расчет сотрудников без единой отметки за месяц '
-                             '(действующий, но отсутствовал весь месяц: отпуск/прогул)')
-    parser.add_argument('--pay-dir', default='data/pay_directory.db',
-                        help='SQLite-справочник новой модели оплаты '
-                             '(нет файла/условий на месяц — legacy-режим)')
-    args = parser.parse_args()
+def _run(args: Namespace, parser: ArgumentParser) -> None:
+    os.makedirs(args.output_dir, exist_ok=True)
+    set_data_dir(args.data_dir)
+    set_session_dir(args.output_dir)
+    set_secret_file(_join(args.output_dir, '_secret_key.tmp'))
+    adopted = adopt_cwd_session()
+    if adopted:
+        print(f'Сессия перенесена из текущего каталога в {adopted} '
+              f'(теперь сессии живут в --output-dir).')
+    pay_dir = args.pay_dir or _join(args.data_dir, 'pay_directory.db')
 
     load_config()
 
     print('\n\t\tСистема расчета заработной платы и учета рабочего времени работников\n')
-    secret_key, salary_mode, key_warning = parse_secret_key(args.key)
-    if key_warning:
-        print(f'ВНИМАНИЕ: {key_warning}. Расчет в режиме БЕЗ зарплаты: оклад будет нулевым.')
+    secret_key, salary_mode = resolve_secret_key(args)
 
     set_secret_key(secret_key)
     if salary_mode:
@@ -64,50 +55,7 @@ def main():
     from core.analysis import clear_journal
     clear_journal()
 
-    pickle_path = 'temporary.pickle'
-    json_path = 'temporary.json'
-    session_state = 'none'
-    list_data: list[str] = []
-    if args.resume and (exists(json_path) or exists(pickle_path)):
-        data_array = load_session()
-        if data_array is None:
-            print('Не удалось восстановить сессию!')
-            sys.exit(1)
-        first_date = list(data_array.keys())[0]
-        year = int(first_date[:4])
-        month = int(first_date[5:7])
-        session_state = 'resumed'
-    else:
-        if not args.resume and session_exists():
-            saved = backup_existing_session()
-            if saved:
-                print(f'ВНИМАНИЕ: найден файл сессии. '
-                      f'Он сохранён отдельно как {saved} и будет проигнорирован. '
-                      f'Используйте --resume для восстановления.')
-            else:
-                print(f'ВНИМАНИЕ: найден файл сессии. '
-                      'Он будет проигнорирован. Используйте --resume для восстановления.')
-            session_state = 'ignored'
-        else:
-            session_state = 'fresh'
-        year = args.year or int(input('Введите год: '))
-        month = args.month or int(input('Введите месяц: '))
-        list_data = read_file_data(args.file, year, month)
-        if not list_data:
-            from os.path import join as _join
-            _missing = not exists(_join('data', args.file))
-            if _missing:
-                print('Нет данных для обработки!')
-                sys.exit(1)
-            if args.include_empty:
-                print('ВНИМАНИЕ: за выбранный месяц отметок нет — '
-                      'начинаем с пустой таблицы (--include-empty).')
-                data_array = {}
-            else:
-                print('Нет данных для обработки!')
-                sys.exit(1)
-        else:
-            data_array = build_data_array(list_data)
+    data_array, year, month, rows_read, session_state = _load_input(args, parser)
 
     print(f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} год')
 
@@ -138,10 +86,10 @@ def main():
     )
     from core.analysis import get_journal
 
-    rows_read = len(list_data) if list_data else sum(len(day) for day in data_array.values())
     print_start_screen(build_start_info(
         args.file if session_state != 'resumed' else '(сессия)',
         year, month, rows_read, len(settlement_ids), session_state,
+        output_dir=args.output_dir, data_dir=args.data_dir,
     ))
 
     print_header('Проверка')
@@ -170,52 +118,77 @@ def main():
         for date_key, emps in work_time_all.items()
     }
     work_time = {d: e for d, e in work_time.items() if e}
-    summary, restructured = calculate_hours_per_month(work_time)
-    # Режим оплаты: новая модель при действующих общих условиях на месяц,
-    # иначе legacy-режим (старая база к старым месяцам не применяется).
-    from core.payroll import PayrollError, build_bundle, bundle_to_wages, new_regime_available
-    pay_bundle = None
-    if new_regime_available(args.pay_dir, year, month) is not None:
-        try:
-            pay_bundle = build_bundle(data_array, work_time, summary, year, month, args.pay_dir)
-        except PayrollError as e:
-            print(f'ВНИМАНИЕ: новая модель недоступна ({e}). Расчет в legacy-режиме.')
-            pay_bundle = None
+    summary, _ = calculate_hours_per_month(work_time)
+    outcome = calculate_payroll(data_array, work_time, summary, year, month, pay_dir,
+                                salary_mode=salary_mode, employees=_STAFF)
+    wages, pay_bundle = outcome.wages, outcome.bundle
+    for warning in outcome.warnings:
+        print(f'ВНИМАНИЕ: {warning}')
     if pay_bundle is not None:
-        wages = bundle_to_wages(pay_bundle)
         from core.ui import print_pay_details
         print_pay_details(pay_bundle)
-        versions_file = f'payroll_versions_{year}_{month:02d}.json'
+        versions_file = _join(args.output_dir, f'payroll_versions_{year}_{month:02d}.json')
         pay_bundle.save_versions(versions_file)
         print(f'Версии условий и календарь сохранены: {versions_file}')
-    else:
-        from core.config import load_wage_rates as _load_rates
-        from core.data_array import get_name_employee as _get_name
-        # Одно чтение ставок за запуск: тот же dict идет в расчет и в предупреждения.
-        rates = _load_rates()
-        wages = calculate_wages(summary, rates=rates, employees=_STAFF)
-    from core.data_array import get_name_employee
-    if pay_bundle is None:
-        zero_rate = [e for e in summary if rates.get(e, 0) == 0]
-        for emp_id in zero_rate:
-            print(f'ВНИМАНИЕ: {get_name_employee(emp_id, _STAFF) or emp_id} — ставка 0 '
-                  f'(нет в wage_rates.dat или неверный ключ -k). Оклад будет нулевым, только молоко.')
-    print_preview(build_preview_rows(summary, wages, employees=_STAFF))
+    preview_rows = build_preview_rows(summary, wages, employees=_STAFF)
+    print_preview(preview_rows)
 
     print_header('Отчеты')
-    build_excel(data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle)
+    build_excel(data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle,
+                output_dir=args.output_dir)
 
     for emp_id in settlement_ids:
         if emp_id not in summary:
             print(f'Пропущен ID {emp_id}: нет данных расчета (роль не поддерживается?).')
             continue
-        build_html(emp_id, data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle)
+        build_html(emp_id, data_array, work_time, summary, wages, employees=_STAFF, bundle=pay_bundle,
+                   output_dir=args.output_dir)
 
-    print_salary_report(build_preview_rows(summary, wages, employees=_STAFF),
+    print_salary_report(preview_rows,
                         title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — зарплата к начислению')
 
     print_journal(get_journal())
     remove_session()
+
+
+def _load_input(args: Namespace, parser: ArgumentParser) -> tuple[TimeTable, int, int, int, str]:
+    """Импорт либо восстановление: таблица, период, число строк и состояние сессии."""
+    if args.resume:
+        if not session_exists():
+            parser.error('сохранённая сессия для --resume не найдена')
+        data_array = load_session()
+        if not data_array:
+            print('Не удалось восстановить сессию (файл пуст или повреждён)!')
+            sys.exit(1)
+        first_date = next(iter(data_array))
+        year, month = int(first_date[:4]), int(first_date[5:7])
+        rows_read = sum(len(day) for day in data_array.values())
+        return data_array, year, month, rows_read, 'resumed'
+
+    year, month = resolve_period(args, parser)
+    session_state = 'fresh'
+    if session_exists():
+        saved = backup_existing_session()
+        if saved:
+            print(f'ВНИМАНИЕ: найден файл сессии. '
+                  f'Он сохранён отдельно как {saved} и будет проигнорирован. '
+                  'Используйте --resume для восстановления.')
+        else:
+            print('ВНИМАНИЕ: найден файл сессии. '
+                  'Он будет проигнорирован. Используйте --resume для восстановления.')
+        session_state = 'ignored'
+
+    list_data = read_file_data(args.file, year, month, args.data_dir)
+    if list_data:
+        data_array = build_data_array(list_data)
+    elif args.include_empty and exists(_join(args.data_dir, args.file)):
+        print('ВНИМАНИЕ: за выбранный месяц отметок нет — '
+              'начинаем с пустой таблицы (--include-empty).')
+        data_array = {}
+    else:
+        print('Нет данных для обработки!')
+        sys.exit(1)
+    return data_array, year, month, len(list_data), session_state
 
 
 if __name__ == '__main__':

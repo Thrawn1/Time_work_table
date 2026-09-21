@@ -26,6 +26,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from core.constants import MILK_ALLOWANCE_PER_DAY
+from core.day_models import WageResult
 from core.money import as_decimal, timedelta_to_hours
 from core.pay_calc import PayInputs, PayResult, calculate_pay, seniority_rate_for_service
 from core.pay_calendar import working_days_in_month
@@ -75,6 +76,9 @@ class PayrollBundle:
         }
 
     def save_versions(self, path: str) -> str:
+        parent = Path(path).parent
+        if str(parent) not in ('', '.'):
+            parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(json.dumps(self.versions_snapshot(), ensure_ascii=False, indent=2),
                               encoding='utf-8')
         return path
@@ -101,9 +105,9 @@ def _service_years(hire_iso: str | None, on: date) -> Decimal | None:
 
 
 def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, month: int,
-                 db_path: str) -> PayrollBundle:
+                 db_path: str, employees: dict | None = None) -> PayrollBundle:
     """Собрать месячный пакет. Кидает PayrollError при неполной настройке."""
-    from core.analysis import _get_marks_and_missed
+    from core.analysis import search_missed_marks
     from core.data_array import exclusion_reason, get_name_employee
     from core.pay_store import (
         connect, get_assignment, get_pay_settings, get_role_rule, get_seniority_scale,
@@ -112,7 +116,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
     month_start = f'{year:04d}-{month:02d}-01'
     last_day = _calendar.monthrange(year, month)[1]
     month_end = f'{year:04d}-{month:02d}-{last_day:02d}'
-    first, last = date(year, month, 1), date(year, month, last_day)
+    first = date(year, month, 1)
 
     workdays = working_days_in_month(year, month)
     if workdays == 0:
@@ -142,7 +146,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                                    f'на {month_start}')
         saw_seniority_eligible = False
         for emp_id in summary:
-            reason = exclusion_reason(emp_id)
+            reason = exclusion_reason(emp_id, employees)
             if reason:
                 continue  # не участник — только дашборд
             if emp_id in exceptions:
@@ -184,8 +188,10 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
             data = summary[emp_id]
             vacation_days = getattr(data, 'vacation_days', data[2])
             truancy_days = getattr(data, 'truancy_days', data[3])
-            singles, _missed = _get_marks_and_missed(data_array, emp_id, year, month)
-            single_issue = bool(singles)
+            single_issue = (
+                rule.time_mode == TIME_ACTUAL and rule.check_single_mark
+                and bool(search_missed_marks(data_array, emp_id, year, month))
+            )
             hire_iso = emp_rows[emp_id]['hire_date'] if emp_id in emp_rows else None
             years = _service_years(hire_iso, first)
             if rule.seniority_eligible:
@@ -215,7 +221,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 milk_amount=milk,
             )
             bundle.results[emp_id] = PayEmployeeResult(
-                emp_id=emp_id, name=get_name_employee(emp_id) or f'ID {emp_id}',
+                emp_id=emp_id, name=get_name_employee(emp_id, employees) or f'ID {emp_id}',
                 rule=rule, inputs=inputs, result=calculate_pay(inputs),
             )
         if not scale and saw_seniority_eligible:
@@ -228,8 +234,6 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
 
 def bundle_to_wages(bundle: PayrollBundle) -> dict[int, WageResult]:
     """Отображение итога в WageResult — один результат для всех отчётов."""
-    from core.day_models import WageResult
-
     return {emp_id: WageResult(
         salary=r.result.total,
         milk=r.result.milk_amount,
