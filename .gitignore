@@ -19,6 +19,7 @@ temporary_*.json
 *.tmp
 payroll_versions_*.json
 data/pay_directory.db
+result/
 Time_table/
 Time_table.zip
 *.spec

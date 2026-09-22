@@ -63,7 +63,8 @@ class TestGitignore:
         text = _read('.gitignore')
         for needle in ('Time_table/', 'Time_table.zip', '*.spec',
                        'temporary_*.json', 'data/pay_directory.db',
-                       'payroll_versions_*.json', '_secret_key.tmp'):
+                       'payroll_versions_*.json', '_secret_key.tmp',
+                       'result/'):
             assert needle in text, needle
 
 
@@ -72,6 +73,8 @@ class TestReadme:
         text = _read('README.md')
         for needle in ('## Установка', '## Быстрый старт', '-k', '--resume',
                        'pay_directory.db', '60 000', '--pay-dir',
+                       '--output-dir', '--data-dir', 'скрыт',
+                       'getpass',
                        '## Сборка EXE', '## Данные и приватность',
                        '## Ограничения', 'temporary.json'):
             assert needle in text, needle

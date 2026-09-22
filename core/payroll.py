@@ -26,6 +26,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from core.constants import MILK_ALLOWANCE_PER_DAY
+from core.day_models import WageResult
 from core.money import as_decimal, timedelta_to_hours
 from core.pay_calc import PayInputs, PayResult, calculate_pay, seniority_rate_for_service
 from core.pay_calendar import working_days_in_month
@@ -76,6 +77,9 @@ class PayrollBundle:
         }
 
     def save_versions(self, path: str) -> str:
+        parent = Path(path).parent
+        if str(parent) not in ('', '.'):
+            parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(json.dumps(self.versions_snapshot(), ensure_ascii=False, indent=2),
                               encoding='utf-8')
         return path
@@ -166,7 +170,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
     employees — справочник для DAT-исключений/имён (F02-union): объединённый
     DAT+SQLite в new-режиме, иначе глобальный DAT (legacy-совместимость).
     """
-    from core.analysis import _get_marks_and_missed
+    from core.analysis import search_missed_marks
     from core.data_array import exclusion_reason, get_name_employee
     from core.pay_store import (
         connect, get_assignment, get_pay_settings, get_role_rule, get_seniority_scale,
@@ -175,7 +179,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
     month_start = f'{year:04d}-{month:02d}-01'
     last_day = _calendar.monthrange(year, month)[1]
     month_end = f'{year:04d}-{month:02d}-{last_day:02d}'
-    first, last = date(year, month, 1), date(year, month, last_day)
+    first = date(year, month, 1)
 
     workdays = working_days_in_month(year, month)
     if workdays == 0:
@@ -276,8 +280,10 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
             data = summary[emp_id]
             vacation_days = getattr(data, 'vacation_days', data[2])
             truancy_days = getattr(data, 'truancy_days', data[3])
-            singles, _missed = _get_marks_and_missed(data_array, emp_id, year, month)
-            single_issue = bool(singles)
+            single_issue = (
+                rule.time_mode == TIME_ACTUAL and rule.check_single_mark
+                and bool(search_missed_marks(data_array, emp_id, year, month))
+            )
             hire_iso = emp_rows[emp_id]['hire_date'] if emp_id in emp_rows else None
             years = _service_years(hire_iso, first)
             if rule.seniority_eligible:

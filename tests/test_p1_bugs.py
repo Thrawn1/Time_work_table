@@ -392,7 +392,7 @@ class TestP1_6_SessionReplacesParams:
         }
         calls = {'read_file': [], 'build_array': 0}
 
-        def mock_read_file(file_name, year, month):
+        def mock_read_file(file_name, year, month, *a):
             calls['read_file'].append((file_name, year, month))
             return ['        101\t2026-07-06 08:00:00\t1\t255\t1\t0']
 
@@ -412,14 +412,15 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
                             lambda wt, *a, **k: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
                                                 (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
-        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
+        monkeypatch.setattr('core.payroll_service.calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
         monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
         monkeypatch.setattr('core.file_parser.load_holidays', lambda year: [])
         monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
 
-        monkeypatch.setattr(sys, 'argv', ['main.py', '-y', '2026', '-m', '7', '-k', 't', '--no-edit'])
+        monkeypatch.setattr(sys, 'argv', ['main.py', '-y', '2026', '-m', '7', '-k', 't', '--no-edit',
+                                           '--output-dir', 'out'])
         main_mod.main()
 
         # Новый расчёт использовал июльский файл, а не июньскую сессию
@@ -427,8 +428,8 @@ class TestP1_6_SessionReplacesParams:
         assert calls['build_array'] == 1
         out = capsys.readouterr().out
         assert 'проигнорирован' in out or 'сохран' in out
-        # Июньская сессия не потеряна: лежит в бэкапе
-        backups = list(tmp_path.glob('temporary_*.json')) + list(tmp_path.glob('temporary_backup_*.json'))
+        # Июньская сессия не потеряна: лежит в бэкапе каталога результатов
+        backups = list((tmp_path / 'out').glob('temporary_*.json')) + list((tmp_path / 'out').glob('temporary_backup_*.json'))
         assert backups, 'бэкап игнорируемой сессии должен остаться'
         from core.session import load_session as _load
         restored = _load(str(backups[0]))
@@ -465,15 +466,17 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
                             lambda wt, *a, **k: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
                                                 (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
-        monkeypatch.setattr(main_mod, 'calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
+        monkeypatch.setattr('core.payroll_service.calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
         monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
         monkeypatch.setattr('core.file_parser.load_holidays', lambda year: [])
         monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
 
-        monkeypatch.setattr(sys, 'argv', ['main.py', '--resume', '-k', 't', '--no-edit'])
+        monkeypatch.setattr(sys, 'argv', ['main.py', '--resume', '-k', 't', '--no-edit',
+                                           '--output-dir', 'out'])
         main_mod.main()
 
         # После успешного resumed-расчёта рабочая сессия удалена
         assert not session_exists()
+        assert not (tmp_path / 'out' / 'temporary.json').exists()

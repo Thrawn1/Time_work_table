@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from functools import lru_cache
 from os import path
-from core.config import HOLIDAYS_FILE, POSTPONED_DAYS_FILE
+from core import config as _config
 
 DAT_LINE_PATTERN = re.compile(
     r'^\s*(\d+)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})(?:\s|$)'
@@ -25,9 +25,14 @@ def parse_attlog_line(line: str) -> tuple[int, datetime] | None:
     return emp_id, dt
 
 
-def read_file_data_with_errors(file_name: str, year: int, month: int) -> tuple[list[str], list[str]]:
-    """Импорт с диагностикой: (строки за период, ошибки с номерами строк)."""
-    file_path = path.join('data', file_name)
+def read_file_data_with_errors(file_name: str, year: int, month: int,
+                                data_dir: str | None = None) -> tuple[list[str], list[str]]:
+    """Импорт с диагностикой: (строки за период, ошибки с номерами строк).
+
+    data_dir=None — каталог из core.config (CLI: --data-dir, дефолт 'data').
+    """
+    base = data_dir if data_dir is not None else _config.DATA_DIR
+    file_path = path.join(base, file_name)
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -67,30 +72,25 @@ def read_file_data_with_errors(file_name: str, year: int, month: int) -> tuple[l
     return result, errors
 
 
-def read_file_data(file_name: str, year: int, month: int) -> list[str]:
-    result, _ = read_file_data_with_errors(file_name, year, month)
+def read_file_data(file_name: str, year: int, month: int,
+                   data_dir: str | None = None) -> list[str]:
+    result, _ = read_file_data_with_errors(file_name, year, month, data_dir)
     return result
 
 
-@lru_cache(maxsize=8)
 def load_holidays(year: int) -> tuple[str, ...]:
-    holidays = []
-    with open(HOLIDAYS_FILE, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split('.')
-            day_str = parts[0]
-            month_str = parts[1]
-            holidays.append(f'{year}-{month_str}-{day_str}')
-    return tuple(holidays)
+    return _load_calendar_dates(path.abspath(_config.HOLIDAYS_FILE), year)
 
 
-@lru_cache(maxsize=8)
 def load_postponed_days(year: int) -> tuple[str, ...]:
-    postponed = []
-    with open(POSTPONED_DAYS_FILE, 'r', encoding='utf-8') as f:
+    return _load_calendar_dates(path.abspath(_config.POSTPONED_DAYS_FILE), year)
+
+
+@lru_cache(maxsize=16)
+def _load_calendar_dates(file_path: str, year: int) -> tuple[str, ...]:
+    """Общий загрузчик: кэш привязан к году и абсолютному пути справочника."""
+    dates = []
+    with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -98,17 +98,13 @@ def load_postponed_days(year: int) -> tuple[str, ...]:
             parts = line.split('.')
             day_str = parts[0]
             month_str = parts[1]
-            postponed.append(f'{year}-{month_str}-{day_str}')
-    return tuple(postponed)
+            dates.append(f'{year:04d}-{month_str}-{day_str}')
+    return tuple(dates)
 
 
 def clear_calendar_cache() -> None:
-    """Сбросить кэш календаря (смена года/тесты с подменой файлов)."""
-    for fn in (load_holidays, load_postponed_days):
-        try:
-            fn.cache_clear()  # type: ignore[attr-defined]
-        except AttributeError:
-            pass  # подменено моком без кэша — нечего сбрасывать
+    """Сбросить кэш после изменения файлов или между запусками приложения."""
+    _load_calendar_dates.cache_clear()
 
 
 def definition_of_working_day(date_str: str) -> tuple[str, str]:

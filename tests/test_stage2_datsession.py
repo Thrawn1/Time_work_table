@@ -114,7 +114,8 @@ class TestSessionBackup:
         except SystemExit as e:
             assert e.code == 1
         assert 'run' not in called
-        assert os.path.exists('temporary.json')
+        # Дефолтный --output-dir='result': сессия при старте перенесена туда (adopt_cwd_session).
+        assert os.path.exists(os.path.join('result', 'temporary.json'))
 
     def test_repeated_backups_do_not_overwrite(self, tmp_path, monkeypatch):
         """F09: повторные бэкапы одного периода не перезаписывают друг друга."""

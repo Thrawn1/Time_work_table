@@ -45,31 +45,21 @@ class TestExplicitDeps:
 
 class TestCalendarCache:
     def test_single_read_per_year(self, monkeypatch):
+        import builtins
         from core import file_parser
-        file_parser.clear_calendar_cache()
-        calls = {'h': 0, 'p': 0}
-        real_h = file_parser.load_holidays.__wrapped__
-        real_p = file_parser.load_postponed_days.__wrapped__
+        calls = []
+        real_open = builtins.open
 
-        def cnt_h(year):
-            calls['h'] += 1
-            return real_h(year)
+        def counted_open(file, *args, **kwargs):
+            calls.append(file)
+            return real_open(file, *args, **kwargs)
 
-        def cnt_p(year):
-            calls['p'] += 1
-            return real_p(year)
-
-        monkeypatch.setattr(file_parser.load_holidays, 'cache_clear',
-                            file_parser.load_holidays.cache_clear)
-        # Подменяем wrapped-доступ через monkeypatch объекта кэша невозможен напрямую,
-        # поэтому проверяем проще: повторные вызовы дают один и тот же объект (кэш).
-        file_parser.clear_calendar_cache()
-        a = file_parser.load_holidays(2026)
-        b = file_parser.load_holidays(2026)
-        assert a is b
-        c = file_parser.load_postponed_days(2026)
-        d = file_parser.load_postponed_days(2026)
-        assert c is d
+        monkeypatch.setattr(builtins, 'open', counted_open)
+        for _ in range(3):
+            file_parser.load_holidays(2026)
+            file_parser.load_postponed_days(2026)
+        assert len(calls) == 2
+        assert len(set(calls)) == 2
 
     def test_definition_uses_cache(self, mock_holidays_jan2026, mock_postponed_empty):
         from core.file_parser import clear_calendar_cache, definition_of_working_day

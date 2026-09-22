@@ -136,10 +136,12 @@ def _sum_truancy(entry):
 
 def str_timedelta(td: timedelta) -> str:
     total = int(td.total_seconds())
+    sign = '-' if total < 0 else ''
+    total = abs(total)
     h = total // 3600
-    m = (total - h * 3600) // 60
-    s = total - h * 3600 - m * 60
-    return f'{h:02d}:{m:02d}:{s:02d}'
+    m = (total % 3600) // 60
+    s = total % 60
+    return f'{sign}{h:02d}:{m:02d}:{s:02d}'
 
 
 def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None) -> WorkTime:
@@ -153,15 +155,7 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
     employees=None — fallback к глобалу core.config.EMPLOYEES ради старых
     тестов; новый код передает справочник явно.
     """
-    # NOTE: читаем модуль-глобал на каждый вызов (не кэшируем в аргументе),
-    # чтобы monkeypatch в тестах продолжал работать.
-    import core.calculations as _self
-
-    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
-    if staff is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
+    staff = EMPLOYEES if employees is None else employees
     result: WorkTime = {}
     for date_key, employees_in_day in time_table.items():
         result[date_key] = {}
@@ -286,76 +280,41 @@ def calculate_wages(summary: Summary, rates: dict | None = None,
     Квантование только финального итога (промежуточное — полная точность).
 
     rates/employees=None — fallback к глобалам ради старых тестов; новый код
-    (main.py) грузит ставки один раз после set_secret_key и передает явно.
+    (payroll_service) грузит ставки один раз после set_secret_key и передает явно.
     """
-    import core.calculations as _self
-
     if rates is None:
         rates = load_wage_rates()
-    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
-    if staff is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
+    staff = EMPLOYEES if employees is None else employees
     result: Wages = {}
     for emp_id, data in summary.items():
         emp = staff.get(emp_id)
-        if emp is None:
+        if emp is None or emp.role_id not in (1, 2, 3, 4):
             continue
         work_days, overtime_wd, undertime_wd = _sum_work(data)
         hol_days, _overtime_we, _undertime_we, hol_worked = _sum_holiday(data)
         vacation_days = _sum_vacation(data)
-        if emp.role_id in (1, 4):
-            rate = _rate_for(rates, emp_id)
+        rate = _rate_for(rates, emp_id)
+        if emp.role_id == 3:
+            salary = rate * (work_days + hol_days)
+            milk = Decimal('0.00')
+        else:
             hourly = _hourly_fraction(rate)
-            work_weekdays = work_days
             overtime_h = timedelta_to_hours(overtime_wd)
             undertime_h = timedelta_to_hours(undertime_wd)
-            work_holidays = hol_days
-            # overtime/undertime выходных в оплату не входят отдельно:
-            # total_worked_holiday уже содержит весь факт (иначе 2.25x / минусы).
             worked_holiday_h = timedelta_to_hours(hol_worked)
-            money_for_milk = MILK_ALLOWANCE_PER_DAY * (work_weekdays + work_holidays)
-            salary_weekdays = (rate * work_weekdays
-                               + OVERTIME_WEEKDAY_MULTIPLIER * hourly * overtime_h
+            # Legacy-кладовщик: без оплаты сверхурочных, выходные по одинарной.
+            weekday_coef = Decimal('0') if emp.role_id == 2 else OVERTIME_WEEKDAY_MULTIPLIER
+            weekend_coef = Decimal('1') if emp.role_id == 2 else OVERTIME_WEEKEND_MULTIPLIER
+            salary_weekdays = (rate * work_days + weekday_coef * hourly * overtime_h
                                - hourly * undertime_h)
-            salary_weekends = OVERTIME_WEEKEND_MULTIPLIER * hourly * worked_holiday_h
-            salary_vacation = rate * vacation_days
-            total = quantize_money(salary_weekdays + salary_weekends + salary_vacation)
-            total_with_milk = quantize_money(total + money_for_milk)
-            result[emp_id] = WageResult(
-                salary=total,
-                milk=quantize_money(money_for_milk),
-                total_with_milk=total_with_milk,
-            )
-        elif emp.role_id == 2:
-            # Кладовщик: как обычный работник, но без оплаты переработок.
-            # Будни: ставка за дни минус недоработка (сверхурочные не плюсуются).
-            # Выходные: факт по одинарной ставке (без 1.5x). Отпуск/молоко — как у роли 1.
-            rate = _rate_for(rates, emp_id)
-            hourly = _hourly_fraction(rate)
-            work_weekdays = work_days
-            undertime_h = timedelta_to_hours(undertime_wd)
-            work_holidays = hol_days
-            worked_holiday_h = timedelta_to_hours(hol_worked)
-            money_for_milk = MILK_ALLOWANCE_PER_DAY * (work_weekdays + work_holidays)
-            salary_weekdays = (rate * work_weekdays
-                               - hourly * undertime_h)
-            salary_weekends = hourly * worked_holiday_h
-            salary_vacation = rate * vacation_days
-            total = quantize_money(salary_weekdays + salary_weekends + salary_vacation)
-            total_with_milk = quantize_money(total + money_for_milk)
-            result[emp_id] = WageResult(
-                salary=total,
-                milk=quantize_money(money_for_milk),
-                total_with_milk=total_with_milk,
-            )
-        elif emp.role_id == 3:
-            rate = _rate_for(rates, emp_id)
-            total = quantize_money(rate * (work_days + hol_days))
-            result[emp_id] = WageResult(
-                salary=total, milk=Decimal('0.00'), total_with_milk=total,
-            )
+            # Весь факт выходного уже здесь: отклонения повторно не оплачиваются.
+            salary_weekends = weekend_coef * hourly * worked_holiday_h
+            salary = salary_weekdays + salary_weekends + rate * vacation_days
+            milk = MILK_ALLOWANCE_PER_DAY * (work_days + hol_days)
+        total = quantize_money(salary)
+        result[emp_id] = WageResult(
+            salary=total,
+            milk=quantize_money(milk),
+            total_with_milk=quantize_money(total + milk),
+        )
     return result
-
-

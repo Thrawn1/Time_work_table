@@ -17,12 +17,16 @@ def _set_cell(ws, row: int, column: int, value, border=None):
 
 
 def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
-                employees: dict | None = None, bundle=None) -> str:
+                employees: dict | None = None, bundle=None,
+                output_dir: str | None = None) -> str:
     """Общая таблица + (при bundle) прозрачный блок новой модели.
 
     bundle=None — legacy-режим без изменений. При bundle блок новой модели
     только отображает bundle.results (собственных формул нет).
+    output_dir=None — текущий каталог (прежнее поведение); иначе файл
+    пишется в каталог (создаётся при отсутствии), возвращается полный путь.
     """
+    import os
     if not time_table:
         print('Нет данных для общей таблицы, Excel не создан.')
         return ''
@@ -39,6 +43,9 @@ def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
     month_num = int(list_dates[0][5:7])
     year_str = list_dates[0][:4]
     file_name = f'{MONTHS_NAME_TO_RUSSIAN[month_num]}_{year_str}.xlsx'
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+        file_name = os.path.join(output_dir, file_name)
     wb.save(file_name)
     print(f'Файл {file_name} c общей таблицей сформирован')
     return file_name

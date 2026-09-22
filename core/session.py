@@ -17,6 +17,7 @@
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime
 
 SESSION_VERSION = 1
@@ -30,6 +31,58 @@ class SessionBackupError(RuntimeError):
     Выбрасывается вместо молчаливого None, чтобы вызывающий код
     не начинал новый расчёт поверх несохранённой сессии.
     """
+
+
+@contextmanager
+def preserve_session_paths():
+    """Восстановить каталог сессии после запуска, в том числе при исключении."""
+    global SESSION_FILE, SESSION_FILE_LEGACY
+    saved = SESSION_FILE, SESSION_FILE_LEGACY
+    try:
+        yield
+    finally:
+        SESSION_FILE, SESSION_FILE_LEGACY = saved
+
+
+def set_session_dir(dir_path: str) -> None:
+    """Переключить каталог сессии (CLI: --output-dir, дефолт 'result').
+
+    Имена файлов сохраняются, меняется только каталог. Создаёт каталог,
+    чтобы атомарная запись через mkstemp не падала. Дефолтные относительные
+    пути сохраняют совместимость с тестами (monkeypatch.chdir).
+    """
+    global SESSION_FILE, SESSION_FILE_LEGACY
+    os.makedirs(dir_path, exist_ok=True)
+    SESSION_FILE = os.path.join(dir_path, os.path.basename(SESSION_FILE))
+    SESSION_FILE_LEGACY = os.path.join(dir_path, os.path.basename(SESSION_FILE_LEGACY))
+
+
+def session_dir() -> str:
+    """Каталог текущей сессии ('.' для дефолтных cwd-путей)."""
+    return os.path.dirname(os.path.abspath(SESSION_FILE))
+
+
+def adopt_cwd_session() -> str | None:
+    """Разовый переезд: перенести сессию из cwd в session_dir, если там её нет.
+
+    Возвращает путь перенесённого файла или None. Нужен на переходный
+    период, пока у пользователей лежат temporary.json в корне.
+    """
+    target_dir = session_dir()
+    if os.path.abspath(target_dir) == os.path.abspath(os.getcwd()):
+        return None
+    moved: str | None = None
+    for name in ('temporary.json', 'temporary.pickle'):
+        src = os.path.join(os.getcwd(), name)
+        dst = os.path.join(target_dir, name)
+        if os.path.exists(src) and not os.path.exists(dst):
+            try:
+                os.replace(src, dst)
+            except OSError:
+                continue
+            if moved is None:
+                moved = dst
+    return moved
 
 # Единый набор статусов — источник в core.day_models (значения те же).
 from core.day_models import ALLOWED_TAGS as _ALLOWED
@@ -196,13 +249,17 @@ def validate_session_raw(raw: dict) -> tuple[dict | None, list[str]]:
     return time_table, []
 
 
-def load_session(path: str = SESSION_FILE) -> dict | None:
+def load_session(path: str | None = None) -> dict | None:
     """
     Загрузка сессии из JSON.
 
+    path=None — текущий SESSION_FILE (учитывает set_session_dir;
+    дефолт в сигнатуре не привязан, чтобы смена каталога работала).
     Возвращает time_table dict или None при ошибке.
     Старые pickle-файлы не загружаются — выводится предупреждение.
     """
+    if path is None:
+        path = SESSION_FILE
     if not os.path.exists(path):
         return None
 
@@ -300,21 +357,24 @@ def backup_existing_session() -> str | None:
 
     if not os.path.exists(SESSION_FILE) and not os.path.exists(SESSION_FILE_LEGACY):
         return None
+    sdir = session_dir()
     backup: str | None = None
     if os.path.exists(SESSION_FILE):
         period = _peek_period(SESSION_FILE)
         if period is not None:
-            candidate = f'temporary_{period[0]:04d}_{period[1]:02d}.json'
+            candidate = os.path.join(sdir, f'temporary_{period[0]:04d}_{period[1]:02d}.json')
             if os.path.abspath(candidate) == os.path.abspath(SESSION_FILE):
-                candidate = (f'temporary_backup_{period[0]:04d}_{period[1]:02d}_'
-                             f'{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
+                candidate = os.path.join(
+                    sdir, f'temporary_backup_{period[0]:04d}_{period[1]:02d}_'
+                          f'{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
             else:
                 candidate = _unique_backup_path(candidate)
             backup = candidate
         else:
-            backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
+            backup = os.path.join(sdir, f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
             while os.path.exists(backup):
-                backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
+                backup = os.path.join(
+                    sdir, f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.json')
         try:
             os.replace(SESSION_FILE, backup)
         except OSError as e:
@@ -323,9 +383,11 @@ def backup_existing_session() -> str | None:
         if backup is not None:
             legacy_backup = _unique_backup_path(backup + '.pickle_legacy')
         else:
-            legacy_backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.pickle')
+            legacy_backup = os.path.join(
+                sdir, f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.pickle')
             while os.path.exists(legacy_backup):
-                legacy_backup = (f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.pickle')
+                legacy_backup = os.path.join(
+                    sdir, f'temporary_backup_{time.time_ns()}_{uuid.uuid4().hex[:8]}.pickle')
         try:
             os.replace(SESSION_FILE_LEGACY, legacy_backup)
             if backup is None:
