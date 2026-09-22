@@ -86,8 +86,14 @@ class TestDailyWagesDecimal:
         # decrypted = '425.867508' (запись '867508.425' наоборот); key = 1.00
         with open('data/variable_data_for_app/wage_rates.dat', 'w', encoding='utf-8') as f:
             f.write('101 [867508.425]\n')
-        with open('_secret_key.tmp', 'w', encoding='utf-8') as f:
-            f.write('1.00')
-        rates = config.load_wage_rates()
-        assert rates[101] == Decimal('425.87')
-        assert isinstance(rates[101], Decimal)
+        # Этап 7 (F18): ключ — только в памяти, файл не создаётся.
+        config.clear_secret_key()
+        config.set_secret_key('1.00')
+        try:
+            rates = config.load_wage_rates()
+            assert rates[101] == Decimal('425.87')
+            assert isinstance(rates[101], Decimal)
+            assert not os.path.exists('_secret_key.tmp')
+            assert not os.path.exists(config.LEGACY_SECRET_FILE)
+        finally:
+            config.clear_secret_key()

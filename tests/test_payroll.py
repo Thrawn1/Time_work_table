@@ -18,10 +18,12 @@ YEAR, MONTH = 2026, 10
 
 @pytest.fixture
 def paydb(tmp_path):
+    from tests.synth_data import write_synth_dat_dir
+
     db = str(tmp_path / 'pay.db')
     con = init_db(db)
     seed_defaults(con)
-    migrate_from_dat(con)
+    migrate_from_dat(con, write_synth_dat_dir(tmp_path / 'synth'))
     con.close()
     return db
 
@@ -152,21 +154,33 @@ def test_seniority_from_hire_date(paydb, emp_patch):
     assert res.total == Decimal('71500.00')
 
 
-def test_midmonth_assignment_warns(paydb, emp_patch):
+def test_midmonth_assignment_refused(paydb, emp_patch):
+    """R06/spec §6: смена назначения внутри месяца — отказ, а не предупреждение."""
+    import sqlite3
+
     from core.pay_store import DEFAULT_TRANSITION
     con = connect(paydb)
     con.execute("UPDATE assignments SET effective_to='2026-10-15'"
                 " WHERE emp_id=1 AND effective_from=?", (DEFAULT_TRANSITION,))
     con.commit()
+    # Mid-month запись создаём напрямую SQL (штатный API её запрещает).
     con.execute("INSERT INTO assignments(emp_id, role_id, effective_from, effective_to)"
                 " VALUES(1, 2, '2026-10-16', NULL)")
     con.commit()
     con.close()
     data_array, work_time = make_tables()
     summary = make_summary(work_time)
-    bundle = build_bundle(data_array, work_time, summary, YEAR, MONTH, paydb)
-    assert any('внутри месяца' in w for w in bundle.warnings)
-    assert bundle.results[1].rule.role_id == 1  # правило на 1-е число
+    with pytest.raises(PayrollError, match='внутри месяца'):
+        build_bundle(data_array, work_time, summary, YEAR, MONTH, paydb)
+    # Штатный API mid-month отклоняет сразу.
+    from core.pay_store import assign_role, connect as _connect
+
+    con2 = _connect(paydb)
+    try:
+        with pytest.raises(ValueError, match='1-го числа'):
+            assign_role(con2, 1, 2, '2026-10-16')
+    finally:
+        con2.close()
 
 
 def test_empty_scale_warns_and_zeroes_bonus(paydb, emp_patch):

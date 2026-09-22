@@ -1,5 +1,5 @@
-# Dev/build-зависимости. Проверено: pytest 9.1.1 (Python 3.14.6).
-# PyInstaller зафиксирован только снизу: перед релизом проверяйте сборку на Windows.
+# Dev/build-зависимости. Проверено: pytest 9.1.1 (Python 3.14.6, R21).
+# PyInstaller: перед релизом проверяйте сборку на Windows в чистом окружении.
 -r requirements.txt
-pytest>=8.0
-pyinstaller>=6.0
+pytest==9.1.1
+pyinstaller==6.15.0

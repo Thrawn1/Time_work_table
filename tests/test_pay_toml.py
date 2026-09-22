@@ -11,10 +11,12 @@ from core.pay_toml import export_toml, generate_template, import_toml
 
 
 def _seeded_db(tmp_path):
+    from tests.synth_data import write_synth_dat_dir
+
     db = str(tmp_path / 'pay.db')
     con = init_db(db)
     seed_defaults(con)
-    migrate_from_dat(con)
+    migrate_from_dat(con, write_synth_dat_dir(tmp_path / 'synth'))
     con.close()
     return db
 

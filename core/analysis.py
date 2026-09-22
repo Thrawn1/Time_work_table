@@ -5,21 +5,57 @@ from core.constants import WEEKDAYS_NAME, MONTHS_NAME_GENITIVE, MONTHS_NAME_TO_R
 from core.file_parser import definition_of_working_day
 
 
-def _get_marks_and_missed(time_table: dict, emp_id: int, year: int, month: int) -> tuple:
-    from core.roles import TIME_ACTUAL, get_default_rule
+def _resolve_staff(employees: dict | None):
+    """Действующий штат: переданный объединённый (R01) или DAT-глобал (legacy)."""
+    if employees is not None:
+        return employees
+    return EMPLOYEES
 
-    role = EMPLOYEES.get(emp_id)
+
+def _resolve_rule(role_id, rules_by_role: dict | None):
+    """Действующее правило роли: SQLite-версия (R01–R02) или DAT-умолчание."""
+    from core.roles import get_default_rule
+
+    if rules_by_role is not None and role_id in rules_by_role:
+        return rules_by_role[role_id]
+    if rules_by_role is not None:
+        return None
+    try:
+        return get_default_rule(role_id)
+    except KeyError:
+        return None
+
+
+def _get_marks_and_missed(time_table: dict, emp_id: int, year: int, month: int,
+                          employees: dict | None = None,
+                          rules_by_role: dict | None = None) -> tuple:
+    """Проверка отметок по действующему штату и правилам (R01–R02).
+
+    employees — объединённый DAT+SQLite штат (SQLite-only сотрудник виден,
+    его одиночная отметка блокирует бонус). rules_by_role — действующие
+    SQLite-правила; без них — DAT-умолчание (legacy). Отсутствие карточки
+    или правила — «нет ошибок» здесь не возвращается молча: вызывающий код
+    (дашборд/бонус) получает 0,0 только для действительно неучаствующих;
+    неизвестный сотрудник без карточки — тоже 0,0, но дашборд покажет
+    «нет в справочнике» через exclusion_reason.
+    """
+    from core.roles import TIME_ACTUAL
+
+    staff = _resolve_staff(employees)
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
     if role is None:
         return 0, 0
-    try:
-        rule = get_default_rule(role.role_id)
-    except KeyError:
+    rule = _resolve_rule(getattr(role, 'role_id', None), rules_by_role)
+    if rule is None:
         return 0, 0
     if not rule.participates:
         return 0, 0
     if rule.time_mode == TIME_ACTUAL and rule.check_single_mark:
-        return search_missed_marks(time_table, emp_id, year, month), search_missed_work_days(time_table, emp_id, year, month)
-    return 0, search_missed_work_days(time_table, emp_id, year, month)
+        return (search_missed_marks(time_table, emp_id, year, month),
+                search_missed_work_days(time_table, emp_id, year, month,
+                                        employees=staff))
+    return 0, search_missed_work_days(time_table, emp_id, year, month,
+                                      employees=staff)
 
 
 def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:
@@ -40,8 +76,10 @@ def generation_of_lists_of_days(year: int, month: int) -> list[list[str]]:
     return [work_days, non_work_days]
 
 
-def search_missed_work_days(time_table: dict, emp_id: int, year: int, month: int) -> list[str] | int:
-    if emp_id not in EMPLOYEES:
+def search_missed_work_days(time_table: dict, emp_id: int, year: int, month: int,
+                            employees: dict | None = None) -> list[str] | int:
+    staff = _resolve_staff(employees)
+    if emp_id not in staff:
         return 0
     month_days = generation_of_lists_of_days(year, month)
     employee_dates = [d for d in time_table if emp_id in time_table[d]]
@@ -133,17 +171,15 @@ def format_range(days: list[str]) -> str:
 
 
 def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int,
-                      employees: dict | None = None) -> None:
-    if employees is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
-    else:
-        staff = employees
+                      employees: dict | None = None,
+                      rules_by_role: dict | None = None) -> None:
+    staff = _resolve_staff(employees)
     role = staff.get(emp_id) if hasattr(staff, 'get') else None
     if role is None:
         return
-    list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
+    list_marks, list_missed = _get_marks_and_missed(
+        time_table, emp_id, year, month,
+        employees=staff, rules_by_role=rules_by_role)
     name = f'{role.last_name} {role.first_name}'.strip()
     if list_marks != 0 or list_missed != 0:
         print('--------------------------------------------------------------------------------------------------------------------------------------------')
@@ -222,6 +258,33 @@ def _set_mark(time_table: dict, date_key: str, emp_id: int, marks: list) -> None
         time_table[date_key] = {emp_id: marks}
 
 
+def _preview_mark(current, choice: str, dt_write):
+    """Будущее значение отметки для журнала ДО записи (R09)."""
+    from copy import copy
+
+    try:
+        preview = copy(current)
+    except Exception:
+        return current
+    if choice == '1':
+        try:
+            if hasattr(preview, 'come'):
+                preview.come = dt_write
+            else:
+                preview[1] = dt_write
+        except (IndexError, TypeError):
+            pass
+    else:
+        try:
+            if hasattr(preview, 'go'):
+                preview.go = dt_write
+            else:
+                preview[0] = dt_write
+        except (IndexError, TypeError):
+            pass
+    return preview
+
+
 _JOURNAL: list[dict] = []
 
 
@@ -233,12 +296,28 @@ def _marks_repr(marks: list) -> str:
         return str(marks)
 
 
+JOURNAL_REQUIRED_FIELDS = frozenset(
+    {'ts', 'emp_id', 'name', 'date', 'action', 'before', 'after'})
+
+
+def validate_journal_entry(entry: object) -> list[str]:
+    """Проверить запись журнала: словарь с обязательными полями (R09)."""
+    if not isinstance(entry, dict):
+        return ['запись журнала должна быть словарём']
+    missing = [f for f in sorted(JOURNAL_REQUIRED_FIELDS) if f not in entry]
+    if missing:
+        return [f'в записи журнала нет полей: {", ".join(missing)}']
+    return []
+
+
 def record_edit(emp_id: int, date_key: str, action: str,
-                before: list | None, after: list, randomized: bool = False) -> None:
-    """Записать правку в журнал запуска."""
-    role = EMPLOYEES.get(emp_id)
+                before: list | None, after: list, randomized: bool = False,
+                employees: dict | None = None, dates: list[str] | None = None) -> None:
+    """Записать правку в журнал запуска (R09: структурированный набор дат)."""
+    staff = _resolve_staff(employees)
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
     name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
-    _JOURNAL.append({
+    entry: dict = {
         'ts': datetime.now().isoformat(timespec='seconds'),
         'emp_id': emp_id,
         'name': name,
@@ -247,7 +326,10 @@ def record_edit(emp_id: int, date_key: str, action: str,
         'before': _marks_repr(before) if before is not None else '—',
         'after': _marks_repr(after),
         'randomized': bool(randomized),
-    })
+    }
+    if dates is not None:
+        entry['dates'] = list(dates)
+    _JOURNAL.append(entry)
 
 
 def get_journal() -> list[dict]:
@@ -260,9 +342,15 @@ def clear_journal() -> None:
     _JOURNAL.clear()
 
 
+def restore_journal(entries: list[dict]) -> None:
+    """Восстановить журнал из сессии при --resume (F08): замена содержимого."""
+    _JOURNAL.clear()
+    _JOURNAL.extend([dict(e) for e in entries if isinstance(e, dict)])
+
+
 def _save_session(time_table: dict) -> None:
     from core.session import save_session
-    save_session(time_table)
+    save_session(time_table, journal=list(_JOURNAL))
 
 
 def _dt(day: str, t: str) -> datetime:
@@ -314,11 +402,20 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
     if not _confirm_save(preview):
         ui.info('Не подтверждено. Введите заново или 0 для пропуска.')
         return False
+    # R09: запись журнала — ДО атомарного сохранения, по каждому дню отдельно.
+    for day in days:
+        record_edit(emp_id, day, action, None,
+                    DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag=TAG_WORK),
+                    randomized=randomized)
     for day in days:
         _set_mark(time_table, day, emp_id, DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag=TAG_WORK))
-    _save_session(time_table)
+    try:
+        _save_session(time_table)
+    except BaseException:
+        # Откат журнала при ошибке записи: отметки и журнал описывают один набор.
+        del _JOURNAL[-len(days):]
+        raise
     ui.info(f'\nДанные за {date_ref} введены\n')
-    record_edit(emp_id, date_ref, action, None, DayMark(go=dt_e0, come=dt_b0, tag=TAG_WORK), randomized=randomized)
     return True
 
 
@@ -330,30 +427,34 @@ def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
     if not _confirm_save(confirm_q):
         return False
     mark_of = _dt_vac if tag == TAG_VACATION else _dt_truancy
+    # R09: журнал до сохранения, точные даты и значения до/после по каждому дню.
+    for day in days:
+        mark = mark_of(day)
+        record_edit(emp_id, day, action, None, DayMark(go=mark, come=mark, tag=tag))
     for day in days:
         mark = mark_of(day)
         _set_mark(time_table, day, emp_id, DayMark(go=mark, come=mark, tag=tag))
-    _save_session(time_table)
-    mark0 = mark_of(days[0])
-    record_edit(emp_id, date_ref, action, None, DayMark(go=mark0, come=mark0, tag=tag))
+    try:
+        _save_session(time_table)
+    except BaseException:
+        del _JOURNAL[-len(days):]
+        raise
     return True
 
 
 def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
-                     employees: dict | None = None) -> None:
+                     employees: dict | None = None,
+                     rules_by_role: dict | None = None) -> None:
     from sys import stderr
     from core import ui
 
-    if employees is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
-    else:
-        staff = employees
+    staff = _resolve_staff(employees)
     role = staff.get(emp_id) if hasattr(staff, 'get') else None
     if role is None:
         return
-    list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
+    list_marks, list_missed = _get_marks_and_missed(
+        time_table, emp_id, year, month,
+        employees=staff, rules_by_role=rules_by_role)
     name = f'{role.last_name} {role.first_name}'.strip()
     if list_marks != 0:
         print(f"ПРЕДУПРЕЖДЕНИЕ! {name} имеет только одну отметку в рабочем дне!", file=stderr)
@@ -390,14 +491,22 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
                     if randomized:
                         preview += ' (часть времени дополнена случайно — проверьте!)'
                     if _confirm_save(preview):
+                        # R09: журнал до сохранения; откат при ошибке записи.
+                        record_edit(emp_id, date_key, 'одиночная метка',
+                                    before_snapshot,
+                                    _preview_mark(time_table[date_key][emp_id],
+                                                  choice, dt_write),
+                                    randomized=bool(randomized),
+                                    employees=_resolve_staff(employees))
                         if choice == '1':
                             _set_mark_come(time_table[date_key][emp_id], dt_write)
                         else:
                             _set_mark_go(time_table[date_key][emp_id], dt_write)
-                        _save_session(time_table)
-                        record_edit(emp_id, date_key, 'одиночная метка',
-                                    before_snapshot, time_table[date_key][emp_id],
-                                    randomized=bool(randomized))
+                        try:
+                            _save_session(time_table)
+                        except BaseException:
+                            del _JOURNAL[-1:]
+                            raise
                         ui.info(f'Ввод данных об отметки подтвержден! {dt_write}')
                         break
                     ui.info('Не подтверждено. Введите снова или 0 для пропуска.')

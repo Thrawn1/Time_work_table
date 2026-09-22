@@ -79,32 +79,110 @@ def read_file_data(file_name: str, year: int, month: int,
 
 
 def load_holidays(year: int) -> tuple[str, ...]:
-    return _load_calendar_dates(path.abspath(_config.HOLIDAYS_FILE), year)
+    return tuple(_load_calendar_file(path.abspath(_config.HOLIDAYS_FILE), year))
 
 
 def load_postponed_days(year: int) -> tuple[str, ...]:
-    return _load_calendar_dates(path.abspath(_config.POSTPONED_DAYS_FILE), year)
+    return tuple(_load_calendar_file(path.abspath(_config.POSTPONED_DAYS_FILE), year))
+
+
+def _parse_calendar_line(line: str, lineno: int, source: str) -> tuple[str, str, str | None]:
+    """Разобрать 'ДД.ММ' или 'ГГГГ-ММ-ДД' (R16).
+
+    Возвращает (day_str, month_str, year_str|None): year None — запись ДД.ММ
+    для любого года (наследие, ненадёжно для переносов); иначе конкретный год.
+    R16: комбинация дня и месяца проверяется календарём (31.02 отклоняется),
+    а не только диапазонами по отдельности.
+    """
+    import calendar as _cal
+
+    text = line.strip()
+    if '-' in text and len(text.strip()) >= 8:
+        # Полная дата ГГГГ-ММ-ДД (R16): привязана к году.
+        try:
+            y_s, m_s, d_s = [p.strip() for p in text.split('-')]
+            y, m, d = int(y_s), int(m_s), int(d_s)
+            _cal.monthrange(y, m)  # проверка месяца
+            if not 1 <= d <= _cal.monthrange(y, m)[1]:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise ValueError(
+                f'{source}:{lineno}: нужен формат "ДД.ММ" или "ГГГГ-ММ-ДД" '
+                f'с существующей датой: {line.strip()!r}') from None
+        return f'{d:02d}', f'{m:02d}', f'{y:04d}'
+    parts = text.split('.')
+    if len(parts) != 2:
+        raise ValueError(
+            f'{source}:{lineno}: нужен формат "ДД.ММ": {line.strip()!r}')
+    day_raw, month_raw = parts[0].strip(), parts[1].strip()
+    if not day_raw.isdigit() or not month_raw.isdigit():
+        raise ValueError(
+            f'{source}:{lineno}: день/месяц должны быть числами "ДД.ММ": {line.strip()!r}')
+    day, month = int(day_raw), int(month_raw)
+    if not 1 <= month <= 12:
+        raise ValueError(
+            f'{source}:{lineno}: месяц {month} вне 1..12: {line.strip()!r}')
+    # R16: 31.02 и подобные отклоняются (проверка по невисокосному + високосному
+    # невозможна без года — отклоняем заведомо невозможные: >29.02, 31.04/06/09/11).
+    import calendar as _cal2
+
+    max_day = 29 if (day == 29 and month == 2) else _cal2.monthrange(2024, month)[1]
+    # 2024 високосный: февраль 29 допустим как ДД.ММ (год подставится позже
+    # и перепроверится); остальные месяцы — по реальной длине.
+    if not 1 <= day <= max_day:
+        raise ValueError(
+            f'{source}:{lineno}: невозможная дата {line.strip()!r} '
+            f'(календарная проверка)')
+    return f'{day:02d}', f'{month:02d}', None
 
 
 @lru_cache(maxsize=16)
-def _load_calendar_dates(file_path: str, year: int) -> tuple[str, ...]:
-    """Общий загрузчик: кэш привязан к году и абсолютному пути справочника."""
-    dates = []
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line:
+def _load_calendar_file(source: str, year: int) -> list[str]:
+    """Прочитать календарный файл с диагностикой строк (F19/R16).
+
+    Поддерживает 'ДД.ММ' (любой год, наследие) и 'ГГГГ-ММ-ДД' (только свой год).
+    Невозможные даты отклоняются с файлом и строкой. Кэш привязан к
+    абсолютному пути и году — при смене каталога (set_data_dir) не путается
+    со старыми данными без явного clear_calendar_cache().
+    """
+    import calendar as _cal
+
+    dates: list[str] = []
+    with open(source, 'r', encoding='utf-8-sig') as f:
+        for lineno, raw in enumerate(f, 1):
+            if not raw.strip():
                 continue
-            parts = line.split('.')
-            day_str = parts[0]
-            month_str = parts[1]
-            dates.append(f'{year:04d}-{month_str}-{day_str}')
-    return tuple(dates)
+            day_str, month_str, year_str = _parse_calendar_line(raw, lineno, source)
+            if year_str is not None and int(year_str) != int(year):
+                continue
+            month, day = int(month_str), int(day_str)
+            try:
+                if not 1 <= day <= _cal.monthrange(int(year), month)[1]:
+                    raise ValueError
+            except ValueError:
+                raise ValueError(
+                    f'{source}:{lineno}: {raw.strip()!r} — нет такой даты '
+                    f'в {year} году') from None
+            dates.append(f'{year}-{month_str}-{day_str}')
+    return dates
+
+
+def find_calendar_conflicts(year: int) -> list[str]:
+    """Пересечения праздника и перенесённого рабочего дня (R16).
+
+    Разрешались неявным приоритетом праздника — теперь явная диагностика.
+    """
+    try:
+        holidays = set(load_holidays(year))
+        postponed = set(load_postponed_days(year))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return []
+    return sorted(holidays & postponed)
 
 
 def clear_calendar_cache() -> None:
     """Сбросить кэш после изменения файлов или между запусками приложения."""
-    _load_calendar_dates.cache_clear()
+    _load_calendar_file.cache_clear()
 
 
 def definition_of_working_day(date_str: str) -> tuple[str, str]:

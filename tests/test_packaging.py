@@ -57,6 +57,18 @@ class TestBuildScript:
         assert '-Force' in text
         assert '--clean' in text
 
+    def test_python_param_drives_build(self):
+        """R21: выбранный интерпретатор выполняет установку и сборку."""
+        text = _read('generation_exe.ps1')
+        assert '-m pip install' in text
+        assert '-m PyInstaller' in text
+
+    def test_pay_admin_entry_point(self):
+        """R21: EXE-поставка управляет справочником (PayAdmin)."""
+        text = _read('generation_exe.ps1')
+        assert 'PayAdmin' in text
+        assert 'core/pay_cli.py' in text
+
 
 class TestGitignore:
     def test_artifacts_ignored(self):

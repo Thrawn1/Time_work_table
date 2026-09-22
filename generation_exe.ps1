@@ -52,35 +52,41 @@ foreach ($stale in @('.\Time_table', '.\Time_table.zip', '.\build', '.\dist', '.
   }
 }
 
-# 1. Interpreter.
-& $Python --version
-Assert-LastExitCode 'check Python'
-
-# 2. Environment: .venv when present, system interpreter otherwise.
-$VenvActivate = '.\.venv\Scripts\Activate.ps1'
-if (Test-Path -LiteralPath $VenvActivate) {
-  . $VenvActivate
+# 1. Interpreter (R21): параметр $Python действительно определяет сборку.
+# .venv при наличии имеет приоритет — его python используется для -m pip/-m PyInstaller.
+$VenvPython = '.\.venv\Scripts\python.exe'
+if (Test-Path -LiteralPath $VenvPython) {
+  $PythonExe = $VenvPython
+  Write-Host "INFO: using .venv interpreter: $PythonExe"
 } else {
+  $PythonExe = $Python
   Write-Host 'INFO: .venv not found, using system Python.'
 }
-$PipCmd = 'pip'
+& $PythonExe --version
+Assert-LastExitCode 'check Python'
 
-# 3. Dependencies (runtime + builder), see requirements*.txt for versions.
-& $PipCmd install -r requirements.txt
+# 2. Dependencies (runtime + builder) тем же интерпретатором, см. requirements*.txt.
+& $PythonExe -m pip install -r requirements.txt
 Assert-LastExitCode 'pip install requirements.txt'
-& $PipCmd install $PyInstallerPin
+& $PythonExe -m pip install $PyInstallerPin
 Assert-LastExitCode "pip install $PyInstallerPin"
 
-# 4. Build.
-& pyinstaller --onefile --clean --name Time_table main.py
-Assert-LastExitCode 'pyinstaller'
+# 3. Build: основная точка входа + администрирование справочников (R21).
+& $PythonExe -m PyInstaller --onefile --clean --name Time_table main.py
+Assert-LastExitCode 'pyinstaller Time_table'
 if (-not (Test-Path -LiteralPath '.\dist\Time_table.exe')) {
   throw 'Expected file .\dist\Time_table.exe was not created. Build stopped.'
 }
+& $PythonExe -m PyInstaller --onefile --clean --name PayAdmin core/pay_cli.py
+Assert-LastExitCode 'pyinstaller PayAdmin'
+if (-not (Test-Path -LiteralPath '.\dist\PayAdmin.exe')) {
+  throw 'Expected file .\dist\PayAdmin.exe was not created. Build stopped.'
+}
 
-# 5. Bundle: allowlist instead of wildcard-copying the working folder.
+# 4. Bundle: allowlist instead of wildcard-copying the working folder.
 New-Item -ItemType Directory -Path '.\Time_table' | Out-Null
 Copy-Item -LiteralPath '.\dist\Time_table.exe' -Destination '.\Time_table\Time_table.exe'
+Copy-Item -LiteralPath '.\dist\PayAdmin.exe' -Destination '.\Time_table\PayAdmin.exe'
 New-Item -ItemType Directory -Path '.\Time_table\data' | Out-Null
 New-Item -ItemType Directory -Path '.\Time_table\data\variable_data_for_app' | Out-Null
 $SafeFiles = @(

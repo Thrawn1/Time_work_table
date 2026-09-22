@@ -10,7 +10,12 @@ KEY_REQUIREMENTS = 'нужны только цифры 0–9, длина 3–122
 
 
 def parse_secret_key(key_input: str) -> tuple[Decimal, bool, str | None]:
-    """Вернуть (ключ, режим зарплаты, диагностика без значения ключа)."""
+    """Вернуть (ключ, режим зарплаты, диагностика без значения ключа).
+
+    Диапазон длины ключа (3-122) сам по себе не гарантирует, что ключ×ставка
+    квантуется в Decimal(28) — при переполнении load_wage_rates даёт
+    ConfigError с файлом и строкой, а не роняет расчёт InvalidOperation.
+    """
     if key_input in ('t', '0'):
         return Decimal('0.00'), False, None
     if key_input.isascii() and key_input.isdecimal() and 3 <= len(key_input) <= 122:
@@ -78,9 +83,9 @@ def _year(value: str) -> int:
     try:
         year = int(value)
     except ValueError:
-        raise argparse.ArgumentTypeError('год должен быть целым числом от 1 до 9999') from None
-    if not 1 <= year <= 9999:
-        raise argparse.ArgumentTypeError('год должен быть от 1 до 9999')
+        raise argparse.ArgumentTypeError('год должен быть целым числом от 1900 до 2100') from None
+    if not 1900 <= year <= 2100:
+        raise argparse.ArgumentTypeError('год должен быть от 1900 до 2100')
     return year
 
 
@@ -92,6 +97,21 @@ def _month(value: str) -> int:
     if not 1 <= month <= 12:
         raise argparse.ArgumentTypeError('месяц должен быть от 1 до 12')
     return month
+
+
+def validate_period(year: int | None, month: int | None) -> tuple[int, int]:
+    """Проверить год/месяц с понятной диагностикой (F19).
+
+    Возвращает (year, month). Ошибка — ValueError с текстом для вызывающего
+    кода (напр. периода, восстановленного из сессии, а не только ввода).
+    """
+    if year is None or month is None:
+        raise ValueError('нужны год и месяц (например, -y 2026 -m 7)')
+    if not 1900 <= year <= 2100:
+        raise ValueError(f'год {year} вне поддерживаемого 1900..2100')
+    if not 1 <= month <= 12:
+        raise ValueError(f'месяц {month} вне 1..12')
+    return year, month
 
 
 def resolve_period(args: argparse.Namespace, parser: argparse.ArgumentParser) -> tuple[int, int]:
@@ -114,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
         description='Система расчета заработной платы и учета рабочего времени'
     )
     parser.add_argument('-f', '--file', default='1_attlog.dat', help='Файл данных')
-    parser.add_argument('-y', '--year', type=_year, help='Год (1–9999)')
+    parser.add_argument('-y', '--year', type=_year, help='Год (1900–2100)')
     parser.add_argument('-m', '--month', type=_month, help='Месяц (1–12)')
     parser.add_argument('-k', '--key', default=None,
                         help='Секретный ключ (или t для без зарплаты). '
@@ -122,7 +142,9 @@ def build_parser() -> argparse.ArgumentParser:
                              'вне терминала — режим без зарплаты')
     parser.add_argument('--no-edit', action='store_true', help='Пропустить интерактивное редактирование')
     parser.add_argument('--resume', action='store_true',
-                        help='Восстановить сохраненную сессию из temporary.json')
+                        help='Восстановить сохраненную сессию из temporary.json '
+                             '(журнал правок восстанавливается; старый '
+                             'temporary.pickle не поддерживается)')
     parser.add_argument('--include-empty', action='store_true',
                         help='Включить в расчет сотрудников без единой отметки за месяц '
                              '(действующий, но отсутствовал весь месяц: отпуск/прогул)')

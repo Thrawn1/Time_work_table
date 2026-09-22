@@ -20,9 +20,37 @@ import tempfile
 from contextlib import contextmanager
 from datetime import datetime
 
-SESSION_VERSION = 1
+SESSION_VERSION = 2
 SESSION_FILE = 'temporary.json'
 SESSION_FILE_LEGACY = 'temporary.pickle'
+
+#: Контекст текущего запуска для --resume (R08): задаёт main до правок,
+#: _save_session подхватывает его автоматически.
+_SESSION_CONTEXT: dict | None = None
+
+
+def set_session_context(ctx: dict | None) -> None:
+    """Запомнить контекст запуска (db_path, salary_mode, mode, календарь...)."""
+    global _SESSION_CONTEXT
+    _SESSION_CONTEXT = dict(ctx) if ctx else None
+
+
+def get_session_context(path: str | None = None) -> dict | None:
+    """Прочитать сохранённый контекст сессии (R08). None — нет/не читается.
+
+    path=None — текущий SESSION_FILE (учитывает set_session_dir).
+    """
+    if path is None:
+        path = SESSION_FILE
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    ctx = raw.get('context')
+    return dict(ctx) if isinstance(ctx, dict) else None
 
 
 class SessionBackupError(RuntimeError):
@@ -105,12 +133,25 @@ def _infer_period(time_table: dict) -> dict | None:
         return None
 
 
-def save_session(time_table: dict, year: int | None = None, month: int | None = None) -> None:
-    """Атомарная запись сессии: temp-файл + os.replace."""
+def save_session(time_table: dict, year: int | None = None, month: int | None = None,
+                 journal: list[dict] | None = None,
+                 context: dict | None = None) -> None:
+    """Атомарная запись сессии: temp-файл + os.replace.
+
+    Журнал правок сохраняется вместе с отметками, чтобы пережить --resume (F08).
+    R08: сохраняется контекст запуска (источники, модель, участники, календарь,
+    версии условий) — секретный ключ вне файла. R09: журнал пишется тем же
+    снимком, что и отметки (вызывающий код записывает правку до save).
+    """
+    eff_context = dict(context) if context is not None else (
+        dict(_SESSION_CONTEXT) if _SESSION_CONTEXT else None)
     data = {
         'version': SESSION_VERSION,
         'entries': {},
+        'journal': list(journal) if journal else [],
     }
+    if eff_context is not None:
+        data['context'] = eff_context
     if year is not None and month is not None:
         data['period'] = {'year': int(year), 'month': int(month)}
     else:
@@ -148,14 +189,35 @@ def validate_session_raw(raw: dict) -> tuple[dict | None, list[str]]:
 
     Строгая проверка: любая ошибка делает восстановление невозможным
     (возвращается None + список ошибок), вместо молчаливого частичного расчёта.
+    Журнал правок (`journal`) необязателен; если есть — должен быть списком
+    словарей, иначе сессия отклоняется.
     """
     errors: list[str] = []
     if not isinstance(raw, dict):
         return None, ['корень сессии должен быть объектом']
     if 'version' not in raw or 'entries' not in raw:
         return None, ['отсутствуют обязательные поля version/entries']
-    if raw['version'] != SESSION_VERSION:
+    if raw['version'] not in (1, SESSION_VERSION):
         return None, [f"версия сессии {raw.get('version')} не совпадает с ожидаемой {SESSION_VERSION}"]
+    if 'journal' in raw:
+        journal = raw['journal']
+        if not isinstance(journal, list) or any(not isinstance(e, dict) for e in journal):
+            return None, ['поле journal должно быть списком словарей']
+        # R09: обязательные поля записей — до отчётов, а не KeyError при выводе.
+        from core.analysis import JOURNAL_REQUIRED_FIELDS
+
+        for idx, entry in enumerate(journal):
+            if not isinstance(entry, dict):
+                errors.append(f'journal[#{idx}]: запись должна быть словарём')
+                continue
+            missing = [f for f in sorted(JOURNAL_REQUIRED_FIELDS) if f not in entry]
+            if missing:
+                errors.append(
+                    f'journal[#{idx}]: нет обязательных полей: {", ".join(missing)}')
+    if 'context' in raw and raw['context'] is not None and not isinstance(raw['context'], dict):
+        errors.append('поле context должно быть объектом')
+    if errors:
+        return None, errors
     entries = raw['entries']
     if not isinstance(entries, dict):
         return None, ['поле entries должно быть объектом {дата: {id: метки}}']
@@ -282,6 +344,42 @@ def load_session(path: str | None = None) -> dict | None:
             print(f'  - {err}')
         return None
     return time_table
+
+
+def load_session_with_journal(path: str | None = None) -> tuple[dict | None, list[dict]]:
+    """Загрузка сессии с журналом правок: (time_table|None, journal).
+
+    При ошибке чтения/валидации — (None, []), диагностика уже напечатана.
+    Контекст (R08) читается отдельно через get_session_context().
+    path=None — текущий SESSION_FILE (учитывает set_session_dir).
+    """
+    if path is None:
+        path = SESSION_FILE
+    table = load_session(path)
+    if table is None:
+        return None, []
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return table, []
+    journal = raw.get('journal', []) if isinstance(raw, dict) else []
+    if not isinstance(journal, list):
+        return table, []
+    return table, [e for e in journal if isinstance(e, dict)]
+
+
+def load_session_full(path: str | None = None) -> tuple[dict | None, list[dict], dict | None]:
+    """Полная загрузка: (time_table|None, journal, context|None) (R08).
+
+    path=None — текущий SESSION_FILE (учитывает set_session_dir).
+    """
+    if path is None:
+        path = SESSION_FILE
+    table, journal = load_session_with_journal(path)
+    if table is None:
+        return None, [], None
+    return table, journal, get_session_context(path)
 
 
 def session_exists() -> bool:

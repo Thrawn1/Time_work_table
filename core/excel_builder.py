@@ -16,32 +16,69 @@ def _set_cell(ws, row: int, column: int, value, border=None):
     return cell
 
 
+def _set_time_cell(ws, row: int, column: int, value, border=None):
+    """Время суток прихода/ухода: формат hh:mm:ss (R20)."""
+    cell = ws.cell(column=column, row=row, value=value)
+    if border is not None:
+        cell.border = border
+    cell.number_format = 'hh:mm:ss'
+    return cell
+
+
+def _set_duration_cell(ws, row: int, column: int, value, border=None):
+    """Накопленная длительность: [h]:mm:ss, часы не оборачиваются через 24 (R20)."""
+    cell = ws.cell(column=column, row=row, value=value)
+    if border is not None:
+        cell.border = border
+    cell.number_format = '[h]:mm:ss'
+    return cell
+
+
+def _set_money_cell(ws, row: int, column: int, value, border=None):
+    cell = ws.cell(column=column, row=row, value=value)
+    if border is not None:
+        cell.border = border
+    cell.number_format = '0.00'
+    return cell
+
+
 def build_excel(time_table: dict, work_time: dict, summary: dict, wages: dict,
                 employees: dict | None = None, bundle=None,
-                output_dir: str | None = None) -> str:
+                output_dir: str | None = None,
+                year: int | None = None, month: int | None = None) -> str:
     """Общая таблица + (при bundle) прозрачный блок новой модели.
 
     bundle=None — legacy-режим без изменений. При bundle блок новой модели
     только отображает bundle.results (собственных формул нет).
     output_dir=None — текущий каталог (прежнее поведение); иначе файл
     пишется в каталог (создаётся при отсутствии), возвращается полный путь.
+    R03: все блоки строятся по окончательному составу (bundle.results при
+    bundle, иначе единый фильтр is_included_in_settlement с тем же справочником);
+    повторной фильтрации по DAT-глобалам нет. R07: пустой месяц с участниками
+    даёт нулевые блоки, а не отсутствие файла (year/month для имени обязательны).
     """
     import os
-    if not time_table:
+    if not time_table and not summary:
         print('Нет данных для общей таблицы, Excel не создан.')
         return ''
     wb = Workbook()
     ws = wb.active
     _setup_columns(ws)
     _write_header(ws)
-    last_detail_row = _write_data_rows(ws, time_table, work_time, employees)
+    last_detail_row = _write_data_rows(ws, time_table, work_time, employees, bundle=bundle)
     next_row = _write_summary_block(ws, work_time, summary, wages, employees, bundle=bundle)
     if bundle is not None:
         _write_pay_block(ws, next_row, bundle)
     ws.auto_filter.ref = f'A1:G{max(last_detail_row, 1)}'
-    list_dates = sorted(time_table.keys())
-    month_num = int(list_dates[0][5:7])
-    year_str = list_dates[0][:4]
+    if time_table:
+        list_dates = sorted(time_table.keys())
+        month_num = int(list_dates[0][5:7])
+        year_str = list_dates[0][:4]
+    elif year is not None and month is not None:
+        month_num, year_str = int(month), f'{int(year):04d}'
+    else:
+        print('Нет данных для общей таблицы, Excel не создан.')
+        return ''
     file_name = f'{MONTHS_NAME_TO_RUSSIAN[month_num]}_{year_str}.xlsx'
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
@@ -76,15 +113,23 @@ def _write_header(ws) -> None:
 
 
 def _write_data_rows(ws, time_table: dict, work_time: dict,
-                      employees: dict | None = None) -> int:
-    """Записать детализацию. Возвращает последнюю строку детализации (>=1)."""
+                      employees: dict | None = None, bundle=None) -> int:
+    """Записать детализацию. Возвращает последнюю строку детализации (>=1).
+
+    R03: состав — bundle.results при bundle (SQLite-only есть везде,
+    SQLite-исключённого нет нигде, включая строки отпуска/прогула);
+    иначе единый фильтр с тем же справочником, что и расчёт.
+    """
     from core.day_models import ATTENDANCE_TAGS, TAG_TRUANCY, TAG_VACATION
 
     border = _make_border()
     count = 2
     for date_key in sorted(time_table.keys()):
         for emp_id in time_table[date_key]:
-            if not is_included_in_settlement(emp_id):
+            if bundle is not None:
+                if emp_id not in bundle.results:
+                    continue
+            elif not is_included_in_settlement(emp_id, employees):
                 continue
             marks = time_table[date_key][emp_id]
             tag = getattr(marks, 'tag', marks[2])
@@ -95,14 +140,15 @@ def _write_data_rows(ws, time_table: dict, work_time: dict,
                 _set_cell(ws, count, 2, date_key, border)
                 come = getattr(marks, 'come', marks[1])
                 go = getattr(marks, 'go', marks[0])
-                ws.cell(column=3, row=count, value=come.time()).border = border
-                ws.cell(column=4, row=count, value=go.time()).border = border
+                _set_time_cell(ws, count, 3, come.time(), border)
+                _set_time_cell(ws, count, 4, go.time(), border)
                 wd = work_time[date_key][emp_id]
                 worked = getattr(wd, 'worked', wd[1])
                 delta = getattr(wd, 'delta', wd[0])
                 overtime_tag = getattr(wd, 'overtime_tag', wd[2])
-                ws.cell(column=5, row=count, value=worked).border = border
-                ws.cell(column=7, row=count, value=delta).border = border
+                # Дневные длительности < 24 ч — формат суток допустим.
+                _set_time_cell(ws, count, 5, worked, border)
+                _set_time_cell(ws, count, 7, delta, border)
                 _set_cell(ws, count, 6, overtime_tag, border)
                 count += 1
             elif tag in (TAG_VACATION, TAG_TRUANCY):
@@ -140,9 +186,10 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
         ws.cell(column=i, row=count, value=topic).border = border
     count += 1
     for emp_id in summary:
-        if not is_included_in_settlement(emp_id):
-            continue
-        if bundle is not None and emp_id not in bundle.results:
+        if bundle is not None:
+            if emp_id not in bundle.results:
+                continue
+        elif not is_included_in_settlement(emp_id, employees):
             continue
         _set_cell(ws, count, 8, get_name_employee(emp_id, employees), border)
         entry = summary[emp_id]
@@ -150,11 +197,12 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
         holiday = getattr(entry, 'holiday', entry[1])
         ws.cell(column=9, row=count, value=getattr(work, 'days', work[0])).border = border
         ws.cell(column=9, row=count).alignment = Alignment(horizontal='center')
-        ws.cell(column=10, row=count, value=getattr(work, 'overtime', work[1])).border = border
-        ws.cell(column=11, row=count, value=getattr(work, 'undertime', work[2])).border = border
+        # R20: месячные длительности — [h]:mm:ss (30 ч → 30:00:00, а не 06:00:00).
+        _set_duration_cell(ws, count, 10, getattr(work, 'overtime', work[1]), border)
+        _set_duration_cell(ws, count, 11, getattr(work, 'undertime', work[2]), border)
         ws.cell(column=12, row=count, value=getattr(holiday, 'days', holiday[0])).border = border
         ws.cell(column=12, row=count).alignment = Alignment(horizontal='center')
-        ws.cell(column=13, row=count, value=getattr(holiday, 'overtime', holiday[1])).border = border
+        _set_duration_cell(ws, count, 13, getattr(holiday, 'overtime', holiday[1]), border)
         ws.cell(column=14, row=count, value=getattr(entry, 'vacation_days', entry[2])).border = border
         ws.cell(column=14, row=count).alignment = Alignment(horizontal='center')
         if emp_id in wages:
@@ -165,9 +213,7 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
                 getattr(wage, 'total_with_milk', wage[2]),
             )
             for col, val in ((15, vals[0]), (16, vals[1]), (17, vals[2])):
-                cell = ws.cell(column=col, row=count, value=val)
-                cell.border = border
-                cell.number_format = '0.00'
+                _set_money_cell(ws, count, col, val, border)
         count += 1
     return count
 

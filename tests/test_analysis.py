@@ -161,7 +161,7 @@ class TestGroupConsecutiveDays:
 
 class TestBulkMissedEdit:
     def test_bulk_vacation(self, setup_employees):
-        """Диапазон из 3 дней отмечается отпуском одним подтверждением."""
+        """Диапазон из 3 дней отмечается отпуском одним подтверждением (R09)."""
         from core import analysis
         analysis.clear_journal()
         missed = ['2026-07-21', '2026-07-22', '2026-07-23']
@@ -173,8 +173,10 @@ class TestBulkMissedEdit:
         for d in missed:
             assert tt[d][101][2] == 'vacation'
         entries = analysis.get_journal()
-        assert len(entries) == 1
-        assert 'x3' in entries[0]['action']
+        # R09: журнал — по каждому дню с точными датами, запись до сохранения.
+        assert len(entries) == 3
+        assert sorted(e['date'] for e in entries) == missed
+        assert all('x3' in e['action'] for e in entries)
         analysis.clear_journal()
 
     def test_skip_all(self, setup_employees):

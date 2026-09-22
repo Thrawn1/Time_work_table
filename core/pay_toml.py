@@ -19,10 +19,14 @@ from __future__ import annotations
 import sqlite3
 import tomllib
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+from pathlib import Path
 
 from core.money import as_decimal
 from core.pay_store import SCHEMA_VERSION, connect, init_db
+from core.pay_validate import is_valid_date as _strict_date
+from core.pay_validate import money_to_cents, parse_money_value
+from core.pay_validate import section_records
 
 TEMPLATE = """\
 # Шаблон справочников оплаты. schema_version = 1.
@@ -81,7 +85,33 @@ def generate_template() -> str:
 
 
 def _tstr(value: str) -> str:
-    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    """Экранировать строку для TOML basic string (F14: round-trip).
+
+    Экранируются ``\\``, ``"`` и все управляющие символы (``\\n``, ``\\r``,
+    ``\\t``, ``\\b``, ``\\f``, остальные C0/C1 — ``\\uXXXX``), иначе экспорт
+    значений с переводом строки даёт невалидный TOML.
+    """
+    parts: list[str] = []
+    for ch in value:
+        if ch == '\\':
+            parts.append('\\\\')
+        elif ch == '"':
+            parts.append('\\"')
+        elif ch == '\n':
+            parts.append('\\n')
+        elif ch == '\r':
+            parts.append('\\r')
+        elif ch == '\t':
+            parts.append('\\t')
+        elif ch == '\b':
+            parts.append('\\b')
+        elif ch == '\f':
+            parts.append('\\f')
+        elif ord(ch) < 0x20 or ord(ch) == 0x7F:
+            parts.append(f'\\u{ord(ch):04X}')
+        else:
+            parts.append(ch)
+    return '"' + ''.join(parts) + '"'
 
 
 def export_toml(db_path: str = 'data/pay_directory.db', section: str | None = None) -> str:
@@ -161,23 +191,24 @@ def _cents_str(cents: int) -> str:
 # --- Импорт -------------------------------------------------------------------
 
 def _is_date(value: object) -> bool:
-    if not isinstance(value, str):
-        return False
-    try:
-        date.fromisoformat(value)
-        return True
-    except ValueError:
-        return False
+    """Строгая дата YYYY-MM-DD (единый контракт F13)."""
+    return _strict_date(value)
 
 
 def _is_money(value: object, allow_zero: bool = True) -> bool:
+    """Деньги строкой Decimal, конечные, неотрицательные (F12).
+
+    Отрицательные отклоняются всегда; при ``allow_zero=False`` отклоняется
+    и ноль. Не-строки (в т.ч. float) отклоняются, чтобы не вносить
+    binary-ошибку парсера.
+    """
     if not isinstance(value, str):
         return False
     try:
-        amount = Decimal(value)
-    except InvalidOperation:
+        amount = parse_money_value(value)
+    except ValueError:
         return False
-    if amount.is_nan() or amount.is_infinite():
+    if amount < 0:
         return False
     return allow_zero or amount > 0
 
@@ -186,7 +217,9 @@ def import_toml(db_path: str, text: str, dry_run: bool = False) -> dict:
     """Импорт пакета. Возвращает {'added': [...], 'unchanged': [...], 'errors': [...]}.
 
     added/unchanged — (раздел, ключ); errors — строки 'раздел[ключ].поле: причина'.
-    При dry_run или при наличии ошибок запись не выполняется.
+    При dry_run или при наличии ошибок запись не выполняется. Dry-run не создаёт
+    файл БД и не меняет схему существующей (F14): отсутствующая БД планируется
+    по пустой схеме в памяти, существующая читается без DDL.
     """
     added: list[tuple[str, str]] = []
     unchanged: list[tuple[str, str]] = []
@@ -196,10 +229,25 @@ def import_toml(db_path: str, text: str, dry_run: bool = False) -> dict:
     except tomllib.TOMLDecodeError as e:
         return {'added': [], 'unchanged': [], 'errors': [f'файл: синтаксис TOML: {e}']}
 
-    if data.get('schema_version') != SCHEMA_VERSION:
+    if type(data.get('schema_version')) is not int or data.get('schema_version') != SCHEMA_VERSION:
         return {'added': [], 'unchanged': [],
                 'errors': [f"schema_version: нужен {SCHEMA_VERSION}, "
                            f"получен {data.get('schema_version')!r}"]}
+
+    if dry_run:
+        if db_path == ':memory:' or not Path(db_path).exists():
+            con = init_db(':memory:')
+        else:
+            con = connect(db_path)
+        try:
+            try:
+                ops = _plan(con, data, added, unchanged, errors)
+            except sqlite3.OperationalError as e:
+                errors.append(f'БД: недоступна для предпросмотра: {e}')
+                return {'added': added, 'unchanged': unchanged, 'errors': errors}
+            return {'added': added, 'unchanged': unchanged, 'errors': errors}
+        finally:
+            con.close()
 
     con = init_db(db_path)
     try:
@@ -233,12 +281,23 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
             return False
         return all(str(row[k]) == str(v) for k, v in want.items())
 
+    from core.pay_validate import require_int_id as _rid, require_month_start as _m1
+    from core.pay_validate import require_month_end_or_none as _m2
+
+    def _int_or_error(value: object, field: str, tag: str) -> int | None:
+        try:
+            return _rid(value, field)
+        except ValueError as e:
+            errors.append(f'{tag}: {e}')
+            return None
+
     # Роли.
-    for i, rec in enumerate(data.get('roles', [])):
+    for i, rec in section_records(data, 'roles', errors):
         tag = f'roles[{rec.get("id", f"#{i}")}]'
         rid, name = rec.get('id'), rec.get('name')
-        if not isinstance(rid, int) or rid < 0:
-            errors.append(f'{tag}.id: нужен неотрицательный int'); continue
+        rid = _int_or_error(rid, f'{tag}.id', tag)
+        if rid is None:
+            continue
         if not isinstance(name, str) or not name.strip():
             errors.append(f'{tag}.name: пустое название'); continue
         if rid in file_roles:
@@ -256,13 +315,20 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
 
     # Правила ролей.
     seen_rules: set[tuple[int, str]] = set()
-    for i, rec in enumerate(data.get('role_rules', [])):
+    for i, rec in section_records(data, 'role_rules', errors):
         tag = f"role_rules[{rec.get('role_id', '?')}@{rec.get('effective_from', f'#{i}')}]"
-        rid, eff = rec.get('role_id'), rec.get('effective_from')
+        rid_raw, eff = rec.get('role_id'), rec.get('effective_from')
+        rid = _int_or_error(rid_raw, f'{tag}.role_id', tag)
+        if rid is None:
+            continue
         if rid not in db_roles:
             errors.append(f'{tag}.role_id: нет такой роли'); continue
         if not _is_date(eff):
             errors.append(f'{tag}.effective_from: нужен ISO YYYY-MM-DD'); continue
+        try:
+            eff = _m1(eff, f'{tag}.effective_from')
+        except ValueError as e:
+            errors.append(str(e)); continue
         if (rid, eff) in seen_rules:
             errors.append(f'{tag}: дубль версии в файле'); continue
         seen_rules.add((rid, eff))
@@ -313,11 +379,11 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
                      str(as_decimal(coef)))))
 
     # Сотрудники.
-    for i, rec in enumerate(data.get('employees', [])):
+    for i, rec in section_records(data, 'employees', errors):
         tag = f"employees[{rec.get('id', f'#{i}')}]"
-        eid = rec.get('id')
-        if not isinstance(eid, int) or eid < 0:
-            errors.append(f'{tag}.id: нужен неотрицательный int'); continue
+        eid = _int_or_error(rec.get('id'), f'{tag}.id', tag)
+        if eid is None:
+            continue
         if eid in file_emps:
             errors.append(f'{tag}.id: дубль в файле'); continue
         file_emps.add(eid)
@@ -329,10 +395,15 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
             errors.append(f'{tag}.hire_date: нужен ISO YYYY-MM-DD'); continue
         row = con.execute('SELECT * FROM employees WHERE id=?', (eid,)).fetchone()
         if row is not None:
-            same = (row['first_name'], row['last_name'], row['hire_date']) == (first, last, hire)
-            if not same:
+            if (row['first_name'], row['last_name']) != (first, last):
                 errors.append(f'{tag}: конфликт с БД (перезапись запрещена)'); continue
-            unchanged.append(('employees', str(eid)))
+            if row['hire_date'] == hire:
+                unchanged.append(('employees', str(eid)))
+            elif row['hire_date'] is None and hire is not None:
+                added.append(('employees', str(eid)))
+                ops.append(('UPDATE employees SET hire_date=? WHERE id=?', (hire, eid)))
+            else:
+                errors.append(f'{tag}: конфликт с БД (перезапись запрещена)'); continue
         else:
             added.append(('employees', str(eid)))
             ops.append(('INSERT INTO employees(id, first_name, last_name, hire_date)'
@@ -341,20 +412,31 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
 
     # Назначения.
     file_periods: dict[int, list[tuple[str, str]]] = {}
-    for i, rec in enumerate(data.get('assignments', [])):
+    for i, rec in section_records(data, 'assignments', errors):
         tag = (f"assignments[{rec.get('emp_id', '?')}@"
                f"{rec.get('effective_from', f'#{i}')}]")
-        eid, rid, eff, end = (rec.get('emp_id'), rec.get('role_id'),
-                              rec.get('effective_from'), rec.get('effective_to'))
+        eid = _int_or_error(rec.get('emp_id'), f'{tag}.emp_id', tag)
+        rid = _int_or_error(rec.get('role_id'), f'{tag}.role_id', tag)
+        if eid is None or rid is None:
+            continue
+        eff, end = rec.get('effective_from'), rec.get('effective_to')
         if eid not in db_emps:
             errors.append(f'{tag}.emp_id: нет такого сотрудника'); continue
         if rid not in db_roles:
             errors.append(f'{tag}.role_id: нет такой роли'); continue
         if not _is_date(eff):
             errors.append(f'{tag}.effective_from: нужен ISO YYYY-MM-DD'); continue
+        try:
+            eff = _m1(eff, f'{tag}.effective_from')
+        except ValueError as e:
+            errors.append(str(e)); continue
         if end is not None:
             if not _is_date(end):
                 errors.append(f'{tag}.effective_to: нужен ISO YYYY-MM-DD'); continue
+            try:
+                end = _m2(end, f'{tag}.effective_to')
+            except ValueError as e:
+                errors.append(str(e)); continue
             if end < eff:
                 errors.append(f'{tag}.effective_to: раньше effective_from'); continue
         periods = file_periods.setdefault(eid, [])
@@ -394,11 +476,15 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
 
     # Стажевые шкалы.
     seen_scales: set[str] = set()
-    for rec in data.get('seniority_scales', []):
+    for _i, rec in section_records(data, 'seniority_scales', errors):
         eff = rec.get('effective_from')
         tag = f'seniority_scales[{eff}]'
         if not _is_date(eff):
             errors.append(f'{tag}.effective_from: нужен ISO YYYY-MM-DD'); continue
+        try:
+            eff = _m1(eff, f'{tag}.effective_from')
+        except ValueError as e:
+            errors.append(str(e)); continue
         if eff in seen_scales:
             errors.append(f'{tag}: дубль версии в файле'); continue
         seen_scales.add(eff)
@@ -407,7 +493,7 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
             errors.append(f'{tag}.thresholds: непустой список'); continue
         ok, years_seen = True, set()
         for t in thresholds:
-            if not isinstance(t, dict) or not isinstance(t.get('years'), int) or t['years'] < 0:
+            if not isinstance(t, dict) or type(t.get('years')) is not int or t['years'] < 0:
                 errors.append(f'{tag}.thresholds.years: неотрицательный int'); ok = False; break
             if t['years'] in years_seen:
                 errors.append(f'{tag}.thresholds: дубль порога {t["years"]}'); ok = False; break
@@ -433,11 +519,15 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
 
     # Общие условия.
     seen_ps: set[str] = set()
-    for rec in data.get('pay_settings', []):
+    for _i, rec in section_records(data, 'pay_settings', errors):
         eff = rec.get('effective_from')
         tag = f'pay_settings[{eff}]'
         if not _is_date(eff):
             errors.append(f'{tag}.effective_from: нужен ISO YYYY-MM-DD'); continue
+        try:
+            eff = _m1(eff, f'{tag}.effective_from')
+        except ValueError as e:
+            errors.append(str(e)); continue
         if eff in seen_ps:
             errors.append(f'{tag}: дубль версии в файле'); continue
         seen_ps.add(eff)
@@ -447,12 +537,15 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
             errors.append(f'{tag}.monthly_base: положительная Decimal-строка'); continue
         if not _is_money(bonus):
             errors.append(f'{tag}.full_month_bonus: Decimal-строка ≥ 0'); continue
-        if not isinstance(hours, int) or hours <= 0:
+        if type(hours) is not int or hours <= 0:
             errors.append(f'{tag}.base_day_hours: int > 0'); continue
         row = con.execute('SELECT * FROM pay_settings WHERE effective_from=?', (eff,)).fetchone()
-        want = {'monthly_base_cents': int(Decimal(base) * 100),
-                'base_day_hours': hours,
-                'full_month_bonus_cents': int(Decimal(bonus) * 100)}
+        try:
+            want = {'monthly_base_cents': money_to_cents(base, 'monthly_base', allow_zero=False),
+                    'base_day_hours': hours,
+                    'full_month_bonus_cents': money_to_cents(bonus, 'full_month_bonus', allow_zero=True)}
+        except ValueError as e:
+            errors.append(f'{tag}: {e}'); continue
         if row is not None:
             if all(row[k] == v for k, v in want.items()):
                 unchanged.append(('pay_settings', eff))
@@ -467,9 +560,12 @@ def _plan(con: sqlite3.Connection, data: dict, added: list, unchanged: list,
 
     # Исключения.
     seen_exc: set[int] = set()
-    for rec in data.get('settlement_exceptions', []):
-        eid, reason = rec.get('emp_id'), rec.get('reason')
-        tag = f'settlement_exceptions[{eid}]'
+    for _i, rec in section_records(data, 'settlement_exceptions', errors):
+        eid_raw, reason = rec.get('emp_id'), rec.get('reason')
+        tag = f'settlement_exceptions[{eid_raw}]'
+        eid = _int_or_error(eid_raw, f'{tag}.emp_id', tag)
+        if eid is None:
+            continue
         if eid in seen_exc:
             errors.append(f'{tag}: дубль в файле'); continue
         seen_exc.add(eid)

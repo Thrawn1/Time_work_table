@@ -144,18 +144,30 @@ def str_timedelta(td: timedelta) -> str:
     return f'{sign}{h:02d}:{m:02d}:{s:02d}'
 
 
-def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None) -> WorkTime:
-    """Учёт времени по единым правилам ролей (core.roles), без решений по ID.
+def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None,
+                            rules_by_role: dict | None = None) -> WorkTime:
+    """Учёт времени по действующим правилам ролей (R02), без решений по ID.
 
-    time_mode 'actual': факт = выход − вход, переработка/недоработка от 8 ч.
-    time_mode 'fixed_shift': 8 ч за рабочий выход независимо от отметок.
-    Роль вне участия (напр. 0) в результат не попадает — её состав
+    time_mode 'actual': факт = выход − вход, переработка/недоработка от нормы
+    смены правила (SQLite-версия в new-режиме, иначе DAT-умолчание).
+    time_mode 'fixed_shift': норма смены за рабочий выход независимо от отметок.
+    Роль вне участия (напр. 0/4) в результат не попадает — её состав
     определяется фильтром участников до расчёта.
 
     employees=None — fallback к глобалу core.config.EMPLOYEES ради старых
-    тестов; новый код передает справочник явно.
+    тестов; новый код передает справочник явно. rules_by_role — действующие
+    SQLite-правила {role_id: RoleRule}; отсутствие версии — понятная ошибка
+    до правок/отчётов (R02), а не KeyError в середине дневных строк.
     """
-    staff = EMPLOYEES if employees is None else employees
+    # NOTE: читаем модуль-глобал на каждый вызов (не кэшируем в аргументе),
+    # чтобы monkeypatch в тестах продолжал работать.
+    import core.calculations as _self
+
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        from core.config import EMPLOYEES as _fallback
+
+        staff = _fallback
     result: WorkTime = {}
     for date_key, employees_in_day in time_table.items():
         result[date_key] = {}
@@ -163,12 +175,31 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
             emp = staff.get(emp_id)
             if emp is None:
                 continue
-            rule = get_default_rule(emp.role_id)
+            role_id = getattr(emp, 'role_id', None)
+            if rules_by_role is not None and role_id in rules_by_role:
+                rule = rules_by_role[role_id]
+            else:
+                if rules_by_role is not None:
+                    raise ValueError(
+                        f'ID {emp_id}: нет версии правил роли {role_id} на месяц — '
+                        f'заведите версию правил до анализа')
+                try:
+                    rule = get_default_rule(role_id)
+                except KeyError:
+                    raise ValueError(
+                        f'ID {emp_id}: неизвестная роль {role_id} — нет правила учёта/оплаты'
+                    ) from None
             if not rule.participates:
                 continue
+            try:
+                norm_hours = float(rule.shift_norm_hours)
+            except (ValueError, TypeError):
+                raise ValueError(
+                    f'ID {emp_id}: некорректная норма смены роли {role_id}: '
+                    f'{rule.shift_norm_hours!r}') from None
             if rule.time_mode == TIME_ACTUAL:
                 worked = _mark_go(marks) - _mark_come(marks)
-                standard = timedelta(hours=WORKING_DAY_HOURS)
+                standard = timedelta(hours=norm_hours)
                 delta = worked - standard
                 abs_delta = abs(delta)
                 tag_overtime = OVERTIME if delta > timedelta(0) else UNDERTIME
@@ -186,7 +217,7 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
                     )
                 elif tag_day in ATTENDANCE_TAGS:
                     result[date_key][emp_id] = DayWork(
-                        delta=timedelta(0), worked=timedelta(hours=WORKING_DAY_HOURS),
+                        delta=timedelta(0), worked=timedelta(hours=norm_hours),
                         overtime_tag=NO_OVERTIME, day_tag=tag_day,
                     )
                 else:
@@ -195,6 +226,9 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
                         delta=timedelta(0), worked=timedelta(0),
                         overtime_tag=NO_OVERTIME, day_tag=tag_day,
                     )
+            else:
+                raise ValueError(
+                    f'ID {emp_id}: неизвестный time_mode {rule.time_mode!r} роли {role_id}')
     return result
 
 

@@ -142,7 +142,7 @@ def test_main_restores_config_on_success_and_failure(
 ):
     roles, employees, exceptions = config.ROLES, config.EMPLOYEES, config.SETTLEMENT_EXCEPTIONS
     before = roles.copy(), employees.copy(), exceptions.copy()
-    paths = config.DATA_DIR, config.SECRET_FILE, session.SESSION_FILE, session.SESSION_FILE_LEGACY
+    paths = config.DATA_DIR, config._SECRET_KEY, session.SESSION_FILE, session.SESSION_FILE_LEGACY
     monkeypatch.chdir(tmp_path)
     args = _run_args(input_dir, tmp_path / 'out') + ['-k', 't']
     if missing_file:
@@ -155,7 +155,7 @@ def test_main_restores_config_on_success_and_failure(
     assert config.ROLES is roles and config.EMPLOYEES is employees
     assert config.SETTLEMENT_EXCEPTIONS is exceptions
     assert (roles, employees, exceptions) == before
-    assert (config.DATA_DIR, config.SECRET_FILE, session.SESSION_FILE,
+    assert (config.DATA_DIR, config._SECRET_KEY, session.SESSION_FILE,
             session.SESSION_FILE_LEGACY) == paths
 
 
@@ -165,7 +165,7 @@ def test_failed_config_load_is_atomic(input_dir, setup_employees):
         (input_dir / 'variable_data_for_app' / 'settlement_exceptions.dat').write_text(
             'invalid-id\n', encoding='utf-8')
         before = config.ROLES.copy(), config.EMPLOYEES.copy(), config.SETTLEMENT_EXCEPTIONS.copy()
-        with pytest.raises(ValueError):
+        with pytest.raises(config.ConfigError):
             config.load_config()
         assert (config.ROLES, config.EMPLOYEES, config.SETTLEMENT_EXCEPTIONS) == before
 

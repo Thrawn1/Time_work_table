@@ -11,9 +11,10 @@ import argparse
 import sys
 
 from core.pay_store import (
-    DEFAULT_DB_PATH, DEFAULT_TRANSITION, connect, get_pay_settings, get_role_rule,
-    get_seniority_scale, init_db, list_exceptions, migrate_from_dat,
-    role_rule_history, seed_defaults,
+    DEFAULT_DB_PATH, DEFAULT_TRANSITION, change_assignment, connect,
+    get_pay_settings, get_role_rule, get_seniority_scale, init_db,
+    list_exceptions, migrate_from_dat, role_rule_versions,
+    seed_defaults, update_employee,
 )
 from core.pay_toml import export_toml, generate_template, import_toml
 
@@ -54,6 +55,21 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser('rules-history', help='История версий правил роли')
     _db_arg(p)
     p.add_argument('role_id', type=int)
+
+    p = sub.add_parser('change-assignment',
+                       help='Сменить роль с даты: закрыть действующее и открыть новое')
+    _db_arg(p)
+    p.add_argument('--emp', type=int, required=True)
+    p.add_argument('--role', type=int, required=True)
+    p.add_argument('--from', dest='from_date', required=True)
+
+    p = sub.add_parser('update-employee', help='Исправить карточку сотрудника')
+    _db_arg(p)
+    p.add_argument('--emp', type=int, required=True)
+    p.add_argument('--first', default=None)
+    p.add_argument('--last', default=None)
+    p.add_argument('--hire', default=None, help='Дата приёма YYYY-MM-DD')
+    p.add_argument('--clear-hire', action='store_true', help='Очистить дату приёма')
     return parser
 
 
@@ -68,7 +84,21 @@ def _print_report(report: dict) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    try:
+        args = build_parser().parse_args(argv)
+    except SystemExit as e:
+        return int(e.code or 0)
+    try:
+        return _dispatch(args)
+    except (OSError, UnicodeDecodeError) as e:
+        print(f'Ошибка: файл недоступен ({e})')
+        return 1
+    except ValueError as e:
+        print(f'Ошибка: {e}')
+        return 1
+
+
+def _dispatch(args) -> int:
     if args.cmd == 'init':
         init_db(args.db)
         con = connect(args.db)
@@ -79,11 +109,22 @@ def main(argv: list[str] | None = None) -> int:
         print(f'Справочник {args.db}: схема создана, стартовые условия внесены.')
         return 0
     if args.cmd == 'migrate':
-        con = init_db(args.db)
         try:
-            report = migrate_from_dat(con, args.dat_dir, args.from_date)
+            con = init_db(args.db)
+        except Exception as e:
+            print(f'Ошибка: справочник недоступен ({e})')
+            return 1
+        try:
+            try:
+                report = migrate_from_dat(con, args.dat_dir, args.from_date)
+            except (ValueError, OSError) as e:
+                print(f'Ошибка: перенос невозможен ({e})')
+                return 1
         finally:
-            con.close()
+            try:
+                con.close()
+            except Exception:
+                pass
         print(f"Ролей: {report['roles']}, сотрудников: {report['employees']}, "
               f"исключений: {report['exceptions']}, пропущено: {report['skipped']}")
         return 0
@@ -135,8 +176,10 @@ def main(argv: list[str] | None = None) -> int:
                     'С' if rule.seniority_eligible else '-',
                 ))
                 part = 'участвует' if rule.participates else f'исключена ({rule.exclude_reason})'
+                effs = [eff for eff, _ in role_rule_versions(con, rid) if eff <= args.date]
+                ver = f' (правила с {effs[-1]})' if effs else ''
                 print(f'  роль {rid} {name}: {rule.time_mode}, норма {rule.shift_norm_hours} ч, '
-                      f'{part}, бонусы П/М/С: {bonuses}.')
+                      f'{part}, бонусы П/М/С: {bonuses}.{ver}')
             print(f'  Стажевая шкала: {get_seniority_scale(con, args.date)}')
             exc = list_exceptions(con)
             print(f'  Персональные исключения ({len(exc)}): '
@@ -149,13 +192,47 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == 'rules-history':
         con = connect(args.db)
         try:
-            for rule in role_rule_history(con, args.role_id):
-                print(f'{rule.role_id}: {rule.time_mode}, норма {rule.shift_norm_hours}, '
+            versions = role_rule_versions(con, args.role_id)
+            if not versions:
+                print(f'Роль {args.role_id}: версий нет.')
+                return 0
+            for eff, rule in versions:
+                print(f'{eff} роль {rule.role_id}: {rule.time_mode}, норма {rule.shift_norm_hours}, '
                       f'участие={int(rule.participates)}, бонусы='
                       f"{int(rule.overtime_eligible)}{int(rule.full_month_eligible)}"
                       f"{int(rule.seniority_eligible)}")
         finally:
             con.close()
+        return 0
+    if args.cmd == 'change-assignment':
+        con = connect(args.db)
+        try:
+            try:
+                closed = change_assignment(con, args.emp, args.role, args.from_date)
+            except ValueError as e:
+                print(f'Ошибка: {e}')
+                return 1
+        finally:
+            con.close()
+        print(f'Сотрудник {args.emp}: закрыто по {closed}, новая роль {args.role} с {args.from_date}.')
+        return 0
+    if args.cmd == 'update-employee':
+        if args.hire is not None and args.clear_hire:
+            print('Ошибка: укажите либо --hire, либо --clear-hire.')
+            return 1
+        con = connect(args.db)
+        try:
+            try:
+                changed = update_employee(
+                    con, args.emp, first_name=args.first, last_name=args.last,
+                    hire_date=args.hire if not args.clear_hire else None,
+                    change_hire=args.hire is not None or args.clear_hire)
+            except ValueError as e:
+                print(f'Ошибка: {e}')
+                return 1
+        finally:
+            con.close()
+        print(f'Сотрудник {args.emp}: {"карточка обновлена." if changed else "без изменений."}')
         return 0
     return 1
 

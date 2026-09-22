@@ -81,24 +81,40 @@ class TestUnionImportAndBundle:
         assert exclusion_reason(900, combined) == ''
         assert is_included_in_settlement(900, combined) is True
 
-    def test_bundle_includes_sqlite_only(self, tmp_path, monkeypatch):
-        from core import analysis, data_array
+    def test_bundle_includes_sqlite_only(self, tmp_path):
+        """R01: SQLite-only виден без подмены DAT-глобалов (сквозной штат)."""
         from core.payroll import build_bundle
-        from core.pay_context import combined_staff_for_import
-        dat = {900: EmployeeData(id=900, first_name='Н', last_name='С',
-                                 role_id=1, role_name='Р')}
-        # DAT-глобалы тоже знают 900, чтобы _get_marks_and_missed не влиял
-        monkeypatch.setattr(data_array, 'EMPLOYEES', dat)
-        monkeypatch.setattr(analysis, 'EMPLOYEES', dat)
+        from core.pay_context import combined_staff_for_import, load_rules_map
         db = _db_with_sqlite_only(tmp_path)
         combined = combined_staff_for_import({}, db, '2026-10-01')
         assert 900 in combined
+        rules = load_rules_map(db, '2026-10-01', combined)
         da = {'2026-10-06': {900: [_dt('2026-10-06', '16:00'),
                                    _dt('2026-10-06', '08:00'), 'work']}}
         wt = {'2026-10-06': {900: (timedelta(0), timedelta(hours=8),
                                     'недоработка', 'work')}}
         summary = {900: ((1, timedelta(0), timedelta(0)),
                           (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
-        bundle = build_bundle(da, wt, summary, YEAR, MONTH, db, employees=combined)
+        bundle = build_bundle(da, wt, summary, YEAR, MONTH, db,
+                              employees=combined, rules_by_role=rules)
         assert 900 in bundle.results
         assert bundle.results[900].name != 'ID 900'
+
+    def test_single_mark_blocks_bonus_without_globals(self, tmp_path):
+        """R01: одиночная отметка SQLite-only блокирует бонус без глобалов."""
+        from core.analysis import _get_marks_and_missed
+        from core.pay_context import combined_staff_for_import, load_rules_map
+        from core.pay_calendar import workday_keys_in_month
+        db = _db_with_sqlite_only(tmp_path)
+        combined = combined_staff_for_import({}, db, '2026-10-01')
+        rules = load_rules_map(db, '2026-10-01', combined)
+        keys = workday_keys_in_month(YEAR, MONTH)
+        da: dict = {}
+        for key in keys:
+            if key == keys[0]:
+                da[key] = {900: [_dt(key, '08:00'), _dt(key, '08:00'), 'work']}
+            else:
+                da[key] = {900: [_dt(key, '16:00'), _dt(key, '08:00'), 'work']}
+        singles, _missed = _get_marks_and_missed(
+            da, 900, YEAR, MONTH, employees=combined, rules_by_role=rules)
+        assert singles != 0

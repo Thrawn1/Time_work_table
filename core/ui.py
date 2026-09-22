@@ -45,12 +45,17 @@ def summarize_employee(single_count: int, missed_count: int, has_marks: bool) ->
 
 def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month: int,
                          employees: dict | None = None,
-                         extra_excluded: dict | None = None) -> list[dict]:
+                         extra_excluded: dict | None = None,
+                         rules_by_role: dict | None = None,
+                         included_ids: set[int] | None = None) -> list[dict]:
     """Собрать строки дашборда. Чистая агрегация, без печати.
 
     extra_excluded: {emp_id: причина} из SQLite (participates=False,
     персональные исключения) — объединяется с DAT-причиной, чтобы дашборд
-    показывал единый состав с bundle (F02).
+    показывал единый состав с bundle (F02). rules_by_role — действующие
+    SQLite-правила (R01–R02). included_ids — окончательные участники расчёта:
+    сотрудник без отметок, но включённый через --include-empty, помечается
+    «Включён без отметок», а не «в расчёт не включён» (R07).
     """
     from core.analysis import _get_marks_and_missed
 
@@ -65,10 +70,16 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
         role = staff.get(emp_id) if hasattr(staff, 'get') else None
         name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
         has_marks = any(emp_id in day for day in time_table.values())
-        list_marks, list_missed = _get_marks_and_missed(time_table, emp_id, year, month)
+        list_marks, list_missed = _get_marks_and_missed(
+            time_table, emp_id, year, month,
+            employees=staff, rules_by_role=rules_by_role)
         single_count = len(list_marks) if isinstance(list_marks, list) else 0
         missed_count = len(list_missed) if isinstance(list_missed, list) else 0
-        info = summarize_employee(single_count, missed_count, has_marks)
+        included = included_ids is not None and emp_id in included_ids
+        info = summarize_employee(single_count, missed_count, has_marks or included)
+        # R07: включённый без отметок — отдельный статус, а не «не включён».
+        if included and not has_marks:
+            info = {'status': 'Включён без отметок', 'style': 'cyan'}
         from core.data_array import exclusion_reason
         reason = exclusion_reason(emp_id, staff)
         if extra_excluded and emp_id in extra_excluded:
@@ -80,6 +91,7 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
             'single': single_count,
             'missed': missed_count,
             'has_marks': has_marks,
+            'included_without_marks': bool(included and not has_marks),
             'status': info['status'],
             'style': info['style'],
             'excluded': reason != '',
@@ -89,14 +101,17 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
 
 
 def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
-    """Дашборд тремя блоками: в расчете — таблицей, без отметок — списком,
-    исключённые из начислений — списком с точной причиной.
+    """Дашборд блоками: в расчёте / включён без отметок / без отметок / исключён.
 
-    Сотрудники без единой отметки (бывшие, другие смены) не смешиваются
-    с проблемами действующих — иначе их 15+ строк хоронят реальные пропуски.
+    R07/R19: явно различаем «исключён», «нет данных» и «включён без отметок»
+    (--include-empty). Сотрудники без единой отметки вне расчёта не смешиваются
+    с проблемами действующих.
     """
-    active = [r for r in rows if r['has_marks'] and not r.get('excluded')]
-    inactive = [r for r in rows if not r['has_marks'] and not r.get('excluded')]
+    active = [r for r in rows
+              if (r['has_marks'] or r.get('included_without_marks')) and not r.get('excluded')]
+    inactive = [r for r in rows
+                if not r['has_marks'] and not r.get('included_without_marks')
+                and not r.get('excluded')]
     excluded = [r for r in rows if r.get('excluded')]
     if not HAS_RICH:
         print(f'=== {title}: в расчете ({len(active)}) ===')
@@ -172,7 +187,10 @@ def ask_menu(prompt: str, valid: tuple[str, ...], cancel_tokens: tuple[str, ...]
     """
     allowed = tuple(valid) + tuple(cancel_tokens)
     while True:
-        raw = input(prompt).strip()
+        try:
+            raw = input(prompt).strip()
+        except (EOFError, KeyboardInterrupt):
+            return cancel_tokens[0] if cancel_tokens else '0'
         if raw in allowed:
             return raw
         info(f'Введите один из: {", ".join(allowed)}.')
@@ -181,7 +199,10 @@ def ask_menu(prompt: str, valid: tuple[str, ...], cancel_tokens: tuple[str, ...]
 def confirm_save(preview: str) -> bool:
     """Подтверждение сохранения. True — сохранить, False — ввести заново."""
     while True:
-        raw = input(f'{preview}\nПодтвердить? [д/н]: ').strip().lower()
+        try:
+            raw = input(f'{preview}\nПодтвердить? [д/н]: ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return False
         if raw in ('д', 'y', 'да', 'yes', '1'):
             return True
         if raw in ('н', 'n', 'нет', 'no', '0'):
@@ -283,7 +304,7 @@ def print_pay_details(bundle) -> None:
     console.print(header)
     table = Table(title='Ведомость (новая модель)')
     for col in ('Сотрудник', 'Норма/факт, ч', 'Обычная', 'Переработка', 'Полный мес.',
-                'Стаж', 'Итого'):
+                'Причина', 'Стаж', 'Итого'):
         table.add_column(col, justify='right' if col != 'Сотрудник' else 'left')
     for r in bundle.results.values():
         res = r.result
@@ -293,6 +314,7 @@ def print_pay_details(bundle) -> None:
             format_money(res.ordinary_pay),
             f'{res.overtime_hours} ч / {format_money(res.overtime_bonus)}',
             f"{'+' if res.full_month_ok else '-'} / {format_money(res.full_month_bonus)}",
+            res.full_month_reason,
             f'{res.seniority_rate * 100}% / {format_money(res.seniority_bonus)}',
             format_money(res.total),
         )
@@ -355,12 +377,18 @@ def build_preview_rows(summary: dict, wages: dict, employees: dict | None = None
 
 
 def print_preview(rows: list[dict], title: str = 'Предпросмотр расчета') -> None:
-    """Таблица предпросмотра до записи файлов."""
+    """Таблица предпросмотра до записи файлов.
+
+    Длительности — str_timedelta (HH:MM:SS), деньги — format_money (HALF_UP),
+    как в Excel/HTML (F22.6).
+    """
+    from core.money import format_money
+
     if not HAS_RICH:
         print(f'=== {title} ===')
         for r in rows:
             print(f"{r['name']}: будни={r['work']} (+{r['overtime']}/-{r['undertime']}) "
-                  f"вых={r['weekend']} отп={r['vacation']} итого={r['total']:.2f}")
+                  f"вых={r['weekend']} отп={r['vacation']} итого={format_money(r['total'])}")
         return
     console = get_console()
     table = Table(title=title)
@@ -374,22 +402,24 @@ def print_preview(rows: list[dict], title: str = 'Предпросмотр ра�
     for r in rows:
         table.add_row(
             r['name'], str(r['work']), r['overtime'], r['undertime'],
-            str(r['weekend']), str(r['vacation']), str(r['total']),
+            str(r['weekend']), str(r['vacation']), format_money(r['total']),
         )
     console.print(table)
 
 
 def print_journal(entries: list[dict], title: str = 'Журнал исправлений') -> None:
-    """Журнал правок за запуск. Пустой — короткое сообщение."""
+    """Журнал правок за запуск. Пустой — короткое сообщение (R09: без KeyError)."""
     if not entries:
         info('Исправлений не вносилось.')
         return
     if not HAS_RICH:
         print(f'=== {title} ({len(entries)}) ===')
         for e in entries:
+            if not isinstance(e, dict):
+                continue
             rnd = ' (часть времени случайна)' if e.get('randomized') else ''
-            print(f"{e['ts']} {e['name']} {e['date']}: {e['action']}: "
-                  f"{e['before']} -> {e['after']}{rnd}")
+            print(f"{e.get('ts', '?')} {e.get('name', '?')} {e.get('date', '?')}: "
+                  f"{e.get('action', '?')}: {e.get('before', '?')} -> {e.get('after', '?')}{rnd}")
         return
     console = get_console()
     table = Table(title=f'{title} ({len(entries)})')
@@ -399,9 +429,12 @@ def print_journal(entries: list[dict], title: str = 'Журнал исправл
     table.add_column('Действие')
     table.add_column('Было -> стало')
     for e in entries:
+        if not isinstance(e, dict):
+            continue
         rnd = ' [yellow](случайное время)[/yellow]' if e.get('randomized') else ''
-        table.add_row(e['ts'], e['name'], e['date'], e['action'],
-                      f"{e['before']} -> {e['after']}{rnd}")
+        table.add_row(str(e.get('ts', '?')), str(e.get('name', '?')), str(e.get('date', '?')),
+                      str(e.get('action', '?')),
+                      f"{e.get('before', '?')} -> {e.get('after', '?')}{rnd}")
     console.print(table)
 
 
@@ -409,7 +442,10 @@ def print_salary_report(rows: list[dict], title: str = 'Итоги месяца'
     """Финальный отчет: дни + деньги одной таблицей.
 
     Строки — из build_preview_rows (там уже salary/milk/total).
+    Деньги — format_money, длительности — str_timedelta: как в Excel/HTML.
     """
+    from core.money import format_money
+
     if not rows:
         warn('Нет данных расчета для отчета.')
         return
@@ -418,7 +454,8 @@ def print_salary_report(rows: list[dict], title: str = 'Итоги месяца'
         for r in rows:
             print(f"{r['name']}: будни={r['work']} (+{r['overtime']}/-{r['undertime']}) "
                   f"вых={r['weekend']} отп={r['vacation']} "
-                  f"оклад={r['salary']:.2f} молоко={r['milk']:.2f} итого={r['total']:.2f}")
+                  f"оклад={format_money(r['salary'])} молоко={format_money(r['milk'])} "
+                  f"итого={format_money(r['total'])}")
         return
     console = get_console()
     table = Table(title=title, show_lines=True)
@@ -437,8 +474,8 @@ def print_salary_report(rows: list[dict], title: str = 'Итоги месяца'
             f"+{r['overtime']} / -{r['undertime']}",
             str(r['weekend']),
             str(r['vacation']),
-            f"{r['salary']:.2f}",
-            f"{r['milk']:.2f}",
-            f"{r['total']:.2f}",
+            format_money(r['salary']),
+            format_money(r['milk']),
+            format_money(r['total']),
         )
     console.print(table)

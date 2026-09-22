@@ -138,35 +138,43 @@ def test_seed_transition_is_january_2026(db):
     assert get_pay_settings(db, '2025-12-31') is None
 
 
-def test_migrate_from_dat_counts():
+def test_migrate_from_dat_counts(tmp_path):
+    """R22: перенос проверяется на синтетике, а не на рабочих справочниках."""
+    from tests.synth_data import write_synth_dat_dir
+
     con = init_db(':memory:')
-    report = migrate_from_dat(con)
-    assert report['roles'] == 4
-    assert report['employees'] == 23
-    assert report['exceptions'] == 3
+    report = migrate_from_dat(con, write_synth_dat_dir(tmp_path / 'synth'))
+    assert report['roles'] == 5
+    assert report['employees'] == 5
+    assert report['exceptions'] == 1
     assert report['conflicts'] == []
     # Все сотрудники получили назначение с даты перехода, ID сохранены.
     assert get_assignment(con, 1, '2026-09-15') == (1, None)
     assert get_assignment(con, 7, '2026-09-15') == (0, None)
-    assert is_excluded(con, 27) is True
+    assert is_excluded(con, 3) is True
     con.close()
 
 
-def test_migrate_idempotent():
+def test_migrate_idempotent(tmp_path):
+    from tests.synth_data import write_synth_dat_dir
+
+    synth = write_synth_dat_dir(tmp_path / 'synth')
     con = init_db(':memory:')
-    migrate_from_dat(con)
-    report2 = migrate_from_dat(con)
+    migrate_from_dat(con, synth)
+    report2 = migrate_from_dat(con, synth)
     assert report2['roles'] == 0
     assert report2['employees'] == 0
     assert report2['exceptions'] == 0
     con.close()
 
 
-def test_migrate_conflict_rolls_back():
+def test_migrate_conflict_rolls_back(tmp_path):
+    from tests.synth_data import write_synth_dat_dir
+
     con = init_db(':memory:')
     upsert_role(con, 1, 'ДРУГОЕ НАЗВАНИЕ')
     with pytest.raises(ValueError, match='Конфликты переноса'):
-        migrate_from_dat(con)
+        migrate_from_dat(con, write_synth_dat_dir(tmp_path / 'synth'))
     # Откат: ни одного сотрудника не записано.
     assert con.execute('SELECT COUNT(*) c FROM employees').fetchone()['c'] == 0
     con.close()

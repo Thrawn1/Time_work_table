@@ -78,9 +78,11 @@ def _build_daily_data(emp_id: int, time_table: dict, work_time: dict,
                 'date': date_key,
                 'time_begin': come.time().isoformat(timespec='auto'),
                 'time_end': go.time().isoformat(timespec='auto'),
-                'delta_time': str(worked),
+                # Единый формат длительностей везде (F22.6): HH:MM:SS
+                # через str_timedelta, как в консоли/превью (не str(timedelta)).
+                'delta_time': str_timedelta(worked),
                 'tag_overtime': overtime_tag,
-                'overtime': str(delta),
+                'overtime': str_timedelta(delta),
                 'tag_day': tag,
             }
             if tag == TAG_VACATION:
@@ -113,26 +115,38 @@ def _build_total_data(emp_id: int, summary: dict, wages: dict,
 
 def _write_html_file(file_name: str, daily_data: list[dict], total_data: dict,
                      pay_lines: list[str] | None = None) -> None:
-    lines = ['<html>\n']
+    """Валидный HTML5-документ (F22): doctype, lang=ru, charset, head/title.
+
+    Каждая строка таблицы — ровно один <tr> из своего генератора
+    (без внешней обёртки <tr> вокруг набора строк).
+    Длительности/деньги — те же str_timedelta/format_money, что в консоли.
+    """
+    title_src = str(total_data.get('family', '') or 'Отчёт')
+    date_src = str(daily_data[0].get('date', '')[:7]) if daily_data else ''
+    title = html.escape(f'{title_src} — {date_src}' if date_src else title_src, quote=True)
+    lines = ['<!DOCTYPE html>\n']
+    lines.append('<html lang="ru">\n')
+    lines.append('<head>\n')
+    lines.append('  <meta charset="utf-8">\n')
+    lines.append(f'  <title>{title}</title>\n')
+    lines.append('</head>\n')
+    lines.append('<body>\n')
     lines.append('  <table border="5" class="dataframe" style="width:100%">\n')
     lines.extend(_gen_header(1))
     lines.append('    <tbody>\n')
-    lines.append('      <tr>\n')
     for day in daily_data:
         lines.extend(_gen_day_row(day))
-    lines.append('      </tr>\n')
     lines.append('    </tbody>\n')
     lines.append('  </table>\n')
     lines.append('  <table border="5" class="dataframe" style="width:100%">\n')
     lines.extend(_gen_header(2))
     lines.append('    <tbody>\n')
-    lines.append('      <tr>\n')
     lines.extend(_gen_total_row(total_data))
-    lines.append('      </tr>\n')
     lines.append('    </tbody>\n')
     lines.append('  </table>\n')
     if pay_lines:
         lines.extend(pay_lines)
+    lines.append('</body>\n')
     lines.append('</html>\n')
     with open(file_name, 'w', encoding='utf-8') as f:
         f.writelines(lines)

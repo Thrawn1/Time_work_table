@@ -236,8 +236,8 @@ class TestCalculateHoursPerDay:
         _, _, _, tag_day = result[date_key][102]
         assert tag_day == 'truancy'
 
-    def test_role4_works_like_role1(self, setup_employees):
-        """Role 4 should behave like role 1."""
+    def test_role4_excluded_from_accruals(self, setup_employees):
+        """Role 4 (R04, spec §2): без начислений — отдельный список выходов."""
         date_key = '2026-07-06'
         time_table = {
             date_key: {
@@ -245,9 +245,7 @@ class TestCalculateHoursPerDay:
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][103]
-        assert worked == timedelta(hours=8)
-        assert abs_delta == timedelta(0)
+        assert 103 not in result[date_key]
 
     def test_unknown_employee_skipped(self, setup_employees):
         """Unknown employee ID is silently skipped."""

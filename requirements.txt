@@ -1,4 +1,4 @@
-# Runtime-зависимости. Проверено на Python 3.14.6: openpyxl 3.1.5, rich 15.0.0.
+# Runtime-зависимости. Проверено на Python 3.14.6 (R21: релизный набор фиксирован).
 # TOML читается штатным tomllib (Python >= 3.11), отдельный tomli не нужен.
-openpyxl>=3.1.0
-rich>=13.0.0
+openpyxl==3.1.5
+rich==15.0.0

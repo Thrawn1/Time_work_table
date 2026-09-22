@@ -27,6 +27,12 @@ class PayrollContext:
     db_path: str
     settings: Any | None = None
     warnings: list[str] = field(default_factory=list)
+    # R02/P3-B: неизменный снимок расчёта — штат, правила, календарь, участники.
+    staff: dict | None = None
+    rules_by_role: dict | None = None
+    workdays_D: int | None = None
+    calendar_dates: dict | None = None
+    db_meta: dict | None = None
 
 
 def resolve_context(db_path: str, year: int, month: int,
@@ -86,7 +92,7 @@ def diagnose_roster_divergence(ctx: PayrollContext, dat_staff: dict,
             if dat_role is not None and int(dat_role) != int(sqlite_role):
                 warnings.append(
                     f'ID {emp_id}: роль DAT={dat_role} vs SQLite={sqlite_role} '
-                    f'на {ctx.month_start} — учёт по DAT, начисление по SQLite'
+                    f'на {ctx.month_start} — используется SQLite (new-режим)'
                 )
             try:
                 rule = get_role_rule(con, int(sqlite_role), ctx.month_start)
@@ -97,12 +103,11 @@ def diagnose_roster_divergence(ctx: PayrollContext, dat_staff: dict,
                     f'ID {emp_id}: SQLite-правило роли {sqlite_role} не участвует '
                     f'({rule.exclude_reason or "без причины"}) — из начислений исключён'
                 )
-        # 2. SQLite-сотрудники вне DAT-справочника.
+        # 2. SQLite-сотрудники вне DAT-справочника (R01: импорт объединённый).
         dat_ids = set((dat_staff or {}).keys())
         for emp_id in sorted(set(sqlite_emps) - dat_ids):
             warnings.append(
-                f'ID {emp_id}: есть только в SQLite — отметки DAT будут отброшены '
-                f'при импорте (требуется объединённый справочник)'
+                f'ID {emp_id}: есть только в SQLite — включён через объединённый штат'
             )
         # 3. Персональные исключения SQLite.
         for emp_id in sorted(sqlite_exceptions):
@@ -163,20 +168,28 @@ def combined_staff_for_import(dat_staff: dict, db_path: str,
             except _sqlite3.Error as e:
                 raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
             if emp_id in combined:
-                # SQLite — авторитет роли в new-режиме.
-                if assigned is not None:
-                    sqlite_role = int(assigned[0])
-                    cur = combined[emp_id]
-                    cur_role = getattr(cur, 'role_id', None)
-                    if cur_role is None or int(cur_role) != sqlite_role:
-                        combined[emp_id] = _EmployeeData(
-                            id=int(emp_id),
-                            first_name=row['first_name'] or getattr(cur, 'first_name', ''),
-                            last_name=row['last_name'] or getattr(cur, 'last_name', ''),
-                            role_id=sqlite_role,
-                            role_name=role_names.get(sqlite_role,
-                                                     getattr(cur, 'role_name', '')),
-                        )
+                # R13: SQLite — авторитет ФИО и роли в new-режиме независимо
+                # от смены роли. Пустые SQLite-ИО — fallback к DAT.
+                cur = combined[emp_id]
+                sqlite_role = int(assigned[0]) if assigned is not None else None
+                want_first = (row['first_name'] or '').strip() or getattr(cur, 'first_name', '')
+                want_last = (row['last_name'] or '').strip() or getattr(cur, 'last_name', '')
+                want_role = sqlite_role if sqlite_role is not None else getattr(cur, 'role_id', None)
+                want_role_name = (role_names.get(want_role, '')
+                                  if want_role is not None else getattr(cur, 'role_name', ''))
+                cur_first = getattr(cur, 'first_name', '')
+                cur_last = getattr(cur, 'last_name', '')
+                cur_role = getattr(cur, 'role_id', None)
+                cur_role_name = getattr(cur, 'role_name', '')
+                if (cur_first, cur_last, cur_role, cur_role_name) != (
+                        want_first, want_last, want_role, want_role_name):
+                    combined[emp_id] = _EmployeeData(
+                        id=int(emp_id),
+                        first_name=want_first,
+                        last_name=want_last,
+                        role_id=want_role,
+                        role_name=want_role_name,
+                    )
                 continue
             if assigned is not None:
                 role_id = int(assigned[0])
@@ -190,6 +203,64 @@ def combined_staff_for_import(dat_staff: dict, db_path: str,
                 role_name=role_names.get(role_id, ''),
             )
         return combined
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+
+def load_rules_map(db_path: str, month_start: str, staff: dict) -> dict:
+    """Действующие SQLite-правила участников на 1-е число (R02).
+
+    Возвращает {role_id: RoleRule}. Отсутствие версии для роли участника —
+    PayrollError до анализа/правок (не KeyError в середине дневных строк).
+    Не пишет в БД.
+    """
+    import sqlite3 as _sqlite3
+
+    from pathlib import Path as _Path
+
+    from core.payroll import PayrollError
+
+    if not _Path(db_path).exists():
+        raise PayrollError(f'{db_path}: справочник не найден для загрузки правил.')
+    from core.pay_store import connect, get_assignment, get_role_rule
+
+    try:
+        con = connect(db_path)
+    except _sqlite3.Error as e:
+        raise PayrollError(f'{db_path}: не удалось открыть справочник ({e}).') from e
+    try:
+        needed: set[int] = set()
+        for emp_id, emp in (staff or {}).items():
+            try:
+                assigned = get_assignment(con, int(emp_id), month_start)
+            except _sqlite3.Error as e:
+                raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
+            if assigned is None:
+                continue
+            needed.add(int(assigned[0]))
+        # Также роли из карточек (для ранней диагностики неизвестных ролей).
+        for emp in (staff or {}).values():
+            rid = getattr(emp, 'role_id', None)
+            if rid is not None:
+                try:
+                    needed.add(int(rid))
+                except (ValueError, TypeError):
+                    pass
+        rules: dict = {}
+        for role_id in sorted(needed):
+            try:
+                rule = get_role_rule(con, int(role_id), month_start)
+            except _sqlite3.Error as e:
+                raise PayrollError(f'{db_path}: ошибка чтения правил ({e}).') from e
+            if rule is None:
+                raise PayrollError(
+                    f'роль {role_id}: нет версии правил на {month_start} — '
+                    f'заведите версию до анализа')
+            rules[int(role_id)] = rule
+        return rules
     finally:
         try:
             con.close()

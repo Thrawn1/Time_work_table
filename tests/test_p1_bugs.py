@@ -415,7 +415,7 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr('core.payroll_service.calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
-        monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
+        monkeypatch.setattr('core.config.load_wage_rates', lambda *a, **k: {101: 800, 102: 800, 103: 800})
         monkeypatch.setattr('core.file_parser.load_holidays', lambda year: [])
         monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
 
@@ -469,7 +469,7 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr('core.payroll_service.calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
-        monkeypatch.setattr('core.config.load_wage_rates', lambda: {101: 800, 102: 800, 103: 800})
+        monkeypatch.setattr('core.config.load_wage_rates', lambda *a, **k: {101: 800, 102: 800, 103: 800})
         monkeypatch.setattr('core.file_parser.load_holidays', lambda year: [])
         monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
 

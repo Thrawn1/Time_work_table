@@ -18,6 +18,8 @@ temporary.json
 temporary_*.json
 *.tmp
 payroll_versions_*.json
+payroll_*_rev*.json
+Ремонтники_*.txt
 data/pay_directory.db
 result/
 Time_table/

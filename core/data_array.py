@@ -46,20 +46,27 @@ def get_employee_work_dates(time_table: dict, emp_id: int) -> list[str]:
     return [d for d in time_table if emp_id in time_table[d]]
 
 
-def get_all_employees_in_data(time_table: dict) -> list[int]:
+def get_all_employees_in_data(time_table: dict, employees: dict | None = None) -> list[int]:
     """Все из справочника — для дашборда (включая бывших/без отметок)."""
+    if employees is not None:
+        return list(employees.keys())
     return list(EMPLOYEES.keys())
 
 
-def get_employees_with_marks(time_table: dict) -> list[int]:
+def get_employees_with_marks(time_table: dict, employees: dict | None = None) -> list[int]:
     """Только те, у кого есть хотя бы одна отметка за период, по порядку справочника.
 
     Это участники расчета по умолчанию: сотрудники без единой отметки
     (уволенные, другие смены) в расчет не включаются. Для genuinely
     отсутствовавшего весь месяц действующего сотрудника — флаг --include-empty.
     """
+    import core.data_array as _self
+
+    staff = getattr(_self, 'EMPLOYEES', None) if employees is None else employees
+    if staff is None:
+        staff = EMPLOYEES
     with_marks = {emp_id for day in time_table.values() for emp_id in day}
-    return [emp_id for emp_id in EMPLOYEES if emp_id in with_marks]
+    return [emp_id for emp_id in staff if emp_id in with_marks]
 
 
 def get_name_employee(emp_id: int, employees: dict | None = None) -> str:

@@ -1,19 +1,19 @@
-"""Месячный пакет нового расчёта: единый набор входных данных (план, шаг 4).
+"""Месячный пакет нового расчёта: единый набор входных данных (spec_payroll.md §4–§6).
 
 Расчётные функции получают всё явно (общие условия, версии правил и назначений,
 стаж, календарь, участники); скрытого чтения ставок/БД в формулах нет.
 Старый режим для периодов без действующих общих условий считает legacy-адаптер
 (core.calculations.calculate_wages) — новая база к старым месяцам не применяется.
 
-Допущения шага 0, зафиксированные здесь явно:
-- факт месяца = сумма фактических часов рабочих дней + выходных/праздников
-  (выходные входят в факт и при превышении нормы становятся переработкой);
-- смена роли внутри месяца: используется правило на 1-е число, в отчёт идёт
-  предупреждение (поинтервальный учёт — следующий шаг);
-- дата приёма неизвестна (перенос из .dat без hire_date) — считаем занятость
-  весь месяц; стаж при неизвестной дате = 0%;
-- молоко: фактическим участникам 40 ₽ × (будни + выходные выходы),
-  фиксированной смене — 0 (как в старом режиме у роли 3); в основу стажа не входит.
+Действующие правила (spec v1.0):
+- факт месяца для начислений — сумма часов ТОЛЬКО будних выходов (R05, §5);
+  выходные/праздники в ``fact``/``H_overtime`` не входят (их отдельная схема — OPEN);
+- версии/назначения только с 1-го числа; mid-month — отказ до расчёта (R06, §6);
+- стаж — полные календарные годы до 1-го числа (R17, §4);
+- роль 4 — без начислений, отдельный список выходов (R04, §2);
+- дата приёма неизвестна — занятость весь месяц; стаж при неизвестной дате = 0%;
+- молоко: фактическим участникам 40 руб. × выходы — ДОПУЩЕНИЕ кода (spec §5 OPEN),
+  фиксированной смене — 0; в основу стажа не входит.
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ class PayrollBundle:
     results: dict[int, PayEmployeeResult] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     salary_mode: bool = True
+    seniority_eff: str | None = None
 
     def versions_snapshot(self) -> dict:
         return {
@@ -72,7 +73,10 @@ class PayrollBundle:
                 'full_month_bonus': str(self.full_month_bonus),
             },
             'role_rule_versions': {str(k): v for k, v in self.rule_versions.items()},
-            'seniority_scale': [[y, str(r)] for y, r in self.seniority_scale],
+            'seniority_scale': {
+                'effective_from': self.seniority_eff,
+                'thresholds': [[y, str(r)] for y, r in self.seniority_scale],
+            },
             'warnings': self.warnings,
         }
 
@@ -108,7 +112,16 @@ def new_regime_available(db_path: str, year: int, month: int):
         raise PayrollError(f'{db_path}: не удалось открыть справочник ({e}).') from e
     try:
         try:
+            from core.pay_validate import find_noncanonical_dates
+
+            _bad = find_noncanonical_dates(con)
+            if _bad:
+                raise PayrollError(
+                    f'{db_path}: неканонические даты справочника ({len(_bad)}): '
+                    + '; '.join(_bad[:5]))
             return get_pay_settings(con, month_start)
+        except PayrollError:
+            raise
         except ValueError as e:
             raise PayrollError(f'{db_path}: некорректный запрос условий ({e}).') from e
         except sqlite3.Error as e:
@@ -134,10 +147,22 @@ def resolve_pay_mode(db_path: str, year: int, month: int) -> str:
 
 
 def _service_years(hire_iso: str | None, on: date) -> Decimal | None:
+    """Полные календарные годы от hire_date до даты расчёта (R17, spec §4).
+
+    Порог достигается в годовщину. 29 февраля: в невисокосном году годовщина —
+    28 февраля (предложение spec, применяется как допущение до шкалы).
+    """
     if not hire_iso:
         return None
     hire = date.fromisoformat(hire_iso)
-    return as_decimal((on - hire).days) / Decimal('365.25')
+    ann_month, ann_day = hire.month, hire.day
+    if ann_month == 2 and ann_day == 29:
+        import calendar as _cal
+
+        if not _cal.isleap(on.year):
+            ann_day = 28
+    years = on.year - hire.year - ((on.month, on.day) < (ann_month, ann_day))
+    return Decimal(max(years, 0))
 
 
 def _zeroed_for_no_salary(result) -> object:
@@ -161,19 +186,24 @@ def _zeroed_for_no_salary(result) -> object:
 
 def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, month: int,
                  db_path: str, salary_mode: bool = True,
-                 employees: dict | None = None) -> PayrollBundle:
+                 employees: dict | None = None,
+                 rules_by_role: dict | None = None) -> PayrollBundle:
     """Собрать месячный пакет. Кидает PayrollError при неполной настройке.
 
     salary_mode=False (ключи t/0/мусор): денежные начисления обнуляются,
     молоко сохраняется — одинаково для новой и legacy-модели (F01).
     Правило SQLite с participates=False исключает сотрудника из начислений (F02).
-    employees — справочник для DAT-исключений/имён (F02-union): объединённый
-    DAT+SQLite в new-режиме, иначе глобальный DAT (legacy-совместимость).
+    employees — объединённый DAT+SQLite штат в new-режиме (R01–R03).
+    rules_by_role — действующие SQLite-правила {role_id: RoleRule} на 1-е число;
+    одиночные отметки проверяются по ним, а не по DAT-умолчанию (R01–R02).
+    Факт для начислений — только будни (R05, spec §5). Версии не с 1-го числа
+    и неканонические даты — отказ до расчёта (R06/R15, spec §6).
     """
-    from core.analysis import search_missed_marks
+    from core.analysis import _get_marks_and_missed
     from core.data_array import exclusion_reason, get_name_employee
     from core.pay_store import (
-        connect, get_assignment, get_pay_settings, get_role_rule, get_seniority_scale,
+        connect, get_assignment, get_pay_settings, get_role_rule_version,
+        get_seniority_version,
     )
 
     month_start = f'{year:04d}-{month:02d}-01'
@@ -201,29 +231,63 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
         if settings is None:
             raise PayrollError(f'{year}-{month:02d}: нет действующих общих условий.')
         try:
-            scale = get_seniority_scale(con, month_start)
+            scale_eff, scale = get_seniority_version(con, month_start)
             emp_rows = {r['id']: r for r in con.execute('SELECT * FROM employees')}
             exceptions = {r['emp_id'] for r in con.execute('SELECT emp_id FROM settlement_exceptions')}
         except _sqlite3.Error as e:
             raise PayrollError(f'{db_path}: ошибка чтения справочника ({e}).') from e
+        # R15: неканонические даты в существующей БД — отказ, а не другой алгоритм.
+        from core.pay_validate import find_noncanonical_dates
+
+        _bad_dates = find_noncanonical_dates(con)
+        if _bad_dates:
+            raise PayrollError(
+                f'{db_path}: неканонические даты справочника ({len(_bad_dates)}): '
+                + '; '.join(_bad_dates[:5]))
+        # R06: версии/назначения не с 1-го числа — отказ до расчёта (spec §6).
+        from core.pay_store import find_midmonth_violations
+
+        _mid = find_midmonth_violations(con)
+        # Фильтруем нарушения будущими периодами? Нет: любое mid-month нарушение
+        # в БД делает расчёт неоднозначным — отказываем с явным списком.
+        # Исключение: нарушения позже month_end не блокируют текущий месяц.
+        _relevant = []
+        for _m in _mid:
+            _relevant.append(_m)
+        # Точная фильтрация по датам внутри месяца — ниже по условиям/назначениям;
+        # здесь отказываем, если есть нарушения, затрагивающие текущий месяц.
+        try:
+            _mid_settings = con.execute(
+                'SELECT effective_from FROM pay_settings WHERE effective_from > ?'
+                ' AND effective_from <= ?', (month_start, month_end)).fetchall()
+        except _sqlite3.Error as e:
+            raise PayrollError(f'{db_path}: ошибка чтения версий условий ({e}).') from e
+        if _mid_settings:
+            raise PayrollError(
+                f'{year}-{month:02d}: общие условия меняются внутри месяца '
+                f'({", ".join(r["effective_from"] for r in _mid_settings)}): '
+                f'по spec §6 версии действуют только с 1-го числа — исправьте справочник')
+        try:
+            _mid_rules = con.execute(
+                'SELECT role_id, effective_from FROM role_rules WHERE effective_from > ?'
+                ' AND effective_from <= ?', (month_start, month_end)).fetchall()
+        except _sqlite3.Error as e:
+            raise PayrollError(f'{db_path}: ошибка чтения версий правил ({e}).') from e
+        if _mid_rules:
+            raise PayrollError(
+                f'{year}-{month:02d}: версии правил меняются внутри месяца '
+                f'({", ".join(str(r["role_id"]) + "@" + r["effective_from"] for r in _mid_rules)}): '
+                f'по spec §6 — исправьте справочник')
+        # Назначения внутри месяца проверяются персонально ниже (отказ с ID).
         bundle = PayrollBundle(
             year=year, month=month, workdays=workdays,
             settings_eff=settings.effective_from, monthly_base=settings.monthly_base,
             base_day_hours=settings.base_day_hours,
             full_month_bonus=settings.full_month_bonus,
             seniority_scale=scale, rule_versions={},
-            salary_mode=bool(salary_mode),
+            salary_mode=bool(salary_mode), seniority_eff=scale_eff,
         )
-        # Предупреждение о смене условий внутри месяца.
-        try:
-            mid = con.execute(
-                'SELECT COUNT(*) c FROM pay_settings WHERE effective_from > ? AND effective_from <= ?',
-                (month_start, month_end)).fetchone()['c']
-        except _sqlite3.Error as e:
-            raise PayrollError(f'{db_path}: ошибка чтения версий условий ({e}).') from e
-        if mid:
-            bundle.warnings.append('общие условия меняются внутри месяца: расчёт по версии '
-                                   f'на {month_start}')
+        # R06: смена условий внутри месяца уже отклонена выше отказом.
         saw_seniority_eligible = False
         for emp_id in summary:
             reason = exclusion_reason(emp_id, employees)
@@ -239,15 +303,16 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 raise PayrollError(f'ID {emp_id}: нет назначения роли на {month_start}.')
             role_id, assign_to = assigned
             try:
-                rule = get_role_rule(con, role_id, month_start)
+                found = get_role_rule_version(con, role_id, month_start)
             except _sqlite3.Error as e:
                 raise PayrollError(f'{db_path}: ошибка чтения правил ролей ({e}).') from e
-            if rule is None:
+            if found is None:
                 raise PayrollError(f'ID {emp_id}: нет версии правил роли {role_id} на {month_start}.')
+            rule_eff, rule = found
             if not rule.participates:
                 # SQLite-правило исключает из начислений (F02): только дашборд с причиной.
                 continue
-            bundle.rule_versions[role_id] = month_start
+            bundle.rule_versions[role_id] = rule_eff
             try:
                 later = con.execute(
                     'SELECT effective_from FROM assignments WHERE emp_id=? AND effective_from > ?'
@@ -255,11 +320,12 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
             except _sqlite3.Error as e:
                 raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
             if later or (assign_to is not None and assign_to < month_end):
-                bundle.warnings.append(
+                raise PayrollError(
                     f'ID {emp_id}: назначение меняется внутри месяца '
                     f'({later["effective_from"] if later else "завершается " + str(assign_to)}): '
-                    'расчёт по правилу на 1-е число')
-            # work_time: {date: {emp: entry}} — агрегируем по сотруднику.
+                    f'по spec §6 смена условий внутри месяца запрещена')
+            # R05/spec §5: факт для начислений — ТОЛЬКО будни. Выходные/праздники
+            # в fact/H_overtime не входят (их отдельная схема — OPEN, не ноль молча).
             fact = Decimal('0')
             present_work = 0
             present_weekend = 0
@@ -276,14 +342,16 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                     fact += timedelta_to_hours(worked)
                 elif tag_day in WEEKEND_TAGS:
                     present_weekend += 1
-                    fact += timedelta_to_hours(worked)
             data = summary[emp_id]
             vacation_days = getattr(data, 'vacation_days', data[2])
             truancy_days = getattr(data, 'truancy_days', data[3])
-            single_issue = (
-                rule.time_mode == TIME_ACTUAL and rule.check_single_mark
-                and bool(search_missed_marks(data_array, emp_id, year, month))
-            )
+            singles, _missed = _get_marks_and_missed(
+                data_array, emp_id, year, month,
+                employees=employees, rules_by_role=(
+                    {rule.role_id: rule} if rules_by_role is None else rules_by_role))
+            # R01: одиночная отметка видна и блокирует бонус (spec §4).
+            # _get_marks... уже учитывает SQLite-правило через rules_by_role.
+            single_issue = bool(singles)
             hire_iso = emp_rows[emp_id]['hire_date'] if emp_id in emp_rows else None
             years = _service_years(hire_iso, first)
             if rule.seniority_eligible:
@@ -325,6 +393,34 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                                    'бонус стажа 0 для всех')
         if not salary_mode:
             bundle.warnings.append('режим без зарплаты: оклады обнулены, молоко сохранено')
+        # P3-C: открытые вопросы spec §9 — не выдаём допущения за утверждения.
+        _any_weekend_days = False
+        _any_vacation = False
+        for _res in bundle.results.values():
+            _any_vacation = _any_vacation or (_res.inputs.vacation_days > 0)
+        try:
+            from core.day_models import WEEKEND_TAGS as _WT
+
+            for _emps in work_time.values():
+                for _eid, _entry in _emps.items():
+                    if _eid in bundle.results:
+                        _tag = getattr(_entry, 'day_tag', _entry[3])
+                        if _tag in _WT:
+                            _any_weekend_days = True
+                            break
+                if _any_weekend_days:
+                    break
+        except (IndexError, AttributeError, TypeError):
+            pass
+        if _any_weekend_days:
+            bundle.warnings.append(
+                'выходные/праздники: отдельная схема оплаты — OPEN (spec п.9); '
+                'в переработку не входят, молоко 40 руб. x выходы — допущение кода')
+        if _any_vacation:
+            bundle.warnings.append('отпуск: оплата в новой модели — OPEN (spec п.9)')
+        if bundle.results:
+            bundle.warnings.append(
+                'молоко 40 руб. x выходы — допущение кода, не утверждение spec (п.5 OPEN)')
         return bundle
     except PayrollError:
         raise

@@ -40,7 +40,7 @@ def config_guard():
     from core import config as c
     keys = ('DATA_DIR', 'VARIABLE_DATA_DIR', 'ID_EMPLOYEE_FILE', 'ROLES_FILE',
             'WAGE_RATES_FILE', 'HOLIDAYS_FILE', 'POSTPONED_DAYS_FILE',
-            'SETTLEMENT_EXCEPTIONS_FILE', 'SECRET_FILE')
+            'SETTLEMENT_EXCEPTIONS_FILE')
     old = {k: getattr(c, k) for k in keys}
     yield c
     for k, v in old.items():
@@ -181,15 +181,19 @@ class TestVersionsAndSecret:
         b.save_versions(str(target))
         assert target.exists()
 
-    def test_secret_file_follows_setter(self, tmp_path, monkeypatch, config_guard):
+    def test_secret_key_never_written_to_output_dir(self, tmp_path, monkeypatch, config_guard):
+        """F18: ключ только в памяти запуска — никакого файла ни в out, ни в cwd."""
         from core import config
         monkeypatch.chdir(tmp_path)
         out = tmp_path / 'out'
         out.mkdir()
-        config.set_secret_file(str(out / '_secret_key.tmp'))
-        config.set_secret_key('12345')
-        assert (out / '_secret_key.tmp').exists()
-        assert not (tmp_path / '_secret_key.tmp').exists()
+        config.clear_secret_key()
+        try:
+            config.set_secret_key('12345')
+            assert not (out / '_secret_key.tmp').exists()
+            assert not (tmp_path / '_secret_key.tmp').exists()
+        finally:
+            config.clear_secret_key()
 
 
 class TestStartScreenDirs:
