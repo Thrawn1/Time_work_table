@@ -120,7 +120,7 @@ def _write_data_rows(ws, time_table: dict, work_time: dict,
     SQLite-исключённого нет нигде, включая строки отпуска/прогула);
     иначе единый фильтр с тем же справочником, что и расчёт.
     """
-    from core.day_models import ATTENDANCE_TAGS, TAG_TRUANCY, TAG_VACATION
+    from core.day_models import ABSENCE_LABELS, ATTENDANCE_TAGS
 
     border = _make_border()
     count = 2
@@ -151,12 +151,12 @@ def _write_data_rows(ws, time_table: dict, work_time: dict,
                 _set_time_cell(ws, count, 7, delta, border)
                 _set_cell(ws, count, 6, overtime_tag, border)
                 count += 1
-            elif tag in (TAG_VACATION, TAG_TRUANCY):
+            elif tag in ABSENCE_LABELS:
                 _set_cell(ws, count, 1, get_name_employee(emp_id, employees), border)
                 _set_cell(ws, count, 2, date_key, border)
                 _set_cell(ws, count, 3, None, border)
                 ws.merge_cells(start_row=count, start_column=3, end_row=count, end_column=7)
-                label = 'Отпуск' if tag == TAG_VACATION else 'Прогул'
+                label = ABSENCE_LABELS[tag]
                 _set_cell(ws, count, 3, label, None).alignment = Alignment(horizontal='center')
                 ws.cell(column=3, row=count).border = border
                 count += 1

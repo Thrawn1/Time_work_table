@@ -17,8 +17,9 @@ class TestDayTags:
             'work', 'weekend', 'holiday', 'vacation', 'truancy')
         assert dm.OVERTIME == 'переработка'
         assert dm.UNDERTIME == 'недоработка'
+        assert dm.TAG_SICK == 'sick'
         assert set(dm.ALLOWED_TAGS) == {
-            'work', 'weekend', 'holiday', 'vacation', 'truancy'}
+            'work', 'weekend', 'holiday', 'vacation', 'truancy', 'sick'}
 
     def test_calculations_use_constants(self, setup_employees):
         from core.calculations import calculate_hours_per_day

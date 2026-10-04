@@ -45,6 +45,7 @@ class PayInputs:
     overtime_coef: Decimal = Decimal('1.5')  # K_overtime, полная оплата часа
     seniority_rate: Decimal = _ZERO  # K_seniority, доля (0.10 = 10%)
     milk_amount: Decimal = _ZERO  # молоко отдельно, в основу стажа не входит
+    sick_days: int = 0  # больничные: не оплачиваются (OPEN, spec §9), бонус полного месяца блокируют
 
 
 @dataclass(frozen=True)
@@ -88,7 +89,7 @@ def monthly_rates(monthly_base: Decimal, workdays: int,
 def check_full_month(workdays: int, workdays_present: int, fact_hours: Decimal,
                      norm_hours: Decimal, vacation_days: int, truancy_days: int,
                      single_mark_issue: bool, employed_whole_month: bool,
-                     eligible: bool) -> tuple[bool, str]:
+                     eligible: bool, sick_days: int = 0) -> tuple[bool, str]:
     """Строгий критерий полного месяца. Возвращает (ok, причина)."""
     if not eligible:
         return False, 'роль не имеет права на бонус'
@@ -96,6 +97,8 @@ def check_full_month(workdays: int, workdays_present: int, fact_hours: Decimal,
         return False, 'приём/увольнение внутри месяца'
     if vacation_days:
         return False, f'отпуск: {vacation_days} дн.'
+    if sick_days:
+        return False, f'больничный: {sick_days} дн.'
     if truancy_days:
         return False, f'прогул: {truancy_days} дн.'
     if workdays_present != workdays:
@@ -138,6 +141,7 @@ def calculate_pay(inp: PayInputs) -> PayResult:
         inp.workdays, inp.workdays_present, fact_hours, norm_hours,
         inp.vacation_days, inp.truancy_days, inp.single_mark_issue,
         inp.employed_whole_month, inp.full_month_eligible,
+        sick_days=inp.sick_days,
     )
     full_exact = as_decimal(inp.full_month_bonus) if full_ok else _ZERO
 

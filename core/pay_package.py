@@ -171,6 +171,7 @@ def serialize_summary(summary: dict) -> dict:
                         'undertime_h': _timedelta_hours(holiday.undertime if hasattr(holiday, 'undertime') else holiday[2])},
             'vacation_days': getattr(data, 'vacation_days', data[2]),
             'truancy_days': getattr(data, 'truancy_days', data[3]),
+            'sick_days': getattr(data, 'sick_days', 0),
         }
     return out
 
@@ -514,6 +515,7 @@ def replay_package(path: str) -> dict:
                     overtime_coef=_Decimal(str(inp_raw.get('overtime_coef', '1.5'))),
                     seniority_rate=_Decimal(str(inp_raw.get('seniority_rate', '0'))),
                     milk_amount=_Decimal(str(inp_raw.get('milk_amount', '0'))),
+                    sick_days=int(inp_raw.get('sick_days', 0)),
                 )
                 if pkg.get('salary_mode') is False:
                     # Режим без зарплаты: деньги нулевые, молоко сохранено.

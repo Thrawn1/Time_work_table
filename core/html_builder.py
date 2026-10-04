@@ -50,7 +50,7 @@ def build_html(emp_id: int, time_table: dict, work_time: dict, summary: dict, wa
 
 def _build_daily_data(emp_id: int, time_table: dict, work_time: dict,
                       employees: dict | None = None) -> list[dict]:
-    from core.day_models import TAG_TRUANCY, TAG_VACATION
+    from core.day_models import ABSENCE_LABELS
 
     if employees is None:
         from core.config import EMPLOYEES as _fallback
@@ -85,10 +85,8 @@ def _build_daily_data(emp_id: int, time_table: dict, work_time: dict,
                 'overtime': str_timedelta(delta),
                 'tag_day': tag,
             }
-            if tag == TAG_VACATION:
-                entry['tag_day'] = 'Отпуск'
-            elif tag == TAG_TRUANCY:
-                entry['tag_day'] = 'Прогул'
+            if tag in ABSENCE_LABELS:
+                entry['tag_day'] = ABSENCE_LABELS[tag]
             result.append(entry)
     return result
 

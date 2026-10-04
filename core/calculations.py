@@ -13,6 +13,7 @@ from core.day_models import (
     ATTENDANCE_TAGS,
     NO_OVERTIME,
     OVERTIME,
+    TAG_SICK,
     TAG_TRUANCY,
     TAG_VACATION,
     TAG_WORK,
@@ -210,7 +211,7 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
                 )
             elif rule.time_mode == TIME_FIXED_SHIFT:
                 tag_day = _mark_tag(marks)
-                if tag_day in (TAG_VACATION, TAG_TRUANCY):
+                if tag_day in (TAG_VACATION, TAG_TRUANCY, TAG_SICK):
                     result[date_key][emp_id] = DayWork(
                         delta=timedelta(0), worked=timedelta(0),
                         overtime_tag=NO_OVERTIME, day_tag=tag_day,
@@ -234,12 +235,16 @@ def calculate_hours_per_day(time_table: TimeTable, employees: dict | None = None
 
 def calculate_hours_per_month(work_time: WorkTime) -> tuple[Summary, dict]:
     restructured: dict[int, list] = {}
+    # Больничные дни считаются отдельно: четыре группы legacy-структуры не меняются.
+    sick_days_by_emp: dict[int, int] = {}
     for date_key, employees in work_time.items():
         for emp_id, data in employees.items():
             if emp_id not in restructured:
                 restructured[emp_id] = [[], [], [], []]
             tag_day = _work_day_tag(data)
-            if tag_day == TAG_WORK:
+            if tag_day == TAG_SICK:
+                sick_days_by_emp[emp_id] = sick_days_by_emp.get(emp_id, 0) + 1
+            elif tag_day == TAG_WORK:
                 cell = (_work_delta(data), _work_overtime_tag(data), date_key)
                 restructured[emp_id][0].append(cell)
             elif tag_day in WEEKEND_TAGS:
@@ -283,6 +288,7 @@ def calculate_hours_per_month(work_time: WorkTime) -> tuple[Summary, dict]:
             ),
             vacation_days=vacation_days,
             truancy_days=truancy_days,
+            sick_days=sick_days_by_emp.get(emp_id, 0),
         )
     return summary, restructured
 

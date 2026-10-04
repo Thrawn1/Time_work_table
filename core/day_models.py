@@ -28,6 +28,7 @@ TAG_WEEKEND = 'weekend'
 TAG_HOLIDAY = 'holiday'
 TAG_VACATION = 'vacation'
 TAG_TRUANCY = 'truancy'
+TAG_SICK = 'sick'
 
 OVERTIME = 'переработка'
 UNDERTIME = 'недоработка'
@@ -36,10 +37,17 @@ NO_OVERTIME = ''
 WORK_TAGS: tuple[str, ...] = (TAG_WORK,)
 WEEKEND_TAGS: tuple[str, ...] = (TAG_WEEKEND, TAG_HOLIDAY)
 ATTENDANCE_TAGS: tuple[str, ...] = (TAG_WORK, TAG_WEEKEND, TAG_HOLIDAY)
-ABSENCE_TAGS: tuple[str, ...] = (TAG_VACATION, TAG_TRUANCY)
+ABSENCE_TAGS: tuple[str, ...] = (TAG_VACATION, TAG_TRUANCY, TAG_SICK)
 ALLOWED_TAGS: frozenset[str] = frozenset(
-    (TAG_WORK, TAG_WEEKEND, TAG_HOLIDAY, TAG_VACATION, TAG_TRUANCY)
+    (TAG_WORK, TAG_WEEKEND, TAG_HOLIDAY, TAG_VACATION, TAG_TRUANCY, TAG_SICK)
 )
+
+#: Подписи статусов-отсутствий в отчётах (Excel/HTML).
+ABSENCE_LABELS: dict[str, str] = {
+    TAG_VACATION: 'Отпуск',
+    TAG_TRUANCY: 'Прогул',
+    TAG_SICK: 'Больничный',
+}
 
 
 # --- Отметки дня: [go(уход), come(приход), tag] -------------------------------
@@ -203,12 +211,17 @@ class HolidayGroup:
 
 @dataclass
 class EmployeeMonth:
-    """Месячный итог сотрудника: будни, выходные, отпуск, прогул."""
+    """Месячный итог сотрудника: будни, выходные, отпуск, прогул.
+
+    ``sick_days`` — больничные дни; в legacy-индексный протокол (0..3) не входит,
+    доступен только по имени.
+    """
 
     work: WorkGroup
     holiday: HolidayGroup
     vacation_days: int
     truancy_days: int
+    sick_days: int = 0
 
     def __len__(self) -> int:
         return 4
@@ -232,8 +245,10 @@ class EmployeeMonth:
 
     def __eq__(self, other) -> bool:
         if isinstance(other, EmployeeMonth):
-            return (self.work, self.holiday, self.vacation_days, self.truancy_days) == \
-                (other.work, other.holiday, other.vacation_days, other.truancy_days)
+            return (self.work, self.holiday, self.vacation_days, self.truancy_days,
+                    self.sick_days) == \
+                (other.work, other.holiday, other.vacation_days, other.truancy_days,
+                 other.sick_days)
         if isinstance(other, (list, tuple)) and len(other) == 4:
             return tuple(self) == tuple(other)
         return NotImplemented

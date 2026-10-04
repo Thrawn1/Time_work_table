@@ -345,6 +345,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
             data = summary[emp_id]
             vacation_days = getattr(data, 'vacation_days', data[2])
             truancy_days = getattr(data, 'truancy_days', data[3])
+            sick_days = getattr(data, 'sick_days', 0)
             singles, _missed = _get_marks_and_missed(
                 data_array, emp_id, year, month,
                 employees=employees, rules_by_role=(
@@ -378,7 +379,7 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 full_month_eligible=rule.full_month_eligible,
                 seniority_eligible=rule.seniority_eligible,
                 overtime_coef=rule.overtime_coef, seniority_rate=sen_rate,
-                milk_amount=milk,
+                milk_amount=milk, sick_days=sick_days,
             )
             _result = calculate_pay(inputs)
             if not salary_mode:
@@ -418,6 +419,9 @@ def build_bundle(data_array: dict, work_time: dict, summary: dict, year: int, mo
                 'в переработку не входят, молоко 40 руб. x выходы — допущение кода')
         if _any_vacation:
             bundle.warnings.append('отпуск: оплата в новой модели — OPEN (spec п.9)')
+        if any(_res.inputs.sick_days > 0 for _res in bundle.results.values()):
+            bundle.warnings.append(
+                'больничный: не оплачивается программой (оплата — OPEN, spec п.9)')
         if bundle.results:
             bundle.warnings.append(
                 'молоко 40 руб. x выходы — допущение кода, не утверждение spec (п.5 OPEN)')
