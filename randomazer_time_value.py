@@ -99,6 +99,22 @@ def format_time(data_time: dict) -> str:
     return f'{h:02d} {m:02d} {s:02d}'
 
 
+#: Разброс автозаполнения вокруг среднего времени: ± этого числа секунд.
+AUTO_FILL_SPREAD_SECONDS = 5 * 60
+
+
+def random_time_near(avg_seconds: int, spread_seconds: int = AUTO_FILL_SPREAD_SECONDS,
+                     rng: random.Random | None = None) -> int:
+    """Случайное время суток (секунды от полуночи) в пределах ±spread от среднего.
+
+    Результат всегда внутри суток: 0..86399. rng — для детерминированных тестов.
+    """
+    source = rng if rng is not None else random
+    low = max(0, int(avg_seconds) - spread_seconds)
+    high = min(86399, int(avg_seconds) + spread_seconds)
+    return source.randint(low, high)
+
+
 def parse_and_fill(time_value: str) -> tuple[str, list]:
     """Разобрать ввод и вернуть (time_str 'HH MM SS', randomized_keys).
 

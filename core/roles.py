@@ -30,6 +30,9 @@ TIME_FIXED_SHIFT = 'fixed_shift'
 
 DEFAULT_OVERTIME_COEF = Decimal('1.5')
 
+#: Роль «Ремонтники»: без начислений, на экране и в файле — только дни выходов.
+REPAIRMEN_ROLE_ID = 4
+
 
 @dataclass(frozen=True)
 class RoleRule:

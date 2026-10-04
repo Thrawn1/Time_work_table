@@ -57,7 +57,8 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
     сотрудник без отметок, но включённый через --include-empty, помечается
     «Включён без отметок», а не «в расчёт не включён» (R07).
     """
-    from core.analysis import _get_marks_and_missed
+    from core.analysis import _current_average, _get_marks_and_missed
+    from core.config import MANUAL_EXCLUSIONS
 
     if employees is None:
         from core.config import EMPLOYEES as _fallback
@@ -82,9 +83,15 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
             info = {'status': 'Включён без отметок', 'style': 'cyan'}
         from core.data_array import exclusion_reason
         reason = exclusion_reason(emp_id, staff)
+        rules_reason = exclusion_reason(emp_id, staff, include_manual=False)
         if extra_excluded and emp_id in extra_excluded:
             _sqlite_reason = extra_excluded[emp_id] or 'исключён SQLite'
-            reason = _sqlite_reason if not reason else f'{reason}; {_sqlite_reason}'
+            if not reason:
+                reason = _sqlite_reason
+            elif _sqlite_reason not in reason:  # одна и та же причина из DAT и SQLite — один раз
+                reason = f'{reason}; {_sqlite_reason}'
+            rules_reason = rules_reason or _sqlite_reason
+        avg = _current_average(time_table, emp_id)
         rows.append({
             'emp_id': emp_id,
             'name': name,
@@ -96,16 +103,72 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
             'style': info['style'],
             'excluded': reason != '',
             'reason': reason,
+            # Исключён оператором на этом запуске (и справочники его не исключают).
+            'manual': emp_id in MANUAL_EXCLUSIONS and not rules_reason,
+            'avg_come': avg.come_text if avg else None,
+            'avg_go': avg.go_text if avg else None,
+            'avg_days': avg.days if avg else 0,
         })
     return rows
 
 
-def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
+def review_numbering(rows: list[dict]) -> list[dict]:
+    """Строки, доступные по номеру: участники расчёта и исключённые вручную.
+
+    Номер строки = индекс в этом списке + 1, порядок — как в справочнике. Он не
+    зависит от того, исключён ли сотрудник: номер не «уезжает» после `x<номер>`,
+    а вернуть исключённого можно по тому же номеру, что показан в блоке исключённых.
+    """
+    return [r for r in rows
+            if ((r['has_marks'] or r.get('included_without_marks')) and not r.get('excluded'))
+            or (r.get('manual') and r['has_marks'])]
+
+
+def build_repairmen_lines(time_table: dict, employees: dict, year: int, month: int) -> list[str]:
+    """«Максим Смирнов — 12, 15, 18, 25 сентября» для каждого ремонтника.
+
+    Чистая функция без печати. Ремонтники — роль REPAIRMEN_ROLE_ID, без начислений:
+    на экране только дни выходов за месяц. Нет выходов — «выходов нет».
+    """
+    from core.constants import MONTHS_NAME_GENITIVE
+    from core.roles import REPAIRMEN_ROLE_ID
+
+    prefix = f'{year:04d}-{month:02d}-'
+    month_ru = MONTHS_NAME_GENITIVE.get(month, str(month)).lower()
+    items: list[tuple[str, list[int]]] = []
+    for emp_id, emp in (employees or {}).items():
+        if getattr(emp, 'role_id', None) != REPAIRMEN_ROLE_ID:
+            continue
+        days = sorted(int(date_key[8:10]) for date_key, day in time_table.items()
+                      if date_key.startswith(prefix) and emp_id in day)
+        name = f'{emp.first_name} {emp.last_name}'.strip() or f'ID {emp_id}'
+        items.append((name, days))
+    items.sort(key=lambda item: item[0])
+    return [f'{name} — {", ".join(str(d) for d in days)} {month_ru}' if days
+            else f'{name} — выходов нет' for name, days in items]
+
+
+def print_repairmen(lines: list[str], title: str = 'Ремонтники (выходы, без начислений)') -> None:
+    """Список ремонтников: по строке на человека. Пустой список — ничего не печатаем."""
+    if not lines:
+        return
+    if not HAS_RICH:
+        print(f'=== {title} ===')
+        for line in lines:
+            print(line)
+        return
+    get_console().print(Panel('\n'.join(lines), title=title, border_style='blue'))
+
+
+def print_dashboard(rows: list[dict], title: str = 'Сводка', numbered: bool = False) -> None:
     """Дашборд блоками: в расчёте / включён без отметок / без отметок / исключён.
 
     R07/R19: явно различаем «исключён», «нет данных» и «включён без отметок»
     (--include-empty). Сотрудники без единой отметки вне расчёта не смешиваются
-    с проблемами действующих.
+    с проблемами действующих. По каждому участнику: сколько дней с одной меткой,
+    сколько рабочих дней вообще без меток и среднее время прихода/ухода.
+    numbered=True — добавить номера для меню разбора (см. review_numbering);
+    исключённые вручную тоже получают номер, чтобы их можно было вернуть.
     """
     active = [r for r in rows
               if (r['has_marks'] or r.get('included_without_marks')) and not r.get('excluded')]
@@ -113,37 +176,50 @@ def print_dashboard(rows: list[dict], title: str = 'Сводка') -> None:
                 if not r['has_marks'] and not r.get('included_without_marks')
                 and not r.get('excluded')]
     excluded = [r for r in rows if r.get('excluded')]
+    numbers = {r['emp_id']: n for n, r in enumerate(review_numbering(rows), 1)} if numbered else {}
+
+    def _label(r: dict) -> str:
+        return f"{numbers[r['emp_id']]}. {r['name']}" if r['emp_id'] in numbers else r['name']
+
+    def _avg(r: dict, key: str) -> str:
+        return r.get(key) or '—'
+
     if not HAS_RICH:
         print(f'=== {title}: в расчете ({len(active)}) ===')
         for r in active:
-            print(f"{r['name']}: одиночных={r['single']} пропусков={r['missed']} [{r['status']}]")
+            print(f"{_label(r)}: одна метка={r['single']} нет меток={r['missed']} "
+                  f"ср. приход={_avg(r, 'avg_come')} ср. уход={_avg(r, 'avg_go')} [{r['status']}]")
         print(f'--- Без отметок за месяц ({len(inactive)}): в расчет не включены ---')
         for r in inactive:
             print(f"{r['name']} [Нет данных]")
         print(f'--- Исключены из начислений ({len(excluded)}) ---')
         for r in excluded:
-            print(f"{r['name']} [{r.get('reason', 'исключён')}]")
+            print(f"{_label(r)} [{r.get('reason', 'исключён')}]")
         return
     console = get_console()
     table = Table(title=f'{title}: в расчете ({len(active)})')
+    if numbered:
+        table.add_column('№', justify='right')
     table.add_column('Сотрудник')
-    table.add_column('Одиночные', justify='right')
-    table.add_column('Пропуски', justify='right')
+    table.add_column('Одна метка', justify='right')
+    table.add_column('Нет меток', justify='right')
+    table.add_column('Ср. приход', justify='right')
+    table.add_column('Ср. уход', justify='right')
     table.add_column('Статус', justify='center')
     for r in active:
-        table.add_row(
-            r['name'],
-            str(r['single']),
-            str(r['missed']),
-            f"[{r['style']}]{r['status']}[/{r['style']}]",
-        )
+        cells = [r['name'], str(r['single']), str(r['missed']),
+                 _avg(r, 'avg_come'), _avg(r, 'avg_go'),
+                 f"[{r['style']}]{r['status']}[/{r['style']}]"]
+        if numbered:
+            cells.insert(0, str(numbers[r['emp_id']]))
+        table.add_row(*cells)
     console.print(table)
     if inactive:
         names = ', '.join(r['name'] for r in inactive)
         console.print(f'[dim]Без отметок за месяц ({len(inactive)}), '
                       f'в расчет не включены: {names}[/dim]')
     if excluded:
-        names = ', '.join(f"{r['name']} ({r.get('reason', 'исключён')})" for r in excluded)
+        names = ', '.join(f"{_label(r)} ({r.get('reason', 'исключён')})" for r in excluded)
         console.print(f'[red]Исключены из начислений ({len(excluded)}): {names}[/red]')
 
 
@@ -155,12 +231,13 @@ def print_header(title: str) -> None:
     get_console().rule(title)
 
 
-def info(msg: str) -> None:
-    """Обычное сообщение."""
+def info(msg: str, markup: bool = True) -> None:
+    """Обычное сообщение. markup=False — печатать как есть: `[a]` не должно
+    читаться rich как тег стиля и пропадать из подсказки меню."""
     if not HAS_RICH:
         print(msg)
         return
-    get_console().print(msg)
+    get_console().print(msg, markup=markup)
 
 
 def warn(msg: str) -> None:
@@ -210,23 +287,26 @@ def confirm_save(preview: str) -> bool:
         info('Введите "д" или "н".')
 
 
-def print_day_card_single(name: str, date_key: str, existing) -> None:
-    """Карточка одиночной отметки."""
+def print_day_card_single(name: str, date_key: str, existing, avg_hint: str | None = None) -> None:
+    """Карточка одиночной отметки (avg_hint — строка о среднем времени сотрудника)."""
     body = (f'Сотрудник: {name}\n'
             f'Дата: {date_key}\n'
             f'Сохранено: {existing}\n'
-            '[1] приход  [2] уход  [0] пропустить')
+            + (f'{avg_hint}\n' if avg_hint else '')
+            + '[1] приход  [2] уход  [3] авто по среднему (± 5 мин)  [0] пропустить')
     if not HAS_RICH:
         print(body)
         return
     get_console().print(Panel(body, title='Одиночная отметка', border_style='yellow'))
 
 
-def print_missed_day_card(name: str, missed_day: str) -> None:
-    """Карточка пропущенного дня."""
+def print_missed_day_card(name: str, missed_day: str, avg_hint: str | None = None) -> None:
+    """Карточка пропущенного дня (avg_hint — строка о среднем времени сотрудника)."""
     body = (f'Сотрудник: {name}\n'
             f'Дата без отметок: {missed_day}\n'
-            '[1] рабочий день  [2] отпуск  [3] прогул  [0] пропустить')
+            + (f'{avg_hint}\n' if avg_hint else '')
+            + '[1] рабочий день  [2] отпуск  [3] прогул  [5] больничный  '
+              '[6] авто по среднему (± 5 мин)  [0] пропустить')
     if not HAS_RICH:
         print(body)
         return
@@ -421,6 +501,8 @@ def print_journal(entries: list[dict], title: str = 'Журнал исправл
             print(f"{e.get('ts', '?')} {e.get('name', '?')} {e.get('date', '?')}: "
                   f"{e.get('action', '?')}: {e.get('before', '?')} -> {e.get('after', '?')}{rnd}")
         return
+    from rich.markup import escape
+
     console = get_console()
     table = Table(title=f'{title} ({len(entries)})')
     table.add_column('Время')
@@ -432,9 +514,11 @@ def print_journal(entries: list[dict], title: str = 'Журнал исправл
         if not isinstance(e, dict):
             continue
         rnd = ' [yellow](случайное время)[/yellow]' if e.get('randomized') else ''
-        table.add_row(str(e.get('ts', '?')), str(e.get('name', '?')), str(e.get('date', '?')),
-                      str(e.get('action', '?')),
-                      f"{e.get('before', '?')} -> {e.get('after', '?')}{rnd}")
+        # Значения содержат «[work]», «[sick]»: без escape rich съедает их как теги.
+        table.add_row(escape(str(e.get('ts', '?'))), escape(str(e.get('name', '?'))),
+                      escape(str(e.get('date', '?'))), escape(str(e.get('action', '?'))),
+                      f"{escape(str(e.get('before', '?')))} -> "
+                      f"{escape(str(e.get('after', '?')))}{rnd}")
     console.print(table)
 
 

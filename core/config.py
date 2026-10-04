@@ -64,6 +64,12 @@ ROLES: dict[int, Role] = {}
 EMPLOYEES: dict[int, EmployeeData] = {}
 SETTLEMENT_EXCEPTIONS: list[int] = []
 
+#: Исключения, выбранные оператором на текущем запуске: {id: причина}. В файлы
+#: справочников не пишутся; живут в сессии (--resume) и в пакете расчёта.
+#: Изменяется только на месте (потребители держат ссылку на этот объект).
+MANUAL_EXCLUSIONS: dict[int, str] = {}
+MANUAL_EXCLUSION_REASON = 'исключён вручную'
+
 
 @contextmanager
 def preserve_config():
@@ -77,6 +83,7 @@ def preserve_config():
     saved_paths = {key: globals()[key] for key in path_keys}
     saved_roles, saved_employees = ROLES.copy(), EMPLOYEES.copy()
     saved_exceptions = SETTLEMENT_EXCEPTIONS.copy()
+    saved_manual = MANUAL_EXCLUSIONS.copy()
     saved_secret_key = _SECRET_KEY
     from core.file_parser import clear_calendar_cache
 
@@ -90,6 +97,8 @@ def preserve_config():
         EMPLOYEES.clear()
         EMPLOYEES.update(saved_employees)
         SETTLEMENT_EXCEPTIONS[:] = saved_exceptions
+        MANUAL_EXCLUSIONS.clear()
+        MANUAL_EXCLUSIONS.update(saved_manual)
         _SECRET_KEY = saved_secret_key
         clear_calendar_cache()
 

@@ -1,5 +1,5 @@
 from datetime import datetime
-from core.config import EMPLOYEES, SETTLEMENT_EXCEPTIONS
+from core.config import EMPLOYEES, MANUAL_EXCLUSIONS, SETTLEMENT_EXCEPTIONS
 from core.day_models import DayMark, TimeTable
 from core.file_parser import read_file_data, definition_of_working_day, parse_attlog_line
 from core.constants import WEEKDAYS_NAME, MONTHS_NAME_TO_RUSSIAN
@@ -84,14 +84,16 @@ def get_name_employee(emp_id: int, employees: dict | None = None) -> str:
 
 
 def is_settlement_allowed(emp_id: int) -> bool:
-    return emp_id not in SETTLEMENT_EXCEPTIONS
+    return emp_id not in SETTLEMENT_EXCEPTIONS and emp_id not in MANUAL_EXCLUSIONS
 
 
-def exclusion_reason(emp_id: int, employees: dict | None = None) -> str:
+def exclusion_reason(emp_id: int, employees: dict | None = None,
+                     include_manual: bool = True) -> str:
     """Точная причина неучастия в начислениях (для дашборда/отчётов).
 
-    Учитывает правила роли (напр. роль 0 «руководство — не участвует»)
-    и персональные исключения. Пустая строка — участвует.
+    Учитывает правила роли (напр. роль 0 «руководство — не участвует»),
+    персональные исключения и исключения, выбранные оператором на этом запуске
+    (include_manual=False — только правила справочников). Пустая строка — участвует.
     employees=None — глобальный DAT-справочник (legacy); переданный словарь
     (напр. объединённый DAT+SQLite) используется для поиска карточки (F02-union).
     """
@@ -117,6 +119,8 @@ def exclusion_reason(emp_id: int, employees: dict | None = None) -> str:
             return rule.exclude_reason or f'роль {role_id} не участвует'
     if emp_id in SETTLEMENT_EXCEPTIONS:
         return 'персональное исключение'
+    if include_manual and emp_id in MANUAL_EXCLUSIONS:
+        return MANUAL_EXCLUSIONS[emp_id]
     return ''
 
 

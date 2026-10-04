@@ -6,12 +6,15 @@ from os.path import exists, join as _join
 
 from core.cli import build_parser, resolve_period, resolve_secret_key, validate_period
 from core.cli import parse_secret_key as parse_secret_key  # совместимость прежнего API main
-from core.config import ConfigError, load_config, preserve_config, set_secret_key, set_data_dir
+from core.config import (
+    MANUAL_EXCLUSIONS, ConfigError, load_config, preserve_config, set_secret_key, set_data_dir,
+)
 from core.file_parser import read_file_data
 from core.data_array import (
     build_data_array, get_all_employees_in_data, get_employees_with_marks, is_included_in_settlement,
 )
-from core.analysis import analyze_for_print, analyze_for_edit, clear_journal, get_journal, restore_journal
+from core.analysis import analyze_for_print, clear_journal, get_journal, restore_journal
+from core.review import current_settlement_ids, run_review
 from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
 from core.excel_builder import build_excel
 from core.html_builder import build_html
@@ -47,8 +50,10 @@ def _write_repairmen_report(data_array: dict, staff: dict, year: int, month: int
     """
     from core.data_array import get_name_employee
 
+    from core.roles import REPAIRMEN_ROLE_ID
+
     repairmen = [e for e, emp in (staff or {}).items()
-                 if getattr(emp, 'role_id', None) == 4]
+                 if getattr(emp, 'role_id', None) == REPAIRMEN_ROLE_ID]
     if not repairmen:
         return ''
     prefix = f'{year:04d}-{month:02d}-'
@@ -144,6 +149,14 @@ def _run(args: Namespace, parser: ArgumentParser) -> None:
                         sys.exit(1)
                 except (ValueError, TypeError):
                     pass
+        # Исключения сотрудников, выбранные оператором до обрыва, действуют и дальше.
+        _saved_manual = (saved_context or {}).get('manual_excluded')
+        if isinstance(_saved_manual, dict):
+            for _k, _v in _saved_manual.items():
+                try:
+                    MANUAL_EXCLUSIONS[int(_k)] = str(_v)
+                except (TypeError, ValueError):
+                    continue
         session_state = 'resumed'
     else:
         year, month = resolve_period(args, parser)
@@ -333,7 +346,7 @@ def _run(args: Namespace, parser: ArgumentParser) -> None:
                   f'на {pay_ctx.month_start} для: {_names}. Расчет прерван без fallback.')
             sys.exit(1)
     # R08/R10: контекст сессии — до правок, чтобы каждое сохранение несло тот же смысл.
-    set_session_context({
+    session_ctx = {
         'db_path': args.pay_dir,
         'mode': pay_ctx.mode,
         'salary_mode': bool(salary_mode),
@@ -341,18 +354,22 @@ def _run(args: Namespace, parser: ArgumentParser) -> None:
         'month_start': pay_ctx.month_start,
         'calendar': _cal_snapshot,
         'participants': sorted(settlement_ids),
+        'manual_excluded': {str(k): v for k, v in MANUAL_EXCLUSIONS.items()},
         'dat_file': args.file if session_state != 'resumed' else (
             (saved_context.get('dat_file') if saved_context else None)),
-    })
+    }
+    set_session_context(session_ctx)
 
     from core.ui import (
         build_dashboard_rows,
         build_preview_rows,
+        build_repairmen_lines,
         build_start_info,
         print_dashboard,
         print_header,
         print_journal,
         print_preview,
+        print_repairmen,
         print_salary_report,
         print_start_screen,
     )
@@ -366,28 +383,60 @@ def _run(args: Namespace, parser: ArgumentParser) -> None:
 
     print_header('Проверка')
     _STAFF = active_staff
-    for emp_id in settlement_ids:
-        analyze_for_print(data_array, emp_id, year, month,
-                          employees=_STAFF, rules_by_role=rules_by_role)
+    # Ремонтники — без начислений и проверок: только дни выходов, сразу на экране.
+    print_repairmen(build_repairmen_lines(data_array, _STAFF, year, month))
 
     _dashboard_ids = (list(active_staff.keys()) if pay_ctx.mode == 'new'
                       else get_all_employees_in_data(data_array, _STAFF))
-    print_dashboard(
-        build_dashboard_rows(data_array, _dashboard_ids, year, month,
-                             employees=_STAFF, extra_excluded=sqlite_excluded or None,
-                             rules_by_role=rules_by_role, included_ids=settlement_set),
-        title=f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка',
-    )
-
-    if not args.no_edit:
-        print_header('Правки')
+    _dashboard_title = f'{MONTHS_NAME_TO_RUSSIAN[month]} {year} — сводка'
+    if args.no_edit:
+        # Без правок: подробный список проблем каждого участника и сводная таблица.
         for emp_id in settlement_ids:
-            analyze_for_edit(data_array, emp_id, year, month,
-                             employees=_STAFF, rules_by_role=rules_by_role)
+            analyze_for_print(data_array, emp_id, year, month,
+                              employees=_STAFF, rules_by_role=rules_by_role)
+        print_dashboard(
+            build_dashboard_rows(data_array, _dashboard_ids, year, month,
+                                 employees=_STAFF, extra_excluded=sqlite_excluded or None,
+                                 rules_by_role=rules_by_role, included_ids=settlement_set),
+            title=_dashboard_title,
+        )
+    else:
+        print_header('Правки')
 
-    for emp_id in settlement_ids:
-        analyze_for_print(data_array, emp_id, year, month,
-                          employees=_STAFF, rules_by_role=rules_by_role)
+        def _persist_exclusions() -> None:
+            """Ручные исключения и состав участников — в контекст сессии (для --resume)."""
+            session_ctx['manual_excluded'] = {str(k): v for k, v in MANUAL_EXCLUSIONS.items()}
+            session_ctx['participants'] = sorted(
+                current_settlement_ids(emp_ids, active_staff, sqlite_excluded))
+            set_session_context(session_ctx)
+            try:
+                from core.session import save_session as _save_ctx
+
+                _save_ctx(data_array, year, month, journal=get_journal())
+            except (OSError, ValueError) as e:
+                print(f'ВНИМАНИЕ: исключение не записано в сессию ({e}); '
+                      f'при --resume его придётся выбрать заново.')
+
+        try:
+            run_review(data_array, _STAFF, emp_ids, year, month,
+                       rules_by_role=rules_by_role, extra_excluded=sqlite_excluded,
+                       on_exclusion_change=_persist_exclusions, title=_dashboard_title)
+        except OSError as e:
+            print(f'ОШИБКА: сессия правок не сохранена ({e}). Расчет прерван; '
+                  f'повторите запуск с --resume.')
+            sys.exit(1)
+        # Состав мог измениться: сотрудников исключили или вернули в расчёт.
+        settlement_ids = current_settlement_ids(emp_ids, active_staff, sqlite_excluded)
+        settlement_set = set(settlement_ids)
+        session_ctx['participants'] = sorted(settlement_ids)
+        session_ctx['manual_excluded'] = {str(k): v for k, v in MANUAL_EXCLUSIONS.items()}
+        set_session_context(session_ctx)
+        print_dashboard(
+            build_dashboard_rows(data_array, _dashboard_ids, year, month,
+                                 employees=_STAFF, extra_excluded=sqlite_excluded or None,
+                                 rules_by_role=rules_by_role, included_ids=settlement_set),
+            title=f'{_dashboard_title} (итог перед расчётом)',
+        )
 
     print_header('Расчет')
     try:
@@ -417,6 +466,13 @@ def _run(args: Namespace, parser: ArgumentParser) -> None:
                 vacation_days=0,
                 truancy_days=0,
             )
+    _sick_days = {e: s.sick_days for e, s in summary.items() if getattr(s, 'sick_days', 0)}
+    if _sick_days:
+        from core.data_array import get_name_employee as _sick_name
+
+        print('Больничные дни (программа их не оплачивает — оплата OPEN, spec п.9):')
+        for _e, _n in sorted(_sick_days.items()):
+            print(f'  {_sick_name(_e, _STAFF) or _e}: {_n} дн.')
     # Режим уже выбран до правок (pay_ctx): new — обязателен и фатален
     # при ошибках настройки, legacy — старый адаптер. Silent fallback запрещён (F05).
     from core.payroll import PayrollError, build_bundle, bundle_to_wages

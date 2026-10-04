@@ -1,4 +1,5 @@
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 from calendar import monthrange
 from core.config import EMPLOYEES
 from core.constants import WEEKDAYS_NAME, MONTHS_NAME_GENITIVE, MONTHS_NAME_TO_RUSSIAN
@@ -131,6 +132,130 @@ def search_missed_marks(time_table: dict, emp_id: int, year: int, month: int) ->
                 result.append([date_str, _mark_come(cell)])
         current += timedelta(days=1)
     return result if result else 0
+
+
+#: Пара «приход–уход» короче этого в среднее не берётся: это двойное касание
+#: терминала, а не смена, и она исказила бы среднее время ухода.
+MIN_SHIFT_FOR_AVERAGE = timedelta(hours=1)
+
+
+@dataclass(frozen=True)
+class AverageTimes:
+    """Среднее время начала и конца рабочего дня сотрудника за месяц."""
+
+    come: int  # секунды от полуночи
+    go: int
+    days: int  # по скольким полным будним дням посчитано
+
+    @property
+    def come_text(self) -> str:
+        return format_seconds(self.come)
+
+    @property
+    def go_text(self) -> str:
+        return format_seconds(self.go)
+
+
+def format_seconds(seconds: int) -> str:
+    """Секунды от полуночи -> 'ЧЧ:ММ:СС'."""
+    seconds = max(0, min(86399, int(seconds)))
+    return f'{seconds // 3600:02d}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}'
+
+
+def _seconds_of_day(moment: datetime) -> int:
+    return moment.hour * 3600 + moment.minute * 60 + moment.second
+
+
+def _at_seconds(day: datetime | str, seconds: int) -> datetime:
+    """Дата `day` (datetime или 'YYYY-MM-DD') в момент `seconds` от полуночи."""
+    if isinstance(day, str):
+        day = datetime.strptime(day, '%Y-%m-%d')
+    seconds = max(0, min(86399, int(seconds)))
+    return datetime.combine(day.date(), time(seconds // 3600, seconds % 3600 // 60,
+                                             seconds % 60))
+
+
+def compute_average_times(time_table: dict, emp_id: int,
+                          skip_dates: frozenset[str] | set[str] = frozenset()
+                          ) -> AverageTimes | None:
+    """Среднее время прихода/ухода по полным будним дням сотрудника.
+
+    Берутся только настоящие данные: будни с двумя разными отметками и сменой не
+    короче MIN_SHIFT_FOR_AVERAGE. Даты из ``skip_dates`` (правки оператора,
+    автозаполнение) пропускаются, чтобы собственные правки не сдвигали среднее.
+    None — нет ни одного подходящего дня.
+    """
+    from core.day_models import TAG_WORK
+
+    come_sum = go_sum = count = 0
+    for date_key, day in time_table.items():
+        if date_key in skip_dates or emp_id not in day:
+            continue
+        marks = day[emp_id]
+        if _mark_tag(marks) != TAG_WORK:
+            continue
+        come, go = _mark_come(marks), _mark_go(marks)
+        if go - come < MIN_SHIFT_FOR_AVERAGE:
+            continue
+        come_sum += _seconds_of_day(come)
+        go_sum += _seconds_of_day(go)
+        count += 1
+    if count == 0:
+        return None
+    return AverageTimes(come=come_sum // count, go=go_sum // count, days=count)
+
+
+def format_average(avg: AverageTimes | None) -> str:
+    """Короткая строка для карточек: «Среднее по 18 дн.: приход 08:03:12, уход 17:01:40»."""
+    if avg is None:
+        return 'Среднее время: нет данных (нет полных рабочих дней)'
+    return f'Среднее по {avg.days} дн.: приход {avg.come_text}, уход {avg.go_text}'
+
+
+def _current_average(time_table: dict, emp_id: int) -> AverageTimes | None:
+    """Среднее по данным без дней, которые оператор уже правил в этом запуске."""
+    return compute_average_times(time_table, emp_id, skip_dates=_edited_dates(emp_id))
+
+
+def _edited_dates(emp_id: int) -> set[str]:
+    return {str(e.get('date')) for e in _JOURNAL if e.get('emp_id') == emp_id}
+
+
+def auto_complete_single(existing: datetime, avg: AverageTimes,
+                         rng=None) -> tuple[datetime, datetime, str] | None:
+    """Достроить одиночную отметку по среднему времени.
+
+    Отметка, которая ближе к среднему приходу, считается приходом (дополняем уход
+    средним временем ухода ± 5 минут), иначе — уходом (дополняем приход).
+    Возвращает (приход, уход, какая сторона дополнена: 'приход'|'уход') или None,
+    если подходящую пару подобрать не удалось (например, отметка позже среднего ухода).
+    """
+    from randomazer_time_value import random_time_near
+
+    seconds = _seconds_of_day(existing)
+    fill_go = abs(seconds - avg.come) <= abs(seconds - avg.go)
+    for _ in range(30):
+        if fill_go:
+            go = _at_seconds(existing, random_time_near(avg.go, rng=rng))
+            if _validate_pair(existing, go) is None:
+                return existing, go, 'уход'
+        else:
+            come = _at_seconds(existing, random_time_near(avg.come, rng=rng))
+            if _validate_pair(come, existing) is None:
+                return come, existing, 'приход'
+    return None
+
+
+def auto_complete_day(day: str, avg: AverageTimes, rng=None) -> tuple[datetime, datetime] | None:
+    """Рабочий день целиком по средним: (приход, уход), оба ± 5 минут от среднего."""
+    from randomazer_time_value import random_time_near
+
+    for _ in range(30):
+        come = _at_seconds(day, random_time_near(avg.come, rng=rng))
+        go = _at_seconds(day, random_time_near(avg.go, rng=rng))
+        if _validate_pair(come, go) is None:
+            return come, go
+    return None
 
 
 def format_datetime_russian(dt_obj: datetime, fmt: str) -> str:
@@ -366,6 +491,10 @@ def _dt_truancy(day: str) -> datetime:
     return _dt(day, '23 59 59')
 
 
+def _dt_sick(day: str) -> datetime:
+    return _dt(day, '00 00 02')
+
+
 def _read_work_times(suffix: str = '') -> tuple[str, str, bool] | None:
     """Спросить приход/уход один раз. None — отмена."""
     got_begin = _read_valid_time(f'Время прихода{suffix}')
@@ -419,14 +548,58 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
     return True
 
 
+def _apply_auto_work_days(time_table: dict, emp_id: int, days: list[str],
+                          avg: AverageTimes | None, date_ref: str, rng=None) -> bool:
+    """Заполнить рабочие дни по средним (± 5 минут, для каждого дня своё время).
+
+    Одно подтверждение на все дни. True — записано. Без средних (нет полных
+    рабочих дней у сотрудника) автозаполнение недоступно.
+    """
+    from core import ui
+    from core.day_models import DayMark, TAG_WORK
+
+    if avg is None:
+        ui.error('Автозаполнение недоступно: у сотрудника нет полных рабочих дней '
+                 'для среднего. Введите время вручную.')
+        return False
+    plan: list[tuple[str, datetime, datetime]] = []
+    for day in days:
+        pair = auto_complete_day(day, avg, rng=rng)
+        if pair is None:
+            ui.error(f'Не удалось подобрать время для {day} по средним. Введите вручную.')
+            return False
+        plan.append((day, pair[0], pair[1]))
+    lines = [f'{day}: приход {come.time()} уход {go.time()}' for day, come, go in plan[:7]]
+    if len(plan) > 7:
+        lines.append(f'... и ещё {len(plan) - 7} дн.')
+    preview = (f'Автозаполнение за {date_ref} по среднему ({avg.come_text} / {avg.go_text}'
+               f' ± 5 мин):\n' + '\n'.join(lines))
+    if not _confirm_save(preview):
+        ui.info('Не подтверждено.')
+        return False
+    action = f'рабочие дни x{len(days)} (авто по среднему)'
+    for day, come, go in plan:
+        record_edit(emp_id, day, action, None,
+                    DayMark(go=go, come=come, tag=TAG_WORK), randomized=True)
+    for day, come, go in plan:
+        _set_mark(time_table, day, emp_id, DayMark(go=go, come=come, tag=TAG_WORK))
+    try:
+        _save_session(time_table)
+    except BaseException:
+        del _JOURNAL[-len(plan):]
+        raise
+    ui.info(f'\nДанные за {date_ref} заполнены по среднему\n')
+    return True
+
+
 def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
                        action: str, date_ref: str, confirm_q: str) -> bool:
-    """Одно подтверждение на все дни. tag: TAG_VACATION | TAG_TRUANCY."""
-    from core.day_models import DayMark, TAG_TRUANCY, TAG_VACATION, TAG_WORK
+    """Одно подтверждение на все дни. tag: TAG_VACATION | TAG_TRUANCY | TAG_SICK."""
+    from core.day_models import DayMark, TAG_SICK, TAG_TRUANCY, TAG_VACATION, TAG_WORK
 
     if not _confirm_save(confirm_q):
         return False
-    mark_of = _dt_vac if tag == TAG_VACATION else _dt_truancy
+    mark_of = {TAG_VACATION: _dt_vac, TAG_TRUANCY: _dt_truancy, TAG_SICK: _dt_sick}[tag]
     # R09: журнал до сохранения, точные даты и значения до/после по каждому дню.
     for day in days:
         mark = mark_of(day)
@@ -456,6 +629,7 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
         time_table, emp_id, year, month,
         employees=staff, rules_by_role=rules_by_role)
     name = f'{role.last_name} {role.first_name}'.strip()
+    avg = _current_average(time_table, emp_id)
     if list_marks != 0:
         print(f"ПРЕДУПРЕЖДЕНИЕ! {name} имеет только одну отметку в рабочем дне!", file=stderr)
         for cell in list_marks:
@@ -466,33 +640,51 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
                 before_snapshot = list(before_single)
             except TypeError:
                 before_snapshot = before_single
-            ui.print_day_card_single(name, date_key, existing)
+            ui.print_day_card_single(name, date_key, existing, avg_hint=format_average(avg))
             while True:
-                choice = ui.ask_menu('Выберете пункт меню:', ('1', '2'))
+                choice = ui.ask_menu('Выберете пункт меню:', ('1', '2', '3'))
                 if choice in ('0', 'q', 'отмена'):
                     break
-                if choice in ('1', '2'):
-                    got = _read_valid_time('Введите время')
-                    if got is None:
-                        break  # пропуск этого дня
-                    entered_time, randomized = got
-                    try:
-                        dt_write = _dt(date_key, entered_time)
-                    except ValueError as e:
-                        ui.error(f'Ошибка: неверное время ({e}). Введите снова.')
-                        continue
-                    come, go = (dt_write, existing) if choice == '1' else (existing, dt_write)
-                    err = _validate_pair(come, go)
-                    if err is not None:
-                        ui.error(f'Ошибка: {err}. Не сохранено. Введите снова или 0 для пропуска.')
-                        continue
-                    preview = (f'Выйдет: приход {come.time()} уход {go.time()} '
-                               f'длительность {go - come}.')
-                    if randomized:
-                        preview += ' (часть времени дополнена случайно — проверьте!)'
+                if choice in ('1', '2', '3'):
+                    action = 'одиночная метка'
+                    if choice == '3':
+                        # Автозаполнение: недостающая сторона — среднее ± 5 минут.
+                        auto = auto_complete_single(existing, avg) if avg is not None else None
+                        if auto is None:
+                            ui.error('Автозаполнение недоступно: нет средних времён или '
+                                     'отметка не подходит к ним. Введите время вручную.')
+                            continue
+                        come, go, side = auto
+                        choice = '2' if side == 'уход' else '1'
+                        dt_write = go if side == 'уход' else come
+                        randomized = True
+                        action = 'одиночная метка (авто по среднему)'
+                        preview = (f'Выйдет: приход {come.time()} уход {go.time()} '
+                                   f'длительность {go - come}. '
+                                   f'(авто: {side} по среднему {avg.come_text} / '
+                                   f'{avg.go_text} ± 5 мин)')
+                    else:
+                        got = _read_valid_time('Введите время')
+                        if got is None:
+                            break  # пропуск этого дня
+                        entered_time, randomized = got
+                        try:
+                            dt_write = _dt(date_key, entered_time)
+                        except ValueError as e:
+                            ui.error(f'Ошибка: неверное время ({e}). Введите снова.')
+                            continue
+                        come, go = (dt_write, existing) if choice == '1' else (existing, dt_write)
+                        err = _validate_pair(come, go)
+                        if err is not None:
+                            ui.error(f'Ошибка: {err}. Не сохранено. Введите снова или 0 для пропуска.')
+                            continue
+                        preview = (f'Выйдет: приход {come.time()} уход {go.time()} '
+                                   f'длительность {go - come}.')
+                        if randomized:
+                            preview += ' (часть времени дополнена случайно — проверьте!)'
                     if _confirm_save(preview):
                         # R09: журнал до сохранения; откат при ошибке записи.
-                        record_edit(emp_id, date_key, 'одиночная метка',
+                        record_edit(emp_id, date_key, action,
                                     before_snapshot,
                                     _preview_mark(time_table[date_key][emp_id],
                                                   choice, dt_write),
@@ -519,14 +711,15 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
                 break
             label = format_range(group)
             multi = len(group) > 1
-            ui.print_missed_day_card(name, label)
+            ui.print_missed_day_card(name, label, avg_hint=format_average(avg))
             if multi:
                 ui.info(f'Диапазон {label}: время вводится один раз на все дни. '
-                        '[4] разобрать по одному дню  [a] пропустить все оставшиеся')
-                valid = ('1', '2', '3', '4', 'a')
+                        '[4] разобрать по одному дню  [a] пропустить все оставшиеся',
+                        markup=False)
+                valid = ('1', '2', '3', '4', '5', '6', 'a')
             else:
-                ui.info('[a] пропустить все оставшиеся')
-                valid = ('1', '2', '3', 'a')
+                ui.info('[a] пропустить все оставшиеся', markup=False)
+                valid = ('1', '2', '3', '5', '6', 'a')
             while True:
                 match ui.ask_menu('Введите пункт меню:', valid):
                     case '0' | 'q' | 'отмена':
@@ -563,16 +756,37 @@ def analyze_for_edit(time_table: dict, emp_id: int, year: int, month: int,
                                               f'прогул x{len(group)}', date_ref,
                                               f'Отметить {date_ref} как прогул?'):
                             break
+                    case '5':
+                        date_ref = label if multi else group[0]
+                        from core.day_models import TAG_SICK
+
+                        if _apply_status_days(time_table, emp_id, group, TAG_SICK,
+                                              f'больничный x{len(group)}', date_ref,
+                                              f'Отметить {date_ref} как больничный?'):
+                            break
+                    case '6':
+                        date_ref = label if multi else group[0]
+                        if _apply_auto_work_days(time_table, emp_id, group, avg, date_ref):
+                            break
 
 
 def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
     """Разобрать один день диапазона. Возвращает 'done' | 'skip'."""
     from core import ui
-    from core.day_models import TAG_TRUANCY, TAG_VACATION
+    from core.day_models import TAG_SICK, TAG_TRUANCY, TAG_VACATION
 
     while True:
-        match ui.ask_menu(f'{day}: [1] рабочий [2] отпуск [3] прогул [0] пропустить день:',
-                          ('1', '2', '3')):
+        match ui.ask_menu(f'{day}: [1] рабочий [2] отпуск [3] прогул [5] больничный '
+                          f'[6] авто по среднему [0] пропустить день:',
+                          ('1', '2', '3', '5', '6')):
+            case '5':
+                if _apply_status_days(time_table, emp_id, [day], TAG_SICK,
+                                      'больничный', day, f'Отметить {day} как больничный?'):
+                    return 'done'
+            case '6':
+                if _apply_auto_work_days(time_table, emp_id, [day],
+                                         _current_average(time_table, emp_id), day):
+                    return 'done'
             case '0' | 'q' | 'отмена':
                 return 'skip'
             case '1':
@@ -591,3 +805,78 @@ def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
                 if _apply_status_days(time_table, emp_id, [day], TAG_TRUANCY,
                                       'прогул', day, f'Отметить {day} как прогул?'):
                     return 'done'
+
+
+def auto_fill_singles(time_table: dict, emp_id: int, year: int, month: int,
+                      employees: dict | None = None,
+                      rules_by_role: dict | None = None, rng=None) -> int:
+    """Достроить ВСЕ одиночные отметки сотрудника по его средним (± 5 минут).
+
+    Одно подтверждение на весь список. Для каждой отметки недостающая сторона
+    берётся у среднего времени ухода/прихода (см. auto_complete_single). Отметки,
+    к которым подобрать пару не удалось, остаются как есть — их можно разобрать
+    вручную. Возвращает число заполненных отметок.
+    """
+    from core import ui
+
+    staff = _resolve_staff(employees)
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
+    if role is None:
+        return 0
+    list_marks, _missed = _get_marks_and_missed(
+        time_table, emp_id, year, month, employees=staff, rules_by_role=rules_by_role)
+    if list_marks == 0:
+        ui.info('Одиночных отметок нет.')
+        return 0
+    avg = _current_average(time_table, emp_id)
+    if avg is None:
+        ui.error('Автозаполнение недоступно: у сотрудника нет полных рабочих дней '
+                 'для среднего. Разберите отметки вручную.')
+        return 0
+    plan: list[tuple[str, str, datetime, datetime, str]] = []
+    skipped: list[str] = []
+    for cell in list_marks:
+        date_key = cell[0]
+        existing = _mark_go(time_table[date_key][emp_id])
+        auto = auto_complete_single(existing, avg, rng=rng)
+        if auto is None:
+            skipped.append(date_key)
+            continue
+        come, go, side = auto
+        plan.append((date_key, '2' if side == 'уход' else '1', come, go, side))
+    if not plan:
+        ui.error('Ни к одной отметке не удалось подобрать пару по средним. '
+                 'Разберите отметки вручную.')
+        return 0
+    name = f'{role.last_name} {role.first_name}'.strip()
+    lines = [f'{date_key}: приход {come.time()} уход {go.time()} (дополнен {side})'
+             for date_key, _choice, come, go, side in plan]
+    preview = (f'{name}: автозаполнение {len(plan)} одиночных отметок по среднему '
+               f'({avg.come_text} / {avg.go_text} ± 5 мин):\n' + '\n'.join(lines))
+    if skipped:
+        preview += f'\nБез изменений (подобрать не удалось): {", ".join(skipped)}'
+    if not _confirm_save(preview):
+        ui.info('Не подтверждено.')
+        return 0
+    action = 'одиночная метка (авто по среднему)'
+    for date_key, choice, come, go, _side in plan:
+        dt_write = go if choice == '2' else come
+        marks = time_table[date_key][emp_id]
+        try:
+            before_snapshot = list(marks)
+        except TypeError:
+            before_snapshot = marks
+        record_edit(emp_id, date_key, action, before_snapshot,
+                    _preview_mark(marks, choice, dt_write), randomized=True,
+                    employees=staff)
+        if choice == '1':
+            _set_mark_come(marks, dt_write)
+        else:
+            _set_mark_go(marks, dt_write)
+    try:
+        _save_session(time_table)
+    except BaseException:
+        del _JOURNAL[-len(plan):]
+        raise
+    ui.info(f'Заполнено отметок: {len(plan)}.')
+    return len(plan)
