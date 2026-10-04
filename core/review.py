@@ -5,9 +5,14 @@
    время прихода и ухода (по настоящим данным терминала).
 2. По номеру — полный список проблем сотрудника и выбор: закрывать по одной
    (вручную, отпуск, прогул, больничный, автозаполнение по среднему ± 5 минут)
-   либо сразу автозаполнить все его одиночные отметки.
+   либо сразу автозаполнить все его одиночные отметки. Дни с недоработкой (отработано
+   меньше нормы смены, на сколько бы ни было) правятся отдельным пунктом: по номеру дня.
 3. ``x<номер>`` — исключить сотрудника из расчёта на этот запуск (повторно — вернуть).
-4. Пустой ввод — к расчёту.
+4. Пустой ввод — к следующему этапу.
+5. Этап «Недоработки» (run_undertime_review) — после того как пропуски закрыты (любым
+   способом, в том числе автозаполнением): все дни участников расчёта, отработанные
+   меньше нормы смены, одним списком; по номеру строки день правится. Пустой ввод —
+   к расчёту.
 
 Модуль только оркестрирует: проверки и правки живут в core.analysis, вывод — в core.ui.
 """
@@ -92,30 +97,103 @@ def review_employee(time_table: dict, employees: dict, emp_id: int, year: int, m
     """Полный список проблем сотрудника и выбор способа их закрыть."""
     from core import ui
     from core.analysis import (
-        _current_average, _get_marks_and_missed, analyze_for_edit, analyze_for_print,
-        auto_fill_singles, format_average,
+        _current_average, _get_marks_and_missed, _get_undertime_days, analyze_for_edit,
+        analyze_for_print, auto_fill_singles, edit_undertime_days, format_average,
+        total_shortfall,
     )
+    from core.calculations import str_timedelta
 
     analyze_for_print(time_table, emp_id, year, month,
                       employees=employees, rules_by_role=rules_by_role)
     while True:
         singles, missed = _get_marks_and_missed(
             time_table, emp_id, year, month, employees=employees, rules_by_role=rules_by_role)
-        if singles == 0 and missed == 0:
-            ui.info('Проблем нет.')
-            return
+        under = _get_undertime_days(
+            time_table, emp_id, year, month, employees=employees, rules_by_role=rules_by_role)
         n_single = len(singles) if isinstance(singles, list) else 0
         n_missed = len(missed) if isinstance(missed, list) else 0
-        ui.info(f'Одна метка: {n_single}, нет меток: {n_missed}. '
-                f'{format_average(_current_average(time_table, emp_id))}')
+        if not (n_single or n_missed or under):
+            ui.info('Проблем нет.')
+            return
+        info_line = f'Одна метка: {n_single}, нет меток: {n_missed}'
+        if under:
+            info_line += (f', недоработка: {len(under)} дн. '
+                          f'(всего {str_timedelta(total_shortfall(under))})')
+        ui.info(f'{info_line}. {format_average(_current_average(time_table, emp_id))}')
+        options: list[tuple[str, str]] = []
+        if n_single or n_missed:
+            options.append(('1', 'закрывать по одной'))
+        if n_single:
+            options.append(('2', 'заполнить все одиночные отметки автоматически (по среднему ± 5 мин)'))
+        if under:
+            options.append(('3', 'править дни с недоработкой'))
         choice = ui.ask_menu(
-            '[1] закрывать по одной  [2] заполнить все одиночные отметки автоматически '
-            '(по среднему ± 5 мин)  [0] назад:', ('1', '2'))
+            '  '.join(f'[{key}] {text}' for key, text in options) + '  [0] назад:',
+            tuple(key for key, _text in options))
         if choice in ('0', 'q', 'отмена'):
             return
         if choice == '1':
             analyze_for_edit(time_table, emp_id, year, month,
                              employees=employees, rules_by_role=rules_by_role)
-        else:
+        elif choice == '2':
             auto_fill_singles(time_table, emp_id, year, month,
                               employees=employees, rules_by_role=rules_by_role)
+        else:
+            edit_undertime_days(time_table, emp_id, year, month,
+                                employees=employees, rules_by_role=rules_by_role)
+
+
+def build_undertime_rows(time_table: dict, employees: dict, emp_ids: list[int],
+                         year: int, month: int, *, rules_by_role: dict | None = None
+                         ) -> list[dict]:
+    """Строки обзора недоработок: {'emp_id', 'name', 'item': UndertimeDay}.
+
+    Порядок — как у ``emp_ids`` (справочник), внутри сотрудника — по датам.
+    """
+    from core.analysis import _get_undertime_days
+
+    rows: list[dict] = []
+    for emp_id in emp_ids:
+        emp = employees.get(emp_id)
+        name = f'{emp.last_name} {emp.first_name}'.strip() if emp else f'ID {emp_id}'
+        for item in _get_undertime_days(time_table, emp_id, year, month,
+                                        employees=employees, rules_by_role=rules_by_role):
+            rows.append({'emp_id': emp_id, 'name': name, 'item': item})
+    return rows
+
+
+def run_undertime_review(time_table: dict, employees: dict, candidate_ids: list[int],
+                         year: int, month: int, *, rules_by_role: dict | None = None,
+                         extra_excluded: dict | None = None,
+                         title: str = 'Недоработки') -> None:
+    """Обзор недоработок участников расчёта и правка дней по номеру строки.
+
+    Показываются только текущие участники расчёта (исключённые не видны). Список
+    обновляется после каждой правки; день, оставшийся короче нормы, остаётся в нём.
+    Пустой ввод, закрытый ввод (EOF) и Ctrl+C завершают этап.
+    """
+    from core import ui
+    from core.analysis import _edit_undertime_day
+
+    ui.print_header(title)
+    while True:
+        ids = current_settlement_ids(candidate_ids, employees, extra_excluded)
+        rows = build_undertime_rows(time_table, employees, ids, year, month,
+                                    rules_by_role=rules_by_role)
+        if not rows:
+            ui.info('Недоработок нет.')
+            return
+        ui.print_undertime_overview(rows)
+        try:
+            raw = input('Номер строки — править день | Enter — к расчёту: ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if raw in _CANCEL:
+            return
+        if not raw.isdigit() or not 1 <= int(raw) <= len(rows):
+            ui.error(f'Нет строки с номером {raw!r}: введите число от 1 до {len(rows)}.')
+            continue
+        row = rows[int(raw) - 1]
+        _edit_undertime_day(time_table, row['emp_id'], row['item'], row['name'],
+                            employees=employees)

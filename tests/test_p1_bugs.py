@@ -406,6 +406,7 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
         monkeypatch.setattr(main_mod, 'analyze_for_print', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'run_review', lambda *a, **k: None)
+        monkeypatch.setattr(main_mod, 'run_undertime_review', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt, *a, **k: {
             d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
                 for e in emps} for d, emps in tt.items()})
@@ -460,6 +461,7 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
         monkeypatch.setattr(main_mod, 'analyze_for_print', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'run_review', lambda *a, **k: None)
+        monkeypatch.setattr(main_mod, 'run_undertime_review', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt, *a, **k: {
             d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
                 for e in emps} for d, emps in tt.items()})

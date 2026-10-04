@@ -134,6 +134,89 @@ def search_missed_marks(time_table: dict, emp_id: int, year: int, month: int) ->
     return result if result else 0
 
 
+@dataclass(frozen=True)
+class UndertimeDay:
+    """Будний день с парой «приход–уход», отработанный меньше нормы смены."""
+
+    date: str
+    come: datetime
+    go: datetime
+    worked: timedelta
+    norm: timedelta
+
+    @property
+    def shortfall(self) -> timedelta:
+        return self.norm - self.worked
+
+
+def search_undertime_days(time_table: dict, emp_id: int, year: int, month: int,
+                          norm: timedelta, skip_single: bool = True) -> list[UndertimeDay]:
+    """Будние дни месяца, где отработано строго меньше нормы смены (любая недоработка).
+
+    Выходные и праздники не проверяются: их оплата идёт по факту, нормы там нет.
+    skip_single — не включать дни с совпадающими отметками: их уже показывает
+    проверка одиночных отметок (если для роли она выключена, такой день — недоработка).
+    """
+    from core.day_models import TAG_WORK
+
+    prefix = f'{year:04d}-{month:02d}-'
+    result: list[UndertimeDay] = []
+    for date_key in sorted(time_table):
+        if not date_key.startswith(prefix) or emp_id not in time_table[date_key]:
+            continue
+        marks = time_table[date_key][emp_id]
+        if _mark_tag(marks) != TAG_WORK:
+            continue
+        come, go = _mark_come(marks), _mark_go(marks)
+        if skip_single and go == come:
+            continue
+        worked = go - come
+        if worked < norm:
+            result.append(UndertimeDay(date_key, come, go, worked, norm))
+    return result
+
+
+def _get_undertime_days(time_table: dict, emp_id: int, year: int, month: int,
+                        employees: dict | None = None,
+                        rules_by_role: dict | None = None) -> list[UndertimeDay]:
+    """Дни с недоработкой по действующим штату и правилам (как в расчёте времени).
+
+    Только роли с учётом по факту (time_mode 'actual'): у фиксированной смены
+    недоработки нет. Нет карточки, правила или неучастие — пустой список.
+    """
+    from core.roles import TIME_ACTUAL
+
+    staff = _resolve_staff(employees)
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
+    if role is None:
+        return []
+    rule = _resolve_rule(getattr(role, 'role_id', None), rules_by_role)
+    if rule is None or not rule.participates or rule.time_mode != TIME_ACTUAL:
+        return []
+    try:
+        norm = timedelta(hours=float(rule.shift_norm_hours))
+    except (ValueError, TypeError):
+        return []  # некорректную норму назовёт расчёт времени, а не сводка
+    return search_undertime_days(time_table, emp_id, year, month, norm,
+                                 skip_single=bool(rule.check_single_mark))
+
+
+def format_undertime_line(item: UndertimeDay) -> str:
+    """'09 июля | чт | 08:00:00–14:30:00 | отработано 06:30:00 | недоработка 01:30:00'."""
+    from core.calculations import str_timedelta
+
+    day = datetime.strptime(item.date, '%Y-%m-%d')
+    return (f"{day:%d} {format_datetime_russian(day, '%B')} | "
+            f"{format_datetime_russian(day, '%A')} | "
+            f'{item.come.time()}–{item.go.time()} | '
+            f'отработано {str_timedelta(item.worked)} | '
+            f'недоработка {str_timedelta(item.shortfall)}')
+
+
+def total_shortfall(items: list[UndertimeDay]) -> timedelta:
+    return sum((i.shortfall for i in items), timedelta(0))
+
+
 #: Пара «приход–уход» короче этого в среднее не берётся: это двойное касание
 #: терминала, а не смена, и она исказила бы среднее время ухода.
 MIN_SHIFT_FOR_AVERAGE = timedelta(hours=1)
@@ -305,8 +388,10 @@ def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int,
     list_marks, list_missed = _get_marks_and_missed(
         time_table, emp_id, year, month,
         employees=staff, rules_by_role=rules_by_role)
+    undertime = _get_undertime_days(time_table, emp_id, year, month,
+                                    employees=staff, rules_by_role=rules_by_role)
     name = f'{role.last_name} {role.first_name}'.strip()
-    if list_marks != 0 or list_missed != 0:
+    if list_marks != 0 or list_missed != 0 or undertime:
         print('--------------------------------------------------------------------------------------------------------------------------------------------')
         print(f'\nФамилия работника:  {name}')
         if list_marks != 0:
@@ -332,6 +417,12 @@ def analyze_for_print(time_table: dict, emp_id: int, year: int, month: int,
                     print(f'\t\t\t{day_num} {month_ru} | {weekday_ru}')
                 else:
                     print(f'\t\t\t{format_range(group)}')
+                print('\t\t\t------------------')
+        if undertime:
+            print('\n\n\n\t\tДни с недоработкой (отработано меньше нормы смены):\n')
+            print('\t\t\t------------------')
+            for item in undertime:
+                print(f'\t\t\t{format_undertime_line(item)}')
                 print('\t\t\t------------------')
 
 
@@ -495,6 +586,11 @@ def _dt_sick(day: str) -> datetime:
     return _dt(day, '00 00 02')
 
 
+def _existing_mark(time_table: dict, day: str, emp_id: int):
+    """Отметка дня до правки (для журнала) или None, если дня нет."""
+    return time_table.get(day, {}).get(emp_id)
+
+
 def _read_work_times(suffix: str = '') -> tuple[str, str, bool] | None:
     """Спросить приход/уход один раз. None — отмена."""
     got_begin = _read_valid_time(f'Время прихода{suffix}')
@@ -509,7 +605,7 @@ def _read_work_times(suffix: str = '') -> tuple[str, str, bool] | None:
 
 def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
                      t_begin: str, t_end: str, randomized: bool,
-                     action: str, date_ref: str) -> bool:
+                     action: str, date_ref: str, employees: dict | None = None) -> bool:
     """Проверить, подтвердить и записать рабочие дни. True — записано."""
     from core import ui
     from core.day_models import DayMark, TAG_WORK
@@ -533,9 +629,9 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
         return False
     # R09: запись журнала — ДО атомарного сохранения, по каждому дню отдельно.
     for day in days:
-        record_edit(emp_id, day, action, None,
+        record_edit(emp_id, day, action, _existing_mark(time_table, day, emp_id),
                     DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag=TAG_WORK),
-                    randomized=randomized)
+                    randomized=randomized, employees=employees)
     for day in days:
         _set_mark(time_table, day, emp_id, DayMark(go=_dt(day, t_end), come=_dt(day, t_begin), tag=TAG_WORK))
     try:
@@ -549,7 +645,8 @@ def _apply_work_days(time_table: dict, emp_id: int, days: list[str],
 
 
 def _apply_auto_work_days(time_table: dict, emp_id: int, days: list[str],
-                          avg: AverageTimes | None, date_ref: str, rng=None) -> bool:
+                          avg: AverageTimes | None, date_ref: str, rng=None,
+                          employees: dict | None = None) -> bool:
     """Заполнить рабочие дни по средним (± 5 минут, для каждого дня своё время).
 
     Одно подтверждение на все дни. True — записано. Без средних (нет полных
@@ -579,8 +676,9 @@ def _apply_auto_work_days(time_table: dict, emp_id: int, days: list[str],
         return False
     action = f'рабочие дни x{len(days)} (авто по среднему)'
     for day, come, go in plan:
-        record_edit(emp_id, day, action, None,
-                    DayMark(go=go, come=come, tag=TAG_WORK), randomized=True)
+        record_edit(emp_id, day, action, _existing_mark(time_table, day, emp_id),
+                    DayMark(go=go, come=come, tag=TAG_WORK), randomized=True,
+                    employees=employees)
     for day, come, go in plan:
         _set_mark(time_table, day, emp_id, DayMark(go=go, come=come, tag=TAG_WORK))
     try:
@@ -593,7 +691,8 @@ def _apply_auto_work_days(time_table: dict, emp_id: int, days: list[str],
 
 
 def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
-                       action: str, date_ref: str, confirm_q: str) -> bool:
+                       action: str, date_ref: str, confirm_q: str,
+                       employees: dict | None = None) -> bool:
     """Одно подтверждение на все дни. tag: TAG_VACATION | TAG_TRUANCY | TAG_SICK."""
     from core.day_models import DayMark, TAG_SICK, TAG_TRUANCY, TAG_VACATION, TAG_WORK
 
@@ -603,7 +702,8 @@ def _apply_status_days(time_table: dict, emp_id: int, days: list[str], tag: str,
     # R09: журнал до сохранения, точные даты и значения до/после по каждому дню.
     for day in days:
         mark = mark_of(day)
-        record_edit(emp_id, day, action, None, DayMark(go=mark, come=mark, tag=tag))
+        record_edit(emp_id, day, action, _existing_mark(time_table, day, emp_id),
+                    DayMark(go=mark, come=mark, tag=tag), employees=employees)
     for day in days:
         mark = mark_of(day)
         _set_mark(time_table, day, emp_id, DayMark(go=mark, come=mark, tag=tag))
@@ -805,6 +905,134 @@ def _edit_one_missed_day(time_table: dict, emp_id: int, day: str) -> str:
                 if _apply_status_days(time_table, emp_id, [day], TAG_TRUANCY,
                                       'прогул', day, f'Отметить {day} как прогул?'):
                     return 'done'
+
+
+def _apply_one_side(time_table: dict, emp_id: int, day: str, side: str,
+                    employees: dict | None = None) -> bool:
+    """Поменять у существующего дня только приход ('come') или только уход ('go').
+
+    Вторая отметка остаётся как есть. True — записано.
+    """
+    from core import ui
+
+    marks = time_table[day][emp_id]
+    title = 'прихода' if side == 'come' else 'ухода'
+    got = _read_valid_time(f'Новое время {title}')
+    if got is None:
+        return False
+    entered, randomized = got
+    try:
+        dt_write = _dt(day, entered)
+    except ValueError as e:
+        ui.error(f'Ошибка: неверное время ({e}). Введите снова.')
+        return False
+    come, go = (dt_write, _mark_go(marks)) if side == 'come' else (_mark_come(marks), dt_write)
+    err = _validate_pair(come, go)
+    if err is not None:
+        ui.error(f'Ошибка: {err}. Не сохранено.')
+        return False
+    preview = f'Выйдет: приход {come.time()} уход {go.time()} длительность {go - come}.'
+    if randomized:
+        preview += ' (часть времени дополнена случайно — проверьте!)'
+    if not _confirm_save(preview):
+        ui.info('Не подтверждено.')
+        return False
+    choice = '1' if side == 'come' else '2'
+    # R09: журнал до записи (строки до/после формируются сразу), откат при сбое сохранения.
+    record_edit(emp_id, day, f'правка недоработки: {"приход" if side == "come" else "уход"}',
+                marks, _preview_mark(marks, choice, dt_write),
+                randomized=bool(randomized), employees=employees)
+    if side == 'come':
+        _set_mark_come(marks, dt_write)
+    else:
+        _set_mark_go(marks, dt_write)
+    try:
+        _save_session(time_table)
+    except BaseException:
+        del _JOURNAL[-1:]
+        raise
+    ui.info(f'Данные за {day} изменены.')
+    return True
+
+
+def _edit_undertime_day(time_table: dict, emp_id: int, item: UndertimeDay, name: str,
+                        employees: dict | None = None) -> str:
+    """Карточка дня с недоработкой и выбор правки. Возвращает 'done' | 'skip'."""
+    from core import ui
+    from core.day_models import TAG_SICK, TAG_TRUANCY, TAG_VACATION
+
+    day = item.date
+    # Сам правимый день в среднее не входит: «авто по среднему» не должно целиться в себя.
+    avg = compute_average_times(time_table, emp_id,
+                                skip_dates=_edited_dates(emp_id) | {day})
+    ui.print_undertime_card(name, format_undertime_line(item), format_average(avg))
+    was = _marks_repr(time_table[day][emp_id])
+    while True:
+        match ui.ask_menu(f'{day}: [1] приход и уход [2] отпуск [3] прогул [5] больничный '
+                          f'[6] авто по среднему [7] только приход [8] только уход '
+                          f'[0] назад:', ('1', '2', '3', '5', '6', '7', '8')):
+            case '0' | 'q' | 'отмена':
+                return 'skip'
+            case '1':
+                got = _read_work_times()
+                if got is None:
+                    return 'skip'
+                t_begin, t_end, randomized = got
+                if _apply_work_days(time_table, emp_id, [day], t_begin, t_end, randomized,
+                                    'правка недоработки: время', day, employees=employees):
+                    return 'done'
+            case '2' | '3' | '5' as choice:
+                tag, label = {'2': (TAG_VACATION, 'отпуск'), '3': (TAG_TRUANCY, 'прогул'),
+                              '5': (TAG_SICK, 'больничный')}[choice]
+                if _apply_status_days(time_table, emp_id, [day], tag,
+                                      f'правка недоработки: {label}', day,
+                                      f'Заменить {day} ({was}) на «{label}»?',
+                                      employees=employees):
+                    return 'done'
+            case '6':
+                if _apply_auto_work_days(time_table, emp_id, [day], avg, day,
+                                         employees=employees):
+                    return 'done'
+            case '7' | '8' as choice:
+                if _apply_one_side(time_table, emp_id, day,
+                                   'come' if choice == '7' else 'go', employees=employees):
+                    return 'done'
+
+
+def edit_undertime_days(time_table: dict, emp_id: int, year: int, month: int,
+                        employees: dict | None = None,
+                        rules_by_role: dict | None = None) -> None:
+    """Список дней сотрудника с недоработкой (любой) и правка выбранного по номеру.
+
+    Недоработку нельзя «закрыть» навсегда: день, который после правки всё ещё
+    короче нормы, остаётся в списке. Выход — 0, пустой ввод или закрытый ввод.
+    """
+    from core import ui
+
+    staff = _resolve_staff(employees)
+    role = staff.get(emp_id) if hasattr(staff, 'get') else None
+    if role is None:
+        return
+    name = f'{role.last_name} {role.first_name}'.strip()
+    while True:
+        items = _get_undertime_days(time_table, emp_id, year, month,
+                                    employees=staff, rules_by_role=rules_by_role)
+        if not items:
+            ui.info('Дней с недоработкой нет.')
+            return
+        ui.print_undertime_list(
+            name, [format_undertime_line(i) for i in items], total_shortfall(items))
+        try:
+            raw = input('Номер дня — править | 0 или Enter — назад: ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return
+        if raw in ('', '0', 'q', 'й', 'отмена'):
+            return
+        if not raw.isdigit() or not 1 <= int(raw) <= len(items):
+            ui.error(f'Нет дня с номером {raw!r}: введите число от 1 до {len(items)}.')
+            continue
+        _edit_undertime_day(time_table, emp_id, items[int(raw) - 1], name, employees=staff)
 
 
 def auto_fill_singles(time_table: dict, emp_id: int, year: int, month: int,

@@ -14,7 +14,7 @@ from core.data_array import (
     build_data_array, get_all_employees_in_data, get_employees_with_marks, is_included_in_settlement,
 )
 from core.analysis import analyze_for_print, clear_journal, get_journal, restore_journal
-from core.review import current_settlement_ids, run_review
+from core.review import current_settlement_ids, run_review, run_undertime_review
 from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
 from core.excel_builder import build_excel
 from core.html_builder import build_html
@@ -421,6 +421,10 @@ def _run(args: Namespace, parser: ArgumentParser) -> None:
             run_review(data_array, _STAFF, emp_ids, year, month,
                        rules_by_role=rules_by_role, extra_excluded=sqlite_excluded,
                        on_exclusion_change=_persist_exclusions, title=_dashboard_title)
+            # Пропуски закрыты — теперь недоработки (в том числе от автозаполнения):
+            # посмотреть все разом и поправить по желанию, до расчёта и Excel.
+            run_undertime_review(data_array, _STAFF, emp_ids, year, month,
+                                 rules_by_role=rules_by_role, extra_excluded=sqlite_excluded)
         except OSError as e:
             print(f'ОШИБКА: сессия правок не сохранена ({e}). Расчет прерван; '
                   f'повторите запуск с --resume.')

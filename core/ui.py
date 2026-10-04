@@ -31,16 +31,21 @@ def get_console():
     return _console
 
 
-def summarize_employee(single_count: int, missed_count: int, has_marks: bool) -> dict:
+def summarize_employee(single_count: int, missed_count: int, has_marks: bool,
+                       undertime_count: int = 0) -> dict:
     """Чистый статус сотрудника для дашборда.
 
     Возвращает {'status': str, 'style': str} где style — цвет rich.
+    Одиночные отметки и пустые дни блокируют бонус — «Править»; одна лишь
+    недоработка — отдельный статус: её решает оператор, программа не требует.
     """
     if not has_marks:
         return {'status': 'Нет данных', 'style': 'red'}
-    if single_count == 0 and missed_count == 0:
-        return {'status': 'OK', 'style': 'green'}
-    return {'status': 'Править', 'style': 'yellow'}
+    if single_count or missed_count:
+        return {'status': 'Править', 'style': 'yellow'}
+    if undertime_count:
+        return {'status': 'Проверить', 'style': 'yellow'}
+    return {'status': 'OK', 'style': 'green'}
 
 
 def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month: int,
@@ -57,7 +62,7 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
     сотрудник без отметок, но включённый через --include-empty, помечается
     «Включён без отметок», а не «в расчёт не включён» (R07).
     """
-    from core.analysis import _current_average, _get_marks_and_missed
+    from core.analysis import _current_average, _get_marks_and_missed, _get_undertime_days
     from core.config import MANUAL_EXCLUSIONS
 
     if employees is None:
@@ -76,8 +81,12 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
             employees=staff, rules_by_role=rules_by_role)
         single_count = len(list_marks) if isinstance(list_marks, list) else 0
         missed_count = len(list_missed) if isinstance(list_missed, list) else 0
+        under_days = _get_undertime_days(
+            time_table, emp_id, year, month,
+            employees=staff, rules_by_role=rules_by_role)
         included = included_ids is not None and emp_id in included_ids
-        info = summarize_employee(single_count, missed_count, has_marks or included)
+        info = summarize_employee(single_count, missed_count, has_marks or included,
+                                  undertime_count=len(under_days))
         # R07: включённый без отметок — отдельный статус, а не «не включён».
         if included and not has_marks:
             info = {'status': 'Включён без отметок', 'style': 'cyan'}
@@ -97,6 +106,7 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
             'name': name,
             'single': single_count,
             'missed': missed_count,
+            'under': len(under_days),
             'has_marks': has_marks,
             'included_without_marks': bool(included and not has_marks),
             'status': info['status'],
@@ -184,10 +194,15 @@ def print_dashboard(rows: list[dict], title: str = 'Сводка', numbered: boo
     def _avg(r: dict, key: str) -> str:
         return r.get(key) or '—'
 
+    def _under(r: dict) -> str:
+        """'3 дн.' или '—': сколько будних дней отработано меньше нормы."""
+        return f"{r['under']} дн." if r.get('under') else '—'
+
     if not HAS_RICH:
         print(f'=== {title}: в расчете ({len(active)}) ===')
         for r in active:
             print(f"{_label(r)}: одна метка={r['single']} нет меток={r['missed']} "
+                  f"недоработка={_under(r)} "
                   f"ср. приход={_avg(r, 'avg_come')} ср. уход={_avg(r, 'avg_go')} [{r['status']}]")
         print(f'--- Без отметок за месяц ({len(inactive)}): в расчет не включены ---')
         for r in inactive:
@@ -203,11 +218,13 @@ def print_dashboard(rows: list[dict], title: str = 'Сводка', numbered: boo
     table.add_column('Сотрудник')
     table.add_column('Одна метка', justify='right')
     table.add_column('Нет меток', justify='right')
-    table.add_column('Ср. приход', justify='right')
-    table.add_column('Ср. уход', justify='right')
-    table.add_column('Статус', justify='center')
+    table.add_column('Недоработка', justify='right', no_wrap=True)
+    # Правые колонки не переносим: на узком терминале сжимаются имя и счётчики.
+    table.add_column('Ср. приход', justify='right', no_wrap=True)
+    table.add_column('Ср. уход', justify='right', no_wrap=True)
+    table.add_column('Статус', justify='center', no_wrap=True)
     for r in active:
-        cells = [r['name'], str(r['single']), str(r['missed']),
+        cells = [r['name'], str(r['single']), str(r['missed']), _under(r),
                  _avg(r, 'avg_come'), _avg(r, 'avg_go'),
                  f"[{r['style']}]{r['status']}[/{r['style']}]"]
         if numbered:
@@ -311,6 +328,73 @@ def print_missed_day_card(name: str, missed_day: str, avg_hint: str | None = Non
         print(body)
         return
     get_console().print(Panel(body, title='Нет данных за день', border_style='red'))
+
+
+def print_undertime_list(name: str, lines: list[str], total) -> None:
+    """Дни сотрудника с недоработкой по номерам (total — суммарная недоработка)."""
+    from core.calculations import str_timedelta
+
+    body = '\n'.join(f'{n}. {line}' for n, line in enumerate(lines, 1))
+    title = f'{name}: дни с недоработкой ({len(lines)}), всего {str_timedelta(total)}'
+    if not HAS_RICH:
+        print(f'=== {title} ===')
+        print(body)
+        return
+    get_console().print(Panel(body, title=title, border_style='yellow'))
+
+
+_WEEKDAY_SHORT = ('Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс')
+
+
+def print_undertime_overview(rows: list[dict]) -> None:
+    """Все дни с недоработкой участников расчёта одним списком с номерами строк.
+
+    rows — из core.review.build_undertime_rows: {'name', 'item': UndertimeDay}.
+    Заголовок этапа печатает вызывающий код (print_header).
+    Номер строки — то, что вводит оператор, чтобы открыть день на правку.
+    """
+    from core.analysis import total_shortfall
+    from core.calculations import str_timedelta
+
+    items = [r['item'] for r in rows]
+    people = len({r['emp_id'] for r in rows})
+    caption = (f'Дней: {len(rows)}, сотрудников: {people}, '
+               f'суммарная недоработка {str_timedelta(total_shortfall(items))}')
+
+    def _cells(item) -> tuple[str, str, str, str, str]:
+        day = f'{item.date[8:10]}.{item.date[5:7]}'
+        return (f'{day} {_WEEKDAY_SHORT[item.come.weekday()]}', str(item.come.time()),
+                str(item.go.time()), str_timedelta(item.worked), str_timedelta(item.shortfall))
+
+    if not HAS_RICH:
+        print(caption)
+        for n, r in enumerate(rows, 1):
+            day, come, go, worked, short = _cells(r['item'])
+            print(f"{n}. {r['name']} | {day} | {come}–{go} | "
+                  f'отработано {worked} | недоработка {short}')
+        return
+    table = Table(caption=caption)
+    table.add_column('№', justify='right', no_wrap=True)
+    table.add_column('Сотрудник')
+    for header in ('День', 'Приход', 'Уход', 'Отработано', 'Недоработка'):
+        table.add_column(header, justify='right', no_wrap=True)
+    for n, r in enumerate(rows, 1):
+        table.add_row(str(n), r['name'], *_cells(r['item']))
+    get_console().print(table)
+
+
+def print_undertime_card(name: str, day_line: str, avg_hint: str | None = None) -> None:
+    """Карточка дня с недоработкой (avg_hint — строка о среднем времени сотрудника)."""
+    body = (f'Сотрудник: {name}\n'
+            f'{day_line}\n'
+            + (f'{avg_hint}\n' if avg_hint else '')
+            + '[1] приход и уход заново  [2] отпуск  [3] прогул  [5] больничный  '
+              '[6] авто по среднему (± 5 мин)  [7] только приход  [8] только уход  '
+              '[0] назад')
+    if not HAS_RICH:
+        print(body)
+        return
+    get_console().print(Panel(body, title='День с недоработкой', border_style='yellow'))
 
 
 def build_start_info(file: str, year: int, month: int, rows_read: int,
