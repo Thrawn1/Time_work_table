@@ -2,6 +2,8 @@
 
 Каждый этап — отдельная функция. Фатальная ошибка этапа — исключение Abort
 с готовым текстом для оператора; main() печатает его и завершает запуск с кодом 1.
+Ctrl+C на любом этапе — прерывание с кодом 130: к расчёту не переходим, сессия
+правок остаётся для --resume.
 """
 
 import os
@@ -57,6 +59,9 @@ from core.session import (
 from core import ui
 
 __all__ = ['main', 'parse_secret_key', 'resolve_secret_key', 'validate_period']
+
+#: Код возврата при Ctrl+C — как у оболочки (128 + SIGINT).
+EXIT_INTERRUPTED = 130
 
 
 class Abort(Exception):
@@ -130,6 +135,17 @@ def main(argv: list[str] | None = None) -> None:
         except Abort as e:
             print(e)
             sys.exit(1)
+        except KeyboardInterrupt:
+            print(_interrupted_text(args))
+            sys.exit(EXIT_INTERRUPTED)
+
+
+def _interrupted_text(args: Namespace) -> str:
+    """Ctrl+C: расчёт не завершён; каждая правка уже атомарно записана в сессию."""
+    if session_exists():
+        return (f'\nПрервано пользователем (Ctrl+C): расчёт не завершён. Отметки и правки '
+                f'сохранены в сессии ({args.output_dir}) — продолжите с --resume.')
+    return '\nПрервано пользователем (Ctrl+C): расчёт не завершён, правок в этом запуске не было.'
 
 
 def _run(args: Namespace, parser: ArgumentParser) -> None:

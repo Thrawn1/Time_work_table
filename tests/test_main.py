@@ -116,6 +116,20 @@ class TestResolveSecretKey:
             resolve_secret_key(_ns(None))
         assert e.value.code == 0
 
+    def test_menu_ctrl_c_exits_130(self, monkeypatch, capsys):
+        # Ctrl+C в меню режима — прерывание, а не «Выход» с кодом 0.
+        _tty(monkeypatch, True)
+        monkeypatch.setattr('core.ui.info', lambda *a, **k: None)
+
+        def _ctrl_c(*a, **k):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr('builtins.input', _ctrl_c)
+        with pytest.raises(SystemExit) as e:
+            resolve_secret_key(_ns(None))
+        assert e.value.code == 130
+        assert 'Прервано' in capsys.readouterr().out
+
     def test_menu_eof_falls_back_time_only(self, monkeypatch, capsys):
         # < NUL в Windows: isatty() == True, но input() сразу EOF
         _tty(monkeypatch, True)

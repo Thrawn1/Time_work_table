@@ -265,7 +265,8 @@ def error(msg: str) -> None:
 
 #: Ввод «назад/пропустить» во всех меню и списках.
 CANCEL_TOKENS: tuple[str, ...] = ('0', 'q', 'й', 'отмена')
-#: Что возвращает ask_menu при отмене (любом из CANCEL_TOKENS, EOF или Ctrl+C).
+#: Что возвращает ask_menu при отмене (любом из CANCEL_TOKENS или EOF).
+#: Ctrl+C отменой не считается: KeyboardInterrupt доходит до main() и прерывает запуск.
 CANCEL = '0'
 
 
@@ -277,7 +278,7 @@ def ask_menu(prompt: str, valid: tuple[str, ...]) -> str:
     while True:
         try:
             raw = input(prompt).strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             return CANCEL
         if raw.lower() in CANCEL_TOKENS:
             return CANCEL
@@ -287,10 +288,10 @@ def ask_menu(prompt: str, valid: tuple[str, ...]) -> str:
 
 
 def read_choice(prompt: str) -> str | None:
-    """Строка ввода в нижнем регистре; None — пустой ввод, отмена, EOF или Ctrl+C."""
+    """Строка ввода в нижнем регистре; None — пустой ввод, отмена или EOF."""
     try:
         raw = input(prompt).strip().lower()
-    except (EOFError, KeyboardInterrupt):
+    except EOFError:
         print()
         return None
     if raw == '' or raw in CANCEL_TOKENS:
@@ -315,7 +316,7 @@ def confirm_save(preview: str) -> bool:
     while True:
         try:
             raw = input(f'{preview}\nПодтвердить? [д/н]: ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             return False
         if raw in ('д', 'y', 'да', 'yes', '1'):
             return True

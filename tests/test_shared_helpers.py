@@ -83,6 +83,32 @@ class TestInput:
         with patch('builtins.input', side_effect=['  X3 ']):
             assert ui.read_choice('> ') == 'x3'
 
+    @pytest.mark.parametrize('ask', [
+        lambda: ui.ask_menu('Меню:', ('1', '2')),
+        lambda: ui.read_choice('> '),
+        lambda: ui.confirm_save('Сохранить?'),
+    ], ids=['ask_menu', 'read_choice', 'confirm_save'])
+    def test_ctrl_c_is_not_cancel(self, ask):
+        """Ctrl+C — прерывание запуска (main), а не «назад» или «к расчёту»."""
+        with patch('builtins.input', side_effect=KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                ask()
+
+    def test_eof_still_cancels(self):
+        with patch('builtins.input', side_effect=EOFError):
+            assert ui.ask_menu('Меню:', ('1', '2')) == ui.CANCEL
+        with patch('builtins.input', side_effect=EOFError):
+            assert ui.confirm_save('Сохранить?') is False
+
+    def test_time_prompt_ctrl_c_propagates_eof_skips(self):
+        from core.analysis import _read_valid_time
+
+        with patch('builtins.input', side_effect=KeyboardInterrupt):
+            with pytest.raises(KeyboardInterrupt):
+                _read_valid_time('Время')
+        with patch('builtins.input', side_effect=EOFError):
+            assert _read_valid_time('Время') is None
+
     def test_pick_number_range_and_message(self, capsys):
         assert ui.pick_number('2', 3, 'дня') == 1
         assert ui.pick_number('4', 3, 'дня', shown='x4') is None

@@ -55,7 +55,8 @@ def run_review(time_table: dict, employees: dict, candidate_ids: list[int],
     """Цикл обзора до пустого ввода. Правки пишутся в time_table и в сессию.
 
     on_exclusion_change() вызывается после смены ручных исключений — вызывающий код
-    сохраняет их в контексте сессии. Закрытый ввод (EOF) и Ctrl+C завершают цикл.
+    сохраняет их в контексте сессии. Закрытый ввод (EOF) завершает цикл; Ctrl+C
+    прерывает весь запуск (main), а не переходит к расчёту.
     """
     while True:
         included = set(current_settlement_ids(candidate_ids, employees, extra_excluded,
@@ -157,7 +158,7 @@ def run_undertime_review(time_table: dict, employees: dict, candidate_ids: list[
 
     Показываются только текущие участники расчёта (исключённые не видны). Список
     обновляется после каждой правки; день, оставшийся короче нормы, остаётся в нём.
-    Пустой ввод, закрытый ввод (EOF) и Ctrl+C завершают этап.
+    Пустой ввод и закрытый ввод (EOF) завершают этап; Ctrl+C прерывает весь запуск.
     """
 
     ui.print_header(title)

@@ -46,14 +46,20 @@ def _clean_state():
 
 
 def feed(*answers):
-    """input(): ответы по очереди, затем EOFError (закрытый ввод), а не StopIteration."""
+    """input(): ответы по очереди, затем EOFError (закрытый ввод), а не StopIteration.
+
+    Класс исключения среди ответов бросается (напр. KeyboardInterrupt — Ctrl+C).
+    """
     it = iter(answers)
 
     def _input(prompt=''):
         try:
-            return next(it)
+            answer = next(it)
         except StopIteration:
             raise EOFError from None
+        if isinstance(answer, type) and issubclass(answer, BaseException):
+            raise answer
+        return answer
 
     return _input
 
@@ -510,6 +516,43 @@ def test_resume_keeps_manual_exclusion(september_dir, tmp_path, monkeypatch, cap
 
     monkeypatch.setattr(main_mod, 'build_excel', real_excel)
     capsys.readouterr()
+    main_mod.main(['--resume', '--no-edit', '--data-dir', str(september_dir),
+                   '--output-dir', str(out), '-k', 't'])
+    assert [p.name for p in out.glob('*.html')] == ['Иванов Иван_101_09_2026.html']
+    assert not (out / 'temporary.json').exists()
+
+
+def test_ctrl_c_in_review_aborts_without_reports(september_dir, tmp_path, monkeypatch, capsys):
+    """Ctrl+C в обзоре — код 130, к расчёту не переходим: ни отчётов, ни пакета."""
+    from main import main
+
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / 'out'
+    monkeypatch.setattr('builtins.input', feed(KeyboardInterrupt))
+    with pytest.raises(SystemExit) as exc:
+        main(_argv(september_dir, out))
+    assert exc.value.code == 130
+    assert 'правок в этом запуске не было' in capsys.readouterr().out
+    produced = sorted(p.name for p in out.iterdir())
+    assert not [n for n in produced if n.endswith(('.xlsx', '.html', '.txt'))
+                or n.startswith('payroll_')], produced
+
+
+def test_ctrl_c_after_edit_keeps_session_for_resume(september_dir, tmp_path, monkeypatch,
+                                                    capsys):
+    """Правка до Ctrl+C остаётся в сессии: --resume продолжает тот же расчёт."""
+    import main as main_mod
+
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / 'out'
+    monkeypatch.setattr('builtins.input', feed('x2', KeyboardInterrupt))
+    with pytest.raises(SystemExit) as exc:
+        main_mod.main(_argv(september_dir, out))
+    assert exc.value.code == 130
+    assert '--resume' in capsys.readouterr().out
+    assert (out / 'temporary.json').exists()
+    assert not list(out.glob('payroll_*.json'))
+
     main_mod.main(['--resume', '--no-edit', '--data-dir', str(september_dir),
                    '--output-dir', str(out), '-k', 't'])
     assert [p.name for p in out.glob('*.html')] == ['Иванов Иван_101_09_2026.html']

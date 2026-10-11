@@ -374,7 +374,7 @@ def _read_valid_time(prompt: str) -> tuple[str, list] | None:
     while True:
         try:
             raw = input(prompt + ' (формат "Ч М С", 0 — пропустить): ')
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print()
             return None
         if raw.strip().lower() in ui.CANCEL_TOKENS:
