@@ -5,10 +5,12 @@ from decimal import Decimal
 
 import pytest
 
+from core import config
 from core.config import EmployeeData
 from core.pay_calendar import month_date_keys, working_days_in_month
 from core.pay_store import connect, init_db, migrate_from_dat, seed_defaults
 from core.payroll import build_bundle
+from core.day_models import DayMark, DayWork
 
 YEAR, MONTH = 2026, 10
 
@@ -27,13 +29,11 @@ def paydb(tmp_path):
 
 @pytest.fixture
 def emp_patch(monkeypatch):
-    from core import analysis, data_array
     emps = {
         1: EmployeeData(id=1, first_name='А', last_name='Цеховик',
                         role_id=1, role_name='Работник цеха'),
     }
-    monkeypatch.setattr(data_array, 'EMPLOYEES', emps)
-    monkeypatch.setattr(analysis, 'EMPLOYEES', emps)
+    monkeypatch.setattr(config, 'EMPLOYEES', emps)
     return emps
 
 
@@ -46,8 +46,8 @@ def make_tables():
     data_array, work_time = {}, {}
     for key in workday_keys_in_month(YEAR, MONTH):
         out, inn = _dt(key, '16:00'), _dt(key, '08:00')
-        data_array.setdefault(key, {})[1] = [out, inn, 'work']
-        work_time.setdefault(key, {})[1] = (timedelta(0), timedelta(hours=8),
+        data_array.setdefault(key, {})[1] = DayMark(out, inn, 'work')
+        work_time.setdefault(key, {})[1] = DayWork(timedelta(0), timedelta(hours=8),
                                             'норма', 'work')
     return data_array, work_time
 
@@ -55,7 +55,7 @@ def make_tables():
 def make_bundle(paydb):
     from core.calculations import calculate_hours_per_month
     data_array, work_time = make_tables()
-    summary, _ = calculate_hours_per_month(work_time)
+    summary = calculate_hours_per_month(work_time)
     summary = {1: summary[1]}
     return data_array, work_time, summary, build_bundle(
         data_array, work_time, summary, YEAR, MONTH, paydb)
@@ -150,7 +150,7 @@ def test_journal_survives_session_file(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
     clear_journal()
-    table = {'2026-10-01': {1: [datetime(2026, 10, 1, 16), datetime(2026, 10, 1, 8), 'work']}}
+    table = {'2026-10-01': {1: DayMark(datetime(2026, 10, 1, 16), datetime(2026, 10, 1, 8), 'work')}}
     journal = [{'ts': '2026-10-02T09:00:00', 'emp_id': 1, 'name': 'Тест',
                 'date': '2026-10-01', 'action': 'edit',
                 'before': '—', 'after': '08:00 -> 16:00 [work]'}]
@@ -178,7 +178,7 @@ def test_legacy_package_roundtrip(tmp_path):
     d = str(tmp_path)
     data_array, work_time = make_tables()
     from core.calculations import calculate_hours_per_month
-    summary, _ = calculate_hours_per_month(work_time)
+    summary = calculate_hours_per_month(work_time)
     from core.day_models import WageResult
     wages = {1: WageResult(salary=Decimal('800.00'), milk=Decimal('40.00'),
                            total_with_milk=Decimal('840.00'))}

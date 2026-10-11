@@ -9,6 +9,7 @@ from randomazer_time_value import (
     format_time,
 )
 from core.analysis import _validate_pair, analyze_for_edit
+from core.day_models import DayMark
 
 
 def make_dt(date_str, time_str):
@@ -97,63 +98,63 @@ class TestAnalyzeForEditValidation:
         from core import analysis
         date_key = '2026-07-06'
         existing = make_dt(date_key, '17:00:00')
-        tt = {date_key: {101: [existing, existing, 'work']}}
+        tt = {date_key: {101: DayMark(existing, existing, 'work')}}
         single = [[date_key, existing]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             # 1=приход, 18:00 (невалидно) -> 0 отмена времени -> 0 пропуск дня
             inputs = ['1', '18 00 00', '0', '0']
             with patch('builtins.input', side_effect=inputs):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
-        assert tt[date_key][101][0] == existing
-        assert tt[date_key][101][1] == existing
+        assert tt[date_key][101].go == existing
+        assert tt[date_key][101].come == existing
 
     def test_equal_time_not_saved(self, setup_employees):
         """Ввод равный второй отметке не сохраняется."""
         from core import analysis
         date_key = '2026-07-06'
         existing = make_dt(date_key, '08:00:00')
-        tt = {date_key: {101: [existing, existing, 'work']}}
+        tt = {date_key: {101: DayMark(existing, existing, 'work')}}
         single = [[date_key, existing]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             # 2=уход, 08:00 (равно приходу) -> отмена
             inputs = ['2', '08 00 00', '0', '0']
             with patch('builtins.input', side_effect=inputs):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
-        assert tt[date_key][101][0] == existing
-        assert tt[date_key][101][1] == existing
+        assert tt[date_key][101].go == existing
+        assert tt[date_key][101].come == existing
 
     def test_typo_not_filled_with_random(self, setup_employees):
         """'08 99 00' отклоняется, а не превращается в случайные минуты."""
         from core import analysis
         date_key = '2026-07-06'
         existing = make_dt(date_key, '17:00:00')
-        tt = {date_key: {101: [existing, existing, 'work']}}
+        tt = {date_key: {101: DayMark(existing, existing, 'work')}}
         single = [[date_key, existing]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             inputs = ['1', '08 99 00', '0', '0']
             with patch('builtins.input', side_effect=inputs):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
         # Ничего не сохранено — опечатка не стала случайными минутами.
-        assert tt[date_key][101][1] == existing
+        assert tt[date_key][101].come == existing
 
     def test_valid_time_saved_after_confirm(self, setup_employees):
         """Валидный приход сохраняется после подтверждения."""
         from core import analysis
         date_key = '2026-07-06'
         existing = make_dt(date_key, '17:00:00')
-        tt = {date_key: {101: [existing, existing, 'work']}}
+        tt = {date_key: {101: DayMark(existing, existing, 'work')}}
         single = [[date_key, existing]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             inputs = ['1', '08 00 00', 'д']
             saved = []
             with patch('builtins.input', side_effect=inputs):
                 with patch.object(analysis, '_save_session', lambda x: saved.append(1)):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
-        assert tt[date_key][101][1] == make_dt(date_key, '08:00:00')
-        assert tt[date_key][101][0] == existing
+        assert tt[date_key][101].come == make_dt(date_key, '08:00:00')
+        assert tt[date_key][101].go == existing
         assert len(saved) == 1
 
     def test_decline_does_not_save(self, setup_employees):
@@ -161,11 +162,11 @@ class TestAnalyzeForEditValidation:
         from core import analysis
         date_key = '2026-07-06'
         existing = make_dt(date_key, '17:00:00')
-        tt = {date_key: {101: [existing, existing, 'work']}}
+        tt = {date_key: {101: DayMark(existing, existing, 'work')}}
         single = [[date_key, existing]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             inputs = ['1', '08 00 00', 'н', '0', '0']
             with patch('builtins.input', side_effect=inputs):
                 with patch.object(analysis, '_save_session', lambda x: (_ for _ in ()).throw(AssertionError('save must not be called'))):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
-        assert tt[date_key][101][1] == existing
+        assert tt[date_key][101].come == existing

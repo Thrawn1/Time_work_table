@@ -63,7 +63,7 @@ def test_no_hardcoded_accounting_outside_roles():
     hours_fn = calc_src.split('def calculate_hours_per_day')[1].split('def calculate_hours_per_month')[0]
     assert 'role_id in (1, 2, 4)' not in hours_fn
     assert 'role_id == 3' not in hours_fn
-    assert 'get_default_rule' in hours_fn
+    assert 'resolve_rule' in hours_fn
 
 
 def test_working_days_plain_month(monkeypatch):

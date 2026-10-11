@@ -141,7 +141,7 @@ class TestEditMenus:
         tt = _full_days('2026-07-06', '2026-07-07', '2026-07-08')
         tt['2026-07-09'] = {101: day('2026-07-09', '08:02:00', '08:02:00')}
         single = [['2026-07-09', make_dt('2026-07-09', '08:02:00')]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             with patch('builtins.input', feed('3', 'д')):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -157,7 +157,7 @@ class TestEditMenus:
         tt = _full_days('2026-07-06', '2026-07-07')
         tt['2026-07-09'] = {101: day('2026-07-09', '08:02:00', '08:02:00')}
         single = [['2026-07-09', make_dt('2026-07-09', '08:02:00')]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             with patch('builtins.input', feed('3', 'н', '0')):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -167,7 +167,7 @@ class TestEditMenus:
     def test_missed_days_option_6_autofills_every_day(self, setup_employees):
         tt = _full_days('2026-07-06', '2026-07-07')
         missed = ['2026-07-21', '2026-07-22']
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], missed)):
             with patch('builtins.input', feed('6', 'д')):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -183,7 +183,7 @@ class TestEditMenus:
 
     def test_autofill_unavailable_without_average(self, setup_employees):
         tt: dict = {}
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, ['2026-07-21'])):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], ['2026-07-21'])):
             with patch('builtins.input', feed('6', '0')):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -193,7 +193,7 @@ class TestEditMenus:
     def test_sick_leave_for_range(self, setup_employees):
         tt: dict = {}
         missed = ['2026-07-21', '2026-07-22']
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], missed)):
             with patch('builtins.input', feed('5', 'д')):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -205,7 +205,7 @@ class TestEditMenus:
         tt = _full_days('2026-07-06', '2026-07-07')
         missed = ['2026-07-21', '2026-07-22']
         # [4] разобрать по одному: первый день — больничный, второй — автозаполнение
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, missed)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], missed)):
             with patch('builtins.input', feed('4', '5', 'д', '6', 'д')):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -219,7 +219,7 @@ class TestEditMenus:
         singles = [['2026-07-09', make_dt('2026-07-09', '08:02:00')],
                    ['2026-07-10', make_dt('2026-07-10', '17:03:00')]]
         saves = []
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(singles, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(singles, [])):
             with patch('builtins.input', feed('д')):
                 with patch.object(analysis, '_save_session', lambda x: saves.append(1)):
                     done = auto_fill_singles(tt, 101, 2026, 7)
@@ -231,7 +231,7 @@ class TestEditMenus:
     def test_bulk_autofill_without_average_does_nothing(self, setup_employees):
         tt = {'2026-07-09': {101: day('2026-07-09', '08:02:00', '08:02:00')}}
         singles = [['2026-07-09', make_dt('2026-07-09', '08:02:00')]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(singles, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(singles, [])):
             assert auto_fill_singles(tt, 101, 2026, 7) == 0
         assert analysis.get_journal() == []
 
@@ -246,13 +246,10 @@ class TestSickLeaveCalc:
         }
         work_time = calculate_hours_per_day(tt)
         assert work_time['2026-07-07'][101].day_tag == 'sick'
-        summary, restructured = calculate_hours_per_month(work_time)
+        summary = calculate_hours_per_month(work_time)
         month = summary[101]
         assert month.sick_days == 1 and month.vacation_days == 0 and month.truancy_days == 0
         assert month.work.days == 1
-        assert [len(g) for g in restructured[101]] == [1, 0, 0, 0]
-        # legacy-протокол индексов не изменился
-        assert len(month) == 4 and month[2] == 0 and month[3] == 0
 
     def test_legacy_wages_do_not_pay_sick_days(self, setup_employees):
         from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
@@ -263,7 +260,7 @@ class TestSickLeaveCalc:
         rates = {101: Decimal('800.00')}
 
         def total(tt):
-            summary, _ = calculate_hours_per_month(calculate_hours_per_day(tt))
+            summary = calculate_hours_per_month(calculate_hours_per_day(tt))
             return calculate_wages(summary, rates=rates, employees=setup_employees)[101]
 
         assert total(with_sick).salary == total(base).salary == Decimal('800.00')
@@ -425,7 +422,7 @@ class TestRunReview:
 
         def fake_marks(table, emp_id, year, month, employees=None, rules_by_role=None):
             m = table['2026-07-10'][101]
-            return (0, 0) if m.go != m.come else (singles, 0)
+            return ([], []) if m.go != m.come else (singles, [])
 
         with patch.object(analysis, '_get_marks_and_missed', fake_marks), \
                 patch.object(analysis, '_save_session', lambda t: state.update(fixed=True)), \

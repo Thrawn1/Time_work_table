@@ -3,6 +3,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from decimal import Decimal
+from core.day_models import DayMark, DayWork, EmployeeMonth, HolidayGroup, WorkGroup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -89,12 +90,9 @@ class TestUnionImportAndBundle:
         combined = combined_staff_for_import({}, db, '2026-10-01')
         assert 900 in combined
         rules = load_rules_map(db, '2026-10-01', combined)
-        da = {'2026-10-06': {900: [_dt('2026-10-06', '16:00'),
-                                   _dt('2026-10-06', '08:00'), 'work']}}
-        wt = {'2026-10-06': {900: (timedelta(0), timedelta(hours=8),
-                                    'недоработка', 'work')}}
-        summary = {900: ((1, timedelta(0), timedelta(0)),
-                          (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+        da = {'2026-10-06': {900: DayMark(_dt('2026-10-06', '16:00'), _dt('2026-10-06', '08:00'), 'work')}}
+        wt = {'2026-10-06': {900: DayWork(timedelta(0), timedelta(hours=8), 'недоработка', 'work')}}
+        summary = {900: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
         bundle = build_bundle(da, wt, summary, YEAR, MONTH, db,
                               employees=combined, rules_by_role=rules)
         assert 900 in bundle.results
@@ -112,9 +110,9 @@ class TestUnionImportAndBundle:
         da: dict = {}
         for key in keys:
             if key == keys[0]:
-                da[key] = {900: [_dt(key, '08:00'), _dt(key, '08:00'), 'work']}
+                da[key] = {900: DayMark(_dt(key, '08:00'), _dt(key, '08:00'), 'work')}
             else:
-                da[key] = {900: [_dt(key, '16:00'), _dt(key, '08:00'), 'work']}
+                da[key] = {900: DayMark(_dt(key, '16:00'), _dt(key, '08:00'), 'work')}
         singles, _missed = _get_marks_and_missed(
             da, 900, YEAR, MONTH, employees=combined, rules_by_role=rules)
         assert singles != 0

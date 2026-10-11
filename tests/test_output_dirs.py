@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from core.day_models import DayMark
 
 
 def make_dt(date_str, time_str):
@@ -119,8 +120,7 @@ class TestDataDir:
 class TestSessionDir:
     def _marks(self):
         return {'2026-07-06': {
-            101: [make_dt('2026-07-06', '16:00:00'),
-                  make_dt('2026-07-06', '08:00:00'), 'work']}},
+            101: DayMark(make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work')}},
 
     def test_round_trip_in_session_dir(self, tmp_path, monkeypatch, session_guard):
         from core import session as s

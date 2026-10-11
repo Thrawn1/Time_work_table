@@ -21,20 +21,22 @@ from __future__ import annotations
 
 import re
 
+from core import ui
+from core import analysis
+from core.calculations import str_timedelta
 from core.config import MANUAL_EXCLUSION_REASON, MANUAL_EXCLUSIONS
+from core.data_array import display_name, is_included_in_settlement
 
-_CANCEL = ('', '0', 'q', 'й', 'отмена')
 _EXCLUDE_RE = re.compile(r'^[xх]\s*(\d+)$')  # латинская x и русская х
 
 
 def current_settlement_ids(candidate_ids: list[int], employees: dict,
-                           extra_excluded: dict | None = None) -> list[int]:
+                           extra_excluded: dict | None = None,
+                           rules_by_role: dict | None = None) -> list[int]:
     """Участники расчёта среди кандидатов: правила справочников, исключения, ручные."""
-    from core.data_array import is_included_in_settlement
-
     extra = extra_excluded or {}
     return [e for e in candidate_ids
-            if is_included_in_settlement(e, employees) and e not in extra]
+            if is_included_in_settlement(e, employees, rules_by_role) and e not in extra]
 
 
 def toggle_manual_exclusion(emp_id: int) -> bool:
@@ -55,30 +57,25 @@ def run_review(time_table: dict, employees: dict, candidate_ids: list[int],
     on_exclusion_change() вызывается после смены ручных исключений — вызывающий код
     сохраняет их в контексте сессии. Закрытый ввод (EOF) и Ctrl+C завершают цикл.
     """
-    from core import ui
-
     while True:
-        included = set(current_settlement_ids(candidate_ids, employees, extra_excluded))
+        included = set(current_settlement_ids(candidate_ids, employees, extra_excluded,
+                                              rules_by_role))
         rows = ui.build_dashboard_rows(
             time_table, list(employees), year, month, employees=employees,
             extra_excluded=extra_excluded or None, rules_by_role=rules_by_role,
             included_ids=included)
         ui.print_dashboard(rows, title=title, numbered=True)
         selectable = ui.review_numbering(rows)
-        try:
-            raw = input('Номер сотрудника — разобрать проблемы | x<номер> — исключить '
-                        '(повторно — вернуть) | Enter — к расчёту: ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        if raw in _CANCEL:
+        raw = ui.read_choice('Номер сотрудника — разобрать проблемы | x<номер> — исключить '
+                             '(повторно — вернуть) | Enter — к расчёту: ')
+        if raw is None:
             return
         exclude = _EXCLUDE_RE.match(raw)
         number_text = exclude.group(1) if exclude else raw
-        if not number_text.isdigit() or not 1 <= int(number_text) <= len(selectable):
-            ui.error(f'Нет сотрудника с номером {raw!r}: введите число от 1 до {len(selectable)}.')
+        index = ui.pick_number(number_text, len(selectable), 'сотрудника', shown=raw)
+        if index is None:
             continue
-        row = selectable[int(number_text) - 1]
+        row = selectable[index]
         if exclude:
             now_excluded = toggle_manual_exclusion(row['emp_id'])
             ui.info(f"{row['name']}: {'исключён из расчёта' if now_excluded else 'возвращён в расчёт'}.")
@@ -95,31 +92,23 @@ def run_review(time_table: dict, employees: dict, candidate_ids: list[int],
 def review_employee(time_table: dict, employees: dict, emp_id: int, year: int, month: int,
                     *, rules_by_role: dict | None = None) -> None:
     """Полный список проблем сотрудника и выбор способа их закрыть."""
-    from core import ui
-    from core.analysis import (
-        _current_average, _get_marks_and_missed, _get_undertime_days, analyze_for_edit,
-        analyze_for_print, auto_fill_singles, edit_undertime_days, format_average,
-        total_shortfall,
-    )
-    from core.calculations import str_timedelta
-
-    analyze_for_print(time_table, emp_id, year, month,
-                      employees=employees, rules_by_role=rules_by_role)
+    analysis.analyze_for_print(time_table, emp_id, year, month,
+                               employees=employees, rules_by_role=rules_by_role)
     while True:
-        singles, missed = _get_marks_and_missed(
+        singles, missed = analysis._get_marks_and_missed(
             time_table, emp_id, year, month, employees=employees, rules_by_role=rules_by_role)
-        under = _get_undertime_days(
+        under = analysis._get_undertime_days(
             time_table, emp_id, year, month, employees=employees, rules_by_role=rules_by_role)
-        n_single = len(singles) if isinstance(singles, list) else 0
-        n_missed = len(missed) if isinstance(missed, list) else 0
+        n_single, n_missed = len(singles), len(missed)
         if not (n_single or n_missed or under):
             ui.info('Проблем нет.')
             return
         info_line = f'Одна метка: {n_single}, нет меток: {n_missed}'
         if under:
             info_line += (f', недоработка: {len(under)} дн. '
-                          f'(всего {str_timedelta(total_shortfall(under))})')
-        ui.info(f'{info_line}. {format_average(_current_average(time_table, emp_id))}')
+                          f'(всего {str_timedelta(analysis.total_shortfall(under))})')
+        avg = analysis._current_average(time_table, emp_id)
+        ui.info(f'{info_line}. {analysis.format_average(avg)}')
         options: list[tuple[str, str]] = []
         if n_single or n_missed:
             options.append(('1', 'закрывать по одной'))
@@ -130,16 +119,16 @@ def review_employee(time_table: dict, employees: dict, emp_id: int, year: int, m
         choice = ui.ask_menu(
             '  '.join(f'[{key}] {text}' for key, text in options) + '  [0] назад:',
             tuple(key for key, _text in options))
-        if choice in ('0', 'q', 'отмена'):
+        if choice == ui.CANCEL:
             return
         if choice == '1':
-            analyze_for_edit(time_table, emp_id, year, month,
+            analysis.analyze_for_edit(time_table, emp_id, year, month,
                              employees=employees, rules_by_role=rules_by_role)
         elif choice == '2':
-            auto_fill_singles(time_table, emp_id, year, month,
+            analysis.auto_fill_singles(time_table, emp_id, year, month,
                               employees=employees, rules_by_role=rules_by_role)
         else:
-            edit_undertime_days(time_table, emp_id, year, month,
+            analysis.edit_undertime_days(time_table, emp_id, year, month,
                                 employees=employees, rules_by_role=rules_by_role)
 
 
@@ -150,13 +139,11 @@ def build_undertime_rows(time_table: dict, employees: dict, emp_ids: list[int],
 
     Порядок — как у ``emp_ids`` (справочник), внутри сотрудника — по датам.
     """
-    from core.analysis import _get_undertime_days
 
     rows: list[dict] = []
     for emp_id in emp_ids:
-        emp = employees.get(emp_id)
-        name = f'{emp.last_name} {emp.first_name}'.strip() if emp else f'ID {emp_id}'
-        for item in _get_undertime_days(time_table, emp_id, year, month,
+        name = display_name(emp_id, employees)
+        for item in analysis._get_undertime_days(time_table, emp_id, year, month,
                                         employees=employees, rules_by_role=rules_by_role):
             rows.append({'emp_id': emp_id, 'name': name, 'item': item})
     return rows
@@ -172,28 +159,22 @@ def run_undertime_review(time_table: dict, employees: dict, candidate_ids: list[
     обновляется после каждой правки; день, оставшийся короче нормы, остаётся в нём.
     Пустой ввод, закрытый ввод (EOF) и Ctrl+C завершают этап.
     """
-    from core import ui
-    from core.analysis import _edit_undertime_day
 
     ui.print_header(title)
     while True:
-        ids = current_settlement_ids(candidate_ids, employees, extra_excluded)
+        ids = current_settlement_ids(candidate_ids, employees, extra_excluded, rules_by_role)
         rows = build_undertime_rows(time_table, employees, ids, year, month,
                                     rules_by_role=rules_by_role)
         if not rows:
             ui.info('Недоработок нет.')
             return
         ui.print_undertime_overview(rows)
-        try:
-            raw = input('Номер строки — править день | Enter — к расчёту: ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            print()
+        raw = ui.read_choice('Номер строки — править день | Enter — к расчёту: ')
+        if raw is None:
             return
-        if raw in _CANCEL:
-            return
-        if not raw.isdigit() or not 1 <= int(raw) <= len(rows):
-            ui.error(f'Нет строки с номером {raw!r}: введите число от 1 до {len(rows)}.')
+        index = ui.pick_number(raw, len(rows), 'строки')
+        if index is None:
             continue
-        row = rows[int(raw) - 1]
-        _edit_undertime_day(time_table, row['emp_id'], row['item'], row['name'],
+        row = rows[index]
+        analysis._edit_undertime_day(time_table, row['emp_id'], row['item'], row['name'],
                             employees=employees)

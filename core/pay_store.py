@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -128,6 +129,30 @@ def connect(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
         con.close()
         raise
     return con
+
+
+@contextmanager
+def open_db(db_path: str = DEFAULT_DB_PATH, *, error: type[Exception] | None = None):
+    """Справочник на время блока ``with``; соединение закрывается всегда.
+
+    error — класс исключения (обычно PayrollError), в которое превращается любой
+    sqlite3.Error открытия или чтения внутри блока: «<путь>: …(<причина>)» вместо
+    сырого OperationalError. None — sqlite3.Error пробрасывается как есть.
+    """
+    try:
+        con = connect(db_path)
+    except sqlite3.Error as e:
+        if error is None:
+            raise
+        raise error(f'{db_path}: не удалось открыть справочник ({e}).') from e
+    try:
+        yield con
+    except sqlite3.Error as e:
+        if error is None:
+            raise
+        raise error(f'{db_path}: ошибка чтения справочника ({e}).') from e
+    finally:
+        con.close()
 
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:

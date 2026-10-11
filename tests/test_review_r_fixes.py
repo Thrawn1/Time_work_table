@@ -6,6 +6,7 @@ from decimal import Decimal
 import pytest
 
 from core.config import EmployeeData
+from core.day_models import DayMark, DayWork
 
 YEAR, MONTH = 2026, 10
 
@@ -36,10 +37,10 @@ def _full_month_tables(emp=1, hours=8):
             out, inn = _dt(key, '16:00'), _dt(key, '08:00')
         else:
             out, inn = _dt(key, f'{8 + hours:02d}:00'), _dt(key, '08:00')
-        da.setdefault(key, {})[emp] = [out, inn, 'work']
+        da.setdefault(key, {})[emp] = DayMark(out, inn, 'work')
         delta = abs(timedelta(hours=hours) - timedelta(hours=8))
         tag = 'переработка' if hours > 8 else 'недоработка'
-        wt.setdefault(key, {})[emp] = (delta, timedelta(hours=hours), tag, 'work')
+        wt.setdefault(key, {})[emp] = DayWork(delta, timedelta(hours=hours), tag, 'work')
     return da, wt
 
 
@@ -65,7 +66,7 @@ class TestR04Repairmen:
         rules = load_rules_map(db, '2026-10-01', combined)
         assert rules[4].participates is False
         da, wt = _full_month_tables(emp=4)
-        summary, _ = calculate_hours_per_month(wt)
+        summary = calculate_hours_per_month(wt)
         bundle = build_bundle(da, wt, {4: summary[4]}, YEAR, MONTH, db,
                               employees=combined, rules_by_role=rules)
         assert 4 not in bundle.results
@@ -85,9 +86,9 @@ class TestR05Weekends:
         da, wt = _full_month_tables(emp=1)
         # Суббота 8 ч после полного буднего месяца.
         sat = '2026-10-03'
-        da[sat] = {1: [_dt(sat, '16:00'), _dt(sat, '08:00'), 'weekend']}
-        wt[sat] = {1: (timedelta(hours=8), timedelta(hours=8), 'переработка', 'weekend')}
-        summary, _ = calculate_hours_per_month(wt)
+        da[sat] = {1: DayMark(_dt(sat, '16:00'), _dt(sat, '08:00'), 'weekend')}
+        wt[sat] = {1: DayWork(timedelta(hours=8), timedelta(hours=8), 'переработка', 'weekend')}
+        summary = calculate_hours_per_month(wt)
         bundle = build_bundle(da, wt, {1: summary[1]}, YEAR, MONTH, db,
                               employees=combined, rules_by_role=rules)
         res = bundle.results[1].result
@@ -232,7 +233,7 @@ class TestR11Replay:
             combined = combined_staff_for_import(dat, db, '2026-10-01')
             rules = load_rules_map(db, '2026-10-01', combined)
             da, wt = _full_month_tables(emp=1)
-            summary, _ = calculate_hours_per_month(wt)
+            summary = calculate_hours_per_month(wt)
             bundle = build_bundle(da, wt, {1: summary[1]}, YEAR, MONTH, db,
                                   employees=combined, rules_by_role=rules)
             snap = staff_snapshot(db, [1], '2026-10-01', combined)
@@ -273,7 +274,7 @@ class TestE2EMatrix:
         else:
             wt = wt_raw
         work_time = calculate_hours_per_day(da, employees=combined, rules_by_role=rules)
-        summary, _ = calculate_hours_per_month(work_time)
+        summary = calculate_hours_per_month(work_time)
         if with_empty:
             from datetime import timedelta as _td
             from core.day_models import EmployeeMonth, HolidayGroup, WorkGroup

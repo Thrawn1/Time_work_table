@@ -5,6 +5,7 @@ import json
 import os
 import pytest
 from datetime import datetime
+from core.day_models import DayMark
 
 
 def make_dt(date_str, time_str):
@@ -18,28 +19,28 @@ class TestSaveAndLoad:
         monkeypatch.chdir(tmp_path)
         time_table = {
             '2026-07-06': {
-                101: [make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work'],
-                102: [make_dt('2026-07-06', '00:00:01'), make_dt('2026-07-06', '00:00:01'), 'vacation'],
+                101: DayMark(make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work'),
+                102: DayMark(make_dt('2026-07-06', '00:00:01'), make_dt('2026-07-06', '00:00:01'), 'vacation'),
             },
             '2026-07-07': {
-                101: [make_dt('2026-07-07', '18:00:00'), make_dt('2026-07-07', '07:30:00'), 'work'],
+                101: DayMark(make_dt('2026-07-07', '18:00:00'), make_dt('2026-07-07', '07:30:00'), 'work'),
             },
         }
         save_session(time_table)
         loaded = load_session()
         assert loaded is not None
         assert set(loaded.keys()) == {'2026-07-06', '2026-07-07'}
-        assert loaded['2026-07-06'][101][0] == make_dt('2026-07-06', '16:00:00')
-        assert loaded['2026-07-06'][101][1] == make_dt('2026-07-06', '08:00:00')
-        assert loaded['2026-07-06'][101][2] == 'work'
-        assert loaded['2026-07-06'][102][2] == 'vacation'
-        assert loaded['2026-07-07'][101][0] == make_dt('2026-07-07', '18:00:00')
+        assert loaded['2026-07-06'][101].go == make_dt('2026-07-06', '16:00:00')
+        assert loaded['2026-07-06'][101].come == make_dt('2026-07-06', '08:00:00')
+        assert loaded['2026-07-06'][101].tag == 'work'
+        assert loaded['2026-07-06'][102].tag == 'vacation'
+        assert loaded['2026-07-07'][101].go == make_dt('2026-07-07', '18:00:00')
 
     def test_atomic_write_no_temp_left(self, tmp_path, monkeypatch):
         """После записи temp-файл не остаётся."""
         from core.session import save_session, SESSION_FILE
         monkeypatch.chdir(tmp_path)
-        save_session({'2026-07-06': {101: [make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work']}})
+        save_session({'2026-07-06': {101: DayMark(make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work')}})
         assert os.path.exists(SESSION_FILE)
         for f in os.listdir(tmp_path):
             assert not f.endswith('.tmp')
@@ -48,7 +49,7 @@ class TestSaveAndLoad:
         """Файл — валидный JSON с правильной структурой."""
         from core.session import save_session, SESSION_FILE, SESSION_VERSION
         monkeypatch.chdir(tmp_path)
-        save_session({'2026-01-01': {1: [make_dt('2026-01-01', '08:00:00'), make_dt('2026-01-01', '08:00:00'), 'holiday']}})
+        save_session({'2026-01-01': {1: DayMark(make_dt('2026-01-01', '08:00:00'), make_dt('2026-01-01', '08:00:00'), 'holiday')}})
         with open(SESSION_FILE, 'r', encoding='utf-8') as f:
             raw = json.load(f)
         assert raw['version'] == SESSION_VERSION
@@ -211,7 +212,7 @@ class TestSessionExistsAndRemove:
         """Игнорируемая сессия сохраняется в бэкап, а не затирается."""
         from core.session import save_session, backup_existing_session, SESSION_FILE
         monkeypatch.chdir(tmp_path)
-        save_session({'2026-06-15': {101: [make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work']}})
+        save_session({'2026-06-15': {101: DayMark(make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work')}})
         assert os.path.exists(SESSION_FILE)
         backup = backup_existing_session()
         assert backup is not None

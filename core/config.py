@@ -71,6 +71,16 @@ MANUAL_EXCLUSIONS: dict[int, str] = {}
 MANUAL_EXCLUSION_REASON = 'исключён вручную'
 
 
+def staff_or_default(employees: dict | None) -> dict:
+    """Переданный штат (напр. объединённый DAT+SQLite) или DAT-справочник запуска."""
+    return EMPLOYEES if employees is None else employees
+
+
+def full_name(emp: EmployeeData) -> str:
+    """«Фамилия Имя» карточки сотрудника."""
+    return f'{emp.last_name} {emp.first_name}'.strip()
+
+
 @contextmanager
 def preserve_config():
     """Изолировать запуск, сохранив пути, справочники и ключ для их потребителей."""

@@ -3,6 +3,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from core.day_models import DayMark
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -37,7 +38,7 @@ class TestMinimalDatLines:
         tt = build_data_array(lines)
         assert '2026-10-01' in tt and 101 in tt['2026-10-01']
         wt = calculate_hours_per_day(tt)
-        _, worked, _, _ = wt['2026-10-01'][101]
+        worked = wt['2026-10-01'][101].worked
         assert worked == timedelta(hours=8)
 
     def test_without_final_newline_same_result(self, tmp_path, monkeypatch):
@@ -73,8 +74,7 @@ class TestSessionBackup:
         """F09: отказ os.replace -> исключение, исходная сессия побайтно сохранена."""
         from core.session import save_session, backup_existing_session, SessionBackupError, SESSION_FILE
         monkeypatch.chdir(tmp_path)
-        data = {'2026-06-15': {101: [make_dt('2026-06-15', '16:00:00'),
-                                     make_dt('2026-06-15', '08:00:00'), 'work']}}
+        data = {'2026-06-15': {101: DayMark(make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work')}}
         save_session(data)
         with open(SESSION_FILE, 'rb') as f:
             before = f.read()
@@ -94,8 +94,7 @@ class TestSessionBackup:
         import main as main_mod
         monkeypatch.chdir(tmp_path)
         from core.session import save_session
-        save_session({'2026-06-15': {101: [make_dt('2026-06-15', '16:00:00'),
-                                           make_dt('2026-06-15', '08:00:00'), 'work']}})
+        save_session({'2026-06-15': {101: DayMark(make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work')}})
         monkeypatch.setattr(main_mod, 'load_config', lambda: None)
         monkeypatch.setattr(main_mod, 'set_secret_key', lambda k: None)
         import core.session as session_mod
@@ -121,13 +120,11 @@ class TestSessionBackup:
         """F09: повторные бэкапы одного периода не перезаписывают друг друга."""
         from core.session import save_session, backup_existing_session
         monkeypatch.chdir(tmp_path)
-        save_session({'2026-06-15': {101: [make_dt('2026-06-15', '16:00:00'),
-                                           make_dt('2026-06-15', '08:00:00'), 'work']}})
+        save_session({'2026-06-15': {101: DayMark(make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work')}})
         first = backup_existing_session()
         assert first is not None and os.path.exists(first)
         # вторая сессия того же периода
-        save_session({'2026-06-20': {101: [make_dt('2026-06-20', '16:00:00'),
-                                           make_dt('2026-06-20', '08:00:00'), 'work']}})
+        save_session({'2026-06-20': {101: DayMark(make_dt('2026-06-20', '16:00:00'), make_dt('2026-06-20', '08:00:00'), 'work')}})
         second = backup_existing_session()
         assert second is not None and os.path.exists(second)
         assert first != second

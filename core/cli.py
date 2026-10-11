@@ -63,7 +63,7 @@ def resolve_secret_key(args: argparse.Namespace) -> tuple[Decimal, bool]:
                     '[1] учёт времени без зарплаты  '
                     '[2] расчёт зарплаты (ключ — скрытым вводом)  [0] выход')
             choice = ui.ask_menu('Режим:', ('1', '2'))
-            if choice in ('0', 'q', 'отмена'):
+            if choice == ui.CANCEL:
                 print('Выход.')
                 sys.exit(0)
             if choice == '1':

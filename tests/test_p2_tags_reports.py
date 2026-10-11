@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from decimal import Decimal
+from core.day_models import DayMark, EmployeeMonth, HolidayGroup, WageResult, WorkGroup
 
 
 def make_dt(date_str, time_str):
@@ -25,8 +26,7 @@ class TestDayTags:
         from core.calculations import calculate_hours_per_day
         from core.day_models import TAG_WORK
         date_key = '2026-07-06'
-        tt = {date_key: {101: [make_dt(date_key, '16:00:00'),
-                               make_dt(date_key, '08:00:00'), TAG_WORK]}}
+        tt = {date_key: {101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), TAG_WORK)}}
         assert calculate_hours_per_day(tt)[date_key][101].day_tag == TAG_WORK
 
 
@@ -38,9 +38,8 @@ class TestExplicitEmployeesReports:
         staff[999] = EmployeeData(999, 'Н', 'Новичок', 1, 'Р')
         rows = build_dashboard_rows({}, [999], 2026, 7, employees=staff)
         assert rows[0]['name'] == 'Новичок Н'
-        summary = {999: ((1, timedelta(0), timedelta(0)),
-                         (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
-        wages = {999: (Decimal('800.00'), Decimal('40.00'), Decimal('840.00'))}
+        summary = {999: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+        wages = {999: WageResult(Decimal('800.00'), Decimal('40.00'), Decimal('840.00'))}
         # без employees fallback тоже работает, но с явным — имя из staff
         preview = build_preview_rows(summary, wages, employees=staff)
         assert preview[0]['name'] == 'Новичок Н'

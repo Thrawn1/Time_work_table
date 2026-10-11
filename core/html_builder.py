@@ -1,11 +1,9 @@
-from datetime import timedelta
 import html
 import re
-from core.config import EMPLOYEES
-from core.data_array import get_name_employee, is_settlement_allowed
-from core.constants import MONTHS_NAME_TO_RUSSIAN
+from core.data_array import get_name_employee
 from core.calculations import str_timedelta
 from core.money import format_money
+from core.payroll import pay_header_text
 
 
 def sanitize_filename_part(text: str) -> str:
@@ -52,62 +50,45 @@ def _build_daily_data(emp_id: int, time_table: dict, work_time: dict,
                       employees: dict | None = None) -> list[dict]:
     from core.day_models import ABSENCE_LABELS
 
-    if employees is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
-    else:
-        staff = employees
-    all_ids = {eid: get_name_employee(eid, staff) for eid in staff}
-    dates = sorted(time_table.keys())
+    name = get_name_employee(emp_id, employees)
     result = []
-    for date_key in dates:
-        if emp_id in time_table[date_key]:
-            marks = time_table[date_key][emp_id]
-            if date_key not in work_time or emp_id not in work_time[date_key]:
-                continue
-            wd = work_time[date_key][emp_id]
-            tag = getattr(marks, 'tag', marks[2])
-            come = getattr(marks, 'come', marks[1])
-            go = getattr(marks, 'go', marks[0])
-            worked = getattr(wd, 'worked', wd[1])
-            overtime_tag = getattr(wd, 'overtime_tag', wd[2])
-            delta = getattr(wd, 'delta', wd[0])
-            entry = {
-                'family': all_ids.get(emp_id, ''),
-                'date': date_key,
-                'time_begin': come.time().isoformat(timespec='auto'),
-                'time_end': go.time().isoformat(timespec='auto'),
-                # Единый формат длительностей везде (F22.6): HH:MM:SS
-                # через str_timedelta, как в консоли/превью (не str(timedelta)).
-                'delta_time': str_timedelta(worked),
-                'tag_overtime': overtime_tag,
-                'overtime': str_timedelta(delta),
-                'tag_day': tag,
-            }
-            if tag in ABSENCE_LABELS:
-                entry['tag_day'] = ABSENCE_LABELS[tag]
-            result.append(entry)
+    for date_key in sorted(time_table):
+        marks = time_table[date_key].get(emp_id)
+        wd = work_time.get(date_key, {}).get(emp_id)
+        if marks is None or wd is None:
+            continue
+        result.append({
+            'family': name,
+            'date': date_key,
+            'time_begin': marks.come.time().isoformat(timespec='auto'),
+            'time_end': marks.go.time().isoformat(timespec='auto'),
+            # Единый формат длительностей везде (F22.6): HH:MM:SS
+            # через str_timedelta, как в консоли/превью (не str(timedelta)).
+            'delta_time': str_timedelta(wd.worked),
+            'tag_overtime': wd.overtime_tag,
+            'overtime': str_timedelta(wd.delta),
+            'tag_day': ABSENCE_LABELS.get(marks.tag, marks.tag),
+        })
     return result
 
 
 def _build_total_data(emp_id: int, summary: dict, wages: dict,
                       employees: dict | None = None) -> dict:
     data = summary[emp_id]
-    work = getattr(data, 'work', data[0])
-    holiday = getattr(data, 'holiday', data[1])
+    work = data.work
+    holiday = data.holiday
     wage = wages[emp_id]
     return {
         'family': get_name_employee(emp_id, employees),
-        'all_work_weekdays': getattr(work, 'days', work[0]),
-        'weekdays_overtime': str_timedelta(getattr(work, 'overtime', work[1])),
-        'weekdays_undertime': str_timedelta(getattr(work, 'undertime', work[2])),
-        'work_weekend': getattr(holiday, 'days', holiday[0]),
-        'overtime_weekend': str_timedelta(getattr(holiday, 'overtime', holiday[1])),
-        'vacation': getattr(data, 'vacation_days', data[2]),
-        'salary': format_money(getattr(wage, 'salary', wage[0])),
-        'milk': format_money(getattr(wage, 'milk', wage[1])),
-        'salary_whith_milk': format_money(getattr(wage, 'total_with_milk', wage[2])),
+        'all_work_weekdays': work.days,
+        'weekdays_overtime': str_timedelta(work.overtime),
+        'weekdays_undertime': str_timedelta(work.undertime),
+        'work_weekend': holiday.days,
+        'overtime_weekend': str_timedelta(holiday.overtime),
+        'vacation': data.vacation_days,
+        'salary': format_money(wage.salary),
+        'milk': format_money(wage.milk),
+        'salary_whith_milk': format_money(wage.total_with_milk),
     }
 
 
@@ -150,19 +131,13 @@ def _write_html_file(file_name: str, daily_data: list[dict], total_data: dict,
         f.writelines(lines)
 
 
-def _pay_header_text(bundle) -> str:
-    """Тот же заголовок, что в консоли/Excel: база, D, ставки, условия."""
-    from core.payroll import pay_header_text
-
-    return pay_header_text(bundle)
-
 
 def _gen_pay_section(emp_id: int, bundle) -> list[str]:
     """Блок новой модели для персонального HTML: заголовок + строка сотрудника."""
     from core.money import format_money
 
     lines = ['  <h3>Новая модель оплаты</h3>\n']
-    lines.append(f'  <p>{html.escape(_pay_header_text(bundle), quote=True)}</p>\n')
+    lines.append(f'  <p>{html.escape(pay_header_text(bundle), quote=True)}</p>\n')
     r = bundle.results.get(emp_id)
     if r is None:
         lines.append('  <p>Сотрудник не входит в ведомость новой модели.</p>\n')

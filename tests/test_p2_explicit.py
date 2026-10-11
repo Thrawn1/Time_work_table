@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from core.day_models import DayMark, EmployeeMonth, HolidayGroup, WorkGroup
 
 
 def make_dt(date_str, time_str):
@@ -12,8 +13,7 @@ class TestExplicitDeps:
     def test_calculate_wages_uses_passed_rates(self, setup_employees):
         from core.calculations import calculate_wages
         summary = {
-            101: ((1, timedelta(0), timedelta(0)),
-                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
+            101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
         }
         custom = {101: Decimal('1000.00'), 102: Decimal('800.00'), 103: Decimal('800.00')}
         res = calculate_wages(summary, rates=custom, employees=setup_employees)
@@ -23,8 +23,7 @@ class TestExplicitDeps:
         from core.calculations import calculate_hours_per_day
         from core.config import EmployeeData
         date_key = '2026-07-06'
-        tt = {date_key: {999: [make_dt(date_key, '16:00:00'),
-                               make_dt(date_key, '08:00:00'), 'work']}}
+        tt = {date_key: {999: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work')}}
         # без явного справочника неизвестный ID пропускается
         assert 999 not in calculate_hours_per_day(tt, employees=setup_employees)[date_key]
         staff = dict(setup_employees)

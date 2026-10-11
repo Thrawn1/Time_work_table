@@ -18,6 +18,7 @@ from core.analysis import (
     search_undertime_days,
 )
 from core.day_models import DayMark
+from core.day_models import DayMark
 
 NORM = timedelta(hours=8)
 
@@ -96,7 +97,7 @@ class TestSearch:
 
     def test_legacy_list_marks_are_supported(self):
         come, go = make_dt('2026-07-06', '08:00:00'), make_dt('2026-07-06', '12:00:00')
-        tt = {'2026-07-06': {101: [go, come, 'work']}}
+        tt = {'2026-07-06': {101: DayMark(go, come, 'work')}}
         assert search_undertime_days(tt, 101, 2026, 7, NORM)[0].worked == timedelta(hours=4)
 
     def test_only_actual_time_roles_have_undertime(self, setup_employees):
@@ -158,8 +159,7 @@ class TestEditDay:
         tt = self._table()
         self.run(tt, '1', '1', '8 0 0', '17 0 0', 'д')
         mark = tt['2026-07-09'][101]
-        assert (mark.come, mark.go, mark.tag) == (
-            make_dt('2026-07-09', '08:00:00'), make_dt('2026-07-09', '17:00:00'), 'work')
+        assert (mark.come, mark.go, mark.tag) == (make_dt('2026-07-09', '08:00:00'), make_dt('2026-07-09', '17:00:00'), 'work')
         (entry,) = analysis.get_journal()
         assert entry['action'] == 'правка недоработки: время'
         assert entry['before'] == '08:00:00 -> 14:30:00 [work]'
@@ -282,7 +282,7 @@ class TestReviewFlow:
         tt = full_days('2026-07-06')
         tt['2026-07-07'] = {101: day('2026-07-07', '08:00:00', '14:30:00')}
         prompts: list[str] = []
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, 0)), \
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], [])), \
                 patch('builtins.input', feed('0', prompts=prompts)):
             review_employee(tt, setup_employees, 101, 2026, 7)
         assert '[3] править дни с недоработкой' in prompts[0]
@@ -294,7 +294,7 @@ class TestReviewFlow:
 
         tt = {'2026-07-06': {101: day('2026-07-06', '08:00:00', '17:00:00')},
               '2026-07-07': {101: day('2026-07-07', '08:00:00', '14:30:00')}}
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, 0)), \
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], [])), \
                 patch('builtins.input', feed('1', '3', '1', '1', '8 0 0', '17 0 0', 'д', '')):
             run_review(tt, {101: setup_employees[101]}, [101], 2026, 7)
         assert tt['2026-07-07'][101].go == make_dt('2026-07-07', '17:00:00')

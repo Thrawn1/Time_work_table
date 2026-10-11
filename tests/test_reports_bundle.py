@@ -55,8 +55,8 @@ def make_legacy_tables():
 class TestPayHeaderSingleSource:
     def test_header_same_everywhere(self):
         from core.payroll import pay_header_text
-        from core.excel_builder import _pay_header_text as excel_h
-        from core.html_builder import _pay_header_text as html_h
+        from core.excel_builder import pay_header_text as excel_h
+        from core.html_builder import pay_header_text as html_h
         bundle = make_bundle()
         assert excel_h(bundle) == pay_header_text(bundle)
         assert html_h(bundle) == pay_header_text(bundle)

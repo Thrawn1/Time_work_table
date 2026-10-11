@@ -1,8 +1,8 @@
 from openpyxl import Workbook
 from openpyxl.styles import Border, Side, Alignment, Font
-from core.config import EMPLOYEES
 from core.data_array import get_name_employee, is_included_in_settlement
 from core.constants import MONTHS_NAME_TO_RUSSIAN
+from core.payroll import pay_header_text
 
 
 def _set_cell(ws, row: int, column: int, value, border=None):
@@ -132,24 +132,19 @@ def _write_data_rows(ws, time_table: dict, work_time: dict,
             elif not is_included_in_settlement(emp_id, employees):
                 continue
             marks = time_table[date_key][emp_id]
-            tag = getattr(marks, 'tag', marks[2])
+            tag = marks.tag
             if tag in ATTENDANCE_TAGS:
                 if date_key not in work_time or emp_id not in work_time[date_key]:
                     continue
                 _set_cell(ws, count, 1, get_name_employee(emp_id, employees), border)
                 _set_cell(ws, count, 2, date_key, border)
-                come = getattr(marks, 'come', marks[1])
-                go = getattr(marks, 'go', marks[0])
-                _set_time_cell(ws, count, 3, come.time(), border)
-                _set_time_cell(ws, count, 4, go.time(), border)
+                _set_time_cell(ws, count, 3, marks.come.time(), border)
+                _set_time_cell(ws, count, 4, marks.go.time(), border)
                 wd = work_time[date_key][emp_id]
-                worked = getattr(wd, 'worked', wd[1])
-                delta = getattr(wd, 'delta', wd[0])
-                overtime_tag = getattr(wd, 'overtime_tag', wd[2])
                 # Дневные длительности < 24 ч — формат суток допустим.
-                _set_time_cell(ws, count, 5, worked, border)
-                _set_time_cell(ws, count, 7, delta, border)
-                _set_cell(ws, count, 6, overtime_tag, border)
+                _set_time_cell(ws, count, 5, wd.worked, border)
+                _set_time_cell(ws, count, 7, wd.delta, border)
+                _set_cell(ws, count, 6, wd.overtime_tag, border)
                 count += 1
             elif tag in ABSENCE_LABELS:
                 _set_cell(ws, count, 1, get_name_employee(emp_id, employees), border)
@@ -193,47 +188,33 @@ def _write_summary_block(ws, work_time: dict, summary: dict, wages: dict,
             continue
         _set_cell(ws, count, 8, get_name_employee(emp_id, employees), border)
         entry = summary[emp_id]
-        work = getattr(entry, 'work', entry[0])
-        holiday = getattr(entry, 'holiday', entry[1])
-        ws.cell(column=9, row=count, value=getattr(work, 'days', work[0])).border = border
+        work = entry.work
+        holiday = entry.holiday
+        ws.cell(column=9, row=count, value=work.days).border = border
         ws.cell(column=9, row=count).alignment = Alignment(horizontal='center')
         # R20: месячные длительности — [h]:mm:ss (30 ч → 30:00:00, а не 06:00:00).
-        _set_duration_cell(ws, count, 10, getattr(work, 'overtime', work[1]), border)
-        _set_duration_cell(ws, count, 11, getattr(work, 'undertime', work[2]), border)
-        ws.cell(column=12, row=count, value=getattr(holiday, 'days', holiday[0])).border = border
+        _set_duration_cell(ws, count, 10, work.overtime, border)
+        _set_duration_cell(ws, count, 11, work.undertime, border)
+        ws.cell(column=12, row=count, value=holiday.days).border = border
         ws.cell(column=12, row=count).alignment = Alignment(horizontal='center')
-        _set_duration_cell(ws, count, 13, getattr(holiday, 'overtime', holiday[1]), border)
-        ws.cell(column=14, row=count, value=getattr(entry, 'vacation_days', entry[2])).border = border
+        _set_duration_cell(ws, count, 13, holiday.overtime, border)
+        ws.cell(column=14, row=count, value=entry.vacation_days).border = border
         ws.cell(column=14, row=count).alignment = Alignment(horizontal='center')
         if emp_id in wages:
             wage = wages[emp_id]
-            vals = (
-                getattr(wage, 'salary', wage[0]),
-                getattr(wage, 'milk', wage[1]),
-                getattr(wage, 'total_with_milk', wage[2]),
-            )
-            for col, val in ((15, vals[0]), (16, vals[1]), (17, vals[2])):
+            for col, val in ((15, wage.salary), (16, wage.milk), (17, wage.total_with_milk)):
                 _set_money_cell(ws, count, col, val, border)
         count += 1
     return count
 
 
-def _pay_header_text(bundle) -> str:
-    """Заголовок блока новой модели — те же числа, что в консоли (ui)."""
-    from core.payroll import pay_header_text
-
-    return pay_header_text(bundle)
-
-
 def _write_pay_block(ws, start_row: int, bundle) -> int:
     """Прозрачный блок новой модели: только отображение bundle, без формул."""
-    from openpyxl.styles import Alignment
-    from core.money import format_money
 
     border = _make_border()
     row = start_row + 2
     ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=15)
-    title = ws.cell(column=1, row=row, value=_pay_header_text(bundle))
+    title = ws.cell(column=1, row=row, value=pay_header_text(bundle))
     title.font = Font(name='Calibri', size=11, bold=True)
     row += 1
     topics = ['Сотрудник', 'Норма, ч', 'Факт, ч', 'Обычная, ₽',

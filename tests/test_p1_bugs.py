@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock
 import sys
 import os
+from core.day_models import DayMark, DayWork, EmployeeMonth, HolidayGroup, WorkGroup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -23,6 +24,21 @@ def make_dt(date_str, time_str):
 # P1 #1: Праздничные смены теряются в расчетах и детализации
 # =============================================================================
 
+def _day_work():
+    from datetime import timedelta
+    from core.day_models import DayWork
+    return DayWork(delta=timedelta(0), worked=timedelta(hours=8),
+                   overtime_tag='недоработка', day_tag='work')
+
+
+def _one_workday_month():
+    from datetime import timedelta
+    from core.day_models import EmployeeMonth, HolidayGroup, WorkGroup
+    zero = timedelta(0)
+    return EmployeeMonth(work=WorkGroup(1, zero, zero), holiday=HolidayGroup(0, zero, zero, zero),
+                         vacation_days=0, truancy_days=0)
+
+
 class TestP1_1_HolidaysLostInCalculations:
     """Holiday shifts for roles 1 and 4 are lost in monthly aggregation."""
 
@@ -32,11 +48,12 @@ class TestP1_1_HolidaysLostInCalculations:
         date_key = '2026-01-01'
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday'],
+                101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][101]
+        day = result[date_key][101]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert worked == timedelta(hours=8)
         assert tag_day == 'holiday'
 
@@ -45,12 +62,14 @@ class TestP1_1_HolidaysLostInCalculations:
         from core.calculations import calculate_hours_per_month
         work_time = {
             '2026-01-01': {
-                101: (timedelta(hours=2), timedelta(hours=10), 'переработка', 'holiday'),
+                101: DayWork(timedelta(hours=2), timedelta(hours=10), 'переработка', 'holiday'),
             }
         }
-        summary, restructured = calculate_hours_per_month(work_time)
-        total_work, overtime_wd, undertime_wd = summary[101][0]
-        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
+        summary = calculate_hours_per_month(work_time)
+        work = summary[101].work
+        total_work, overtime_wd, undertime_wd = work.days, work.overtime, work.undertime
+        holiday = summary[101].holiday
+        total_holiday, overtime_we, undertime_we, total_worked_we = holiday.days, holiday.overtime, holiday.undertime, holiday.worked
         # FIXED: holiday is counted in total_holiday, not in total_work
         assert total_work == 0
         assert total_holiday == 1
@@ -62,14 +81,11 @@ class TestP1_1_HolidaysLostInCalculations:
         from core.calculations import calculate_wages
         from decimal import Decimal
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),   # 0 work days
-                (1, timedelta(0), timedelta(0), timedelta(hours=8)),  # 1 holiday, 8h worked
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), timedelta(hours=8)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         # FIXED: 1 holiday day, 8h worked = 1.5 * (800/8) * 8 = 1200
         assert total == Decimal('1200.00')
         assert milk == Decimal('40.00')
@@ -78,9 +94,9 @@ class TestP1_1_HolidaysLostInCalculations:
         """FIXED: single holiday mark IS flagged by search_missed_marks."""
         from core.analysis import search_missed_marks
         dt = make_dt('2026-01-01', '08:00:00')
-        tt = {'2026-01-01': {101: [dt, dt, 'holiday']}}
+        tt = {'2026-01-01': {101: DayMark(dt, dt, 'holiday')}}
         result = search_missed_marks(tt, 101, 2026, 1)
-        assert result != 0
+        assert result
         assert result[0][0] == '2026-01-01'
 
     def test_holiday_shows_times_in_html(self, setup_employees):
@@ -88,7 +104,7 @@ class TestP1_1_HolidaysLostInCalculations:
         from core.calculations import calculate_hours_per_day
         from core.html_builder import _build_daily_data, _gen_day_row
         date_key = '2026-01-01'
-        tt = {date_key: {101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday']}}
+        tt = {date_key: {101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday')}}
         wt = calculate_hours_per_day(tt)
         dd = _build_daily_data(101, tt, wt)
         assert len(dd) == 1
@@ -103,7 +119,7 @@ class TestP1_1_HolidaysLostInCalculations:
         from core.calculations import calculate_hours_per_day
         from core.excel_builder import _write_data_rows
         date_key = '2026-01-01'
-        tt = {date_key: {101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday']}}
+        tt = {date_key: {101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday')}}
         wt = calculate_hours_per_day(tt)
         wb = Workbook()
         ws = wb.active
@@ -125,11 +141,12 @@ class TestP1_2_Role3LosesStatus:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                102: [make_dt(date_key, '00:00:01'), make_dt(date_key, '00:00:01'), 'vacation'],
+                102: DayMark(make_dt(date_key, '00:00:01'), make_dt(date_key, '00:00:01'), 'vacation'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][102]
+        day = result[date_key][102]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         # FIXED: vacation is preserved
         assert tag_day == 'vacation'
         assert worked == timedelta(0)
@@ -140,11 +157,11 @@ class TestP1_2_Role3LosesStatus:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                102: [make_dt(date_key, '23:59:59'), make_dt(date_key, '23:59:59'), 'truancy'],
+                102: DayMark(make_dt(date_key, '23:59:59'), make_dt(date_key, '23:59:59'), 'truancy'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        _, _, _, tag_day = result[date_key][102]
+        tag_day = result[date_key][102].day_tag
         # FIXED: truancy is preserved
         assert tag_day == 'truancy'
 
@@ -153,12 +170,12 @@ class TestP1_2_Role3LosesStatus:
         from core.calculations import calculate_hours_per_month
         work_time = {
             '2026-07-06': {
-                102: (timedelta(0), timedelta(0), '', 'vacation'),
+                102: DayWork(timedelta(0), timedelta(0), '', 'vacation'),
             }
         }
-        summary, _ = calculate_hours_per_month(work_time)
-        total_work, _, _ = summary[102][0]
-        vacation = summary[102][2]
+        summary = calculate_hours_per_month(work_time)
+        total_work = summary[102].work.days
+        vacation = summary[102].vacation_days
         # FIXED: vacation counted as vacation, not work
         assert total_work == 0
         assert vacation == 1
@@ -168,12 +185,12 @@ class TestP1_2_Role3LosesStatus:
         from core.calculations import calculate_hours_per_month
         work_time = {
             '2026-07-06': {
-                102: (timedelta(0), timedelta(0), '', 'truancy'),
+                102: DayWork(timedelta(0), timedelta(0), '', 'truancy'),
             }
         }
-        summary, _ = calculate_hours_per_month(work_time)
-        total_work, _, _ = summary[102][0]
-        truancy = summary[102][3]
+        summary = calculate_hours_per_month(work_time)
+        total_work = summary[102].work.days
+        truancy = summary[102].truancy_days
         # FIXED: truancy counted as truancy, not work
         assert total_work == 0
         assert truancy == 1
@@ -183,15 +200,16 @@ class TestP1_2_Role3LosesStatus:
         from core.calculations import calculate_wages
         from decimal import Decimal
         summary = {
-            102: (
-                (0, timedelta(0), timedelta(0)),   # 0 work days — FIXED
-                (0, timedelta(0)),
+            102: EmployeeMonth(
+                WorkGroup(0, timedelta(0), timedelta(0)),   # 0 work days — FIXED
+                HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)),
                 0,  # vacation tracked separately
                 0,
             )
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[102]
+        wage = result[102]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         # FIXED: 0 work+holiday days = 0 salary
         assert total == Decimal('0.00')
 
@@ -200,26 +218,26 @@ class TestP1_2_Role3LosesStatus:
         from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
         from decimal import Decimal
         date_key = '2026-07-04'
-        tt = {date_key: {102: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'weekend']}}
+        tt = {date_key: {102: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'weekend')}}
         wt = calculate_hours_per_day(tt)
-        assert wt[date_key][102][3] == 'weekend'
-        assert wt[date_key][102][1] == timedelta(hours=8)
-        summary, _ = calculate_hours_per_month(wt)
-        assert summary[102][0][0] == 0  # не в буднях
-        assert summary[102][1][0] == 1  # в выходных
-        total, _, _ = calculate_wages(summary)[102]
+        assert wt[date_key][102].day_tag == 'weekend'
+        assert wt[date_key][102].worked == timedelta(hours=8)
+        summary = calculate_hours_per_month(wt)
+        assert summary[102].work.days == 0  # не в буднях
+        assert summary[102].holiday.days == 1  # в выходных
+        total = calculate_wages(summary)[102].salary
         assert total == Decimal('800.00')
 
     def test_role3_holiday_preserved(self, setup_employees):
         """Регрессия: роль 3 сохраняет 'holiday', а не подменяет на 'work'."""
         from core.calculations import calculate_hours_per_day, calculate_hours_per_month
         date_key = '2026-01-01'
-        tt = {date_key: {102: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday']}}
+        tt = {date_key: {102: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday')}}
         wt = calculate_hours_per_day(tt)
-        assert wt[date_key][102][3] == 'holiday'
-        summary, _ = calculate_hours_per_month(wt)
-        assert summary[102][0][0] == 0
-        assert summary[102][1][0] == 1
+        assert wt[date_key][102].day_tag == 'holiday'
+        summary = calculate_hours_per_month(wt)
+        assert summary[102].work.days == 0
+        assert summary[102].holiday.days == 1
 
 
 # =============================================================================
@@ -234,14 +252,11 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         from core.calculations import calculate_wages
         from decimal import Decimal
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), timedelta(0)),  # 1 day, 0 worked hours
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         # FIXED: 0 hours worked = 0 pay
         assert total == Decimal('0.00')
         assert milk == Decimal('40.00')  # milk is per day count, not per worked hours
@@ -252,14 +267,10 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         from decimal import Decimal
         expected = Decimal('300.00')  # 1.5 * (800/8) * 2
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), timedelta(hours=2)),  # 2h worked
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), timedelta(hours=2)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, _, _ = result[101]
+        total = result[101].salary
         assert total == expected
         assert total < Decimal('1200.00')  # FIXED: less than full shift
 
@@ -268,21 +279,17 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         from core.analysis import search_missed_marks
         from core.calculations import calculate_wages
         dt = make_dt('2026-07-04', '08:00:00')  # Saturday
-        tt = {'2026-07-04': {101: [dt, dt, 'weekend']}}
+        tt = {'2026-07-04': {101: DayMark(dt, dt, 'weekend')}}
         # search_missed_marks does detect it
         result = search_missed_marks(tt, 101, 2026, 7)
-        assert result != 0
+        assert result
         # FIXED: 0-hour shift pays 0
         from decimal import Decimal
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         wages = calculate_wages(summary)
-        total, _, _ = wages[101]
+        total = wages[101].salary
         assert total == Decimal('0.00')
 
     def test_weekend_undertime_tracked(self, setup_employees):
@@ -290,11 +297,12 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         from core.calculations import calculate_hours_per_month
         work_time = {
             '2026-07-04': {
-                101: (timedelta(hours=2), timedelta(hours=2), 'недоработка', 'weekend'),
+                101: DayWork(timedelta(hours=2), timedelta(hours=2), 'недоработка', 'weekend'),
             }
         }
-        summary, _ = calculate_hours_per_month(work_time)
-        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
+        summary = calculate_hours_per_month(work_time)
+        holiday = summary[101].holiday
+        total_holiday, overtime_we, undertime_we, total_worked_we = holiday.days, holiday.overtime, holiday.undertime, holiday.worked
         # FIXED: undertime is tracked, total_holiday = 1, total_worked = 2h
         assert total_holiday == 1
         assert undertime_we == timedelta(hours=2)
@@ -307,8 +315,8 @@ class TestP1_4_IncompleteWeekendPaidAsFull:
         result = build_data_array(lines)
         marks = result['2026-07-04'][101]
         # single mark: come == go, worked = 0
-        assert marks[0] == marks[1]
-        assert marks[2] == 'weekend'
+        assert marks.go == marks.come
+        assert marks.tag == 'weekend'
 
 
 # =============================================================================
@@ -324,40 +332,16 @@ class TestP1_5_EmployeeWithoutMarksDisappears:
         tt = {}
         result = search_missed_work_days(tt, 101, 2026, 7)
         # FIXED: returns list of all workdays in July 2026
-        assert result != 0
+        assert result
         assert len(result) > 0
         assert '2026-07-06' in result  # Monday
-
-    def test_employee_no_marks_in_all_employees(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        """FIXED: get_all_employees_in_data returns ALL employees from handbook."""
-        from core.data_array import get_all_employees_in_data
-        tt = {}  # empty — no marks for anyone
-        result = get_all_employees_in_data(tt)
-        # FIXED: all handbook employees returned
-        assert 101 in result
-        assert 102 in result
-        assert 103 in result
-
-    def test_one_employee_present_others_still_included(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        """FIXED: employees without marks are still in the result."""
-        from core.data_array import get_all_employees_in_data
-        tt = {
-            '2026-07-06': {
-                101: [make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work'],
-            }
-        }
-        result = get_all_employees_in_data(tt)
-        # FIXED: all employees returned, not just those with marks
-        assert 101 in result
-        assert 102 in result
-        assert 103 in result
 
     def test_employee_no_marks_search_missed_marks_returns_zero(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """search_missed_marks returns 0 for employee with no marks (no marks to check)."""
         from core.analysis import search_missed_marks
         tt = {}
         result = search_missed_marks(tt, 101, 2026, 7)
-        assert result == 0
+        assert result == []
 
 
 # =============================================================================
@@ -377,7 +361,7 @@ class TestP1_6_SessionReplacesParams:
 
         june_data = {
             '2026-06-15': {
-                101: [make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work'],
+                101: DayMark(make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work'),
             }
         }
         from core.session import save_session, SESSION_FILE
@@ -387,7 +371,7 @@ class TestP1_6_SessionReplacesParams:
 
         july_table = {
             '2026-07-06': {
-                101: [make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work'],
+                101: DayMark(make_dt('2026-07-06', '16:00:00'), make_dt('2026-07-06', '08:00:00'), 'work'),
             }
         }
         calls = {'read_file': [], 'build_array': 0}
@@ -408,12 +392,9 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'run_review', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'run_undertime_review', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt, *a, **k: {
-            d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
-                for e in emps} for d, emps in tt.items()})
+            d: {e: _day_work() for e in emps} for d, emps in tt.items()})
         monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
-                            lambda wt, *a, **k: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
-                                                (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
-        monkeypatch.setattr('core.payroll_service.calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
+                            lambda wt, *a, **k: {101: _one_workday_month()})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
         monkeypatch.setattr('core.config.load_wage_rates', lambda *a, **k: {101: 800, 102: 800, 103: 800})
@@ -446,7 +427,7 @@ class TestP1_6_SessionReplacesParams:
 
         june_data = {
             '2026-06-15': {
-                101: [make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work'],
+                101: DayMark(make_dt('2026-06-15', '16:00:00'), make_dt('2026-06-15', '08:00:00'), 'work'),
             }
         }
         from core.session import save_session, session_exists
@@ -463,12 +444,9 @@ class TestP1_6_SessionReplacesParams:
         monkeypatch.setattr(main_mod, 'run_review', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'run_undertime_review', lambda *a, **k: None)
         monkeypatch.setattr(main_mod, 'calculate_hours_per_day', lambda tt, *a, **k: {
-            d: {e: (__import__('datetime').timedelta(0), __import__('datetime').timedelta(hours=8), 'недоработка', 'work')
-                for e in emps} for d, emps in tt.items()})
+            d: {e: _day_work() for e in emps} for d, emps in tt.items()})
         monkeypatch.setattr(main_mod, 'calculate_hours_per_month',
-                            lambda wt, *a, **k: ({101: ((1, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)),
-                                                (0, __import__('datetime').timedelta(0), __import__('datetime').timedelta(0), __import__('datetime').timedelta(0)), 0, 0)}, {}))
-        monkeypatch.setattr('core.payroll_service.calculate_wages', lambda s, *a, **k: {101: (800, 40, 840)})
+                            lambda wt, *a, **k: {101: _one_workday_month()})
         monkeypatch.setattr(main_mod, 'build_excel', lambda *a, **k: 'x.xlsx')
         monkeypatch.setattr(main_mod, 'build_html', lambda *a, **k: 'h.html')
         monkeypatch.setattr('core.config.load_wage_rates', lambda *a, **k: {101: 800, 102: 800, 103: 800})

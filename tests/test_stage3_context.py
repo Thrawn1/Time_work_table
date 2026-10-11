@@ -3,9 +3,11 @@ import os
 import sys
 from datetime import datetime, timedelta
 from decimal import Decimal
+from core.day_models import DayMark, DayWork, EmployeeMonth, HolidayGroup, WorkGroup
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from core import config
 from core.config import EmployeeData
 
 YEAR, MONTH = 2026, 10
@@ -43,24 +45,21 @@ def _make_tables(emps=(1,)):
     for key in workday_keys_in_month(YEAR, MONTH):
         out, inn = _dt(key, '16:00'), _dt(key, '08:00')
         for emp in emps:
-            data_array.setdefault(key, {})[emp] = [out, inn, 'work']
-            work_time.setdefault(key, {})[emp] = (
-                timedelta(0), timedelta(hours=8), 'недоработка', 'work')
+            data_array.setdefault(key, {})[emp] = DayMark(out, inn, 'work')
+            work_time.setdefault(key, {})[emp] = DayWork(timedelta(0), timedelta(hours=8), 'недоработка', 'work')
     from core.calculations import calculate_hours_per_month
-    summary, _ = calculate_hours_per_month(work_time)
+    summary = calculate_hours_per_month(work_time)
     return data_array, work_time, {e: summary[e] for e in emps if e in summary}
 
 
 def _patch_emp(monkeypatch):
-    from core import analysis, data_array
     emps = {
         1: EmployeeData(id=1, first_name='А', last_name='Цеховик',
                         role_id=1, role_name='Работник цеха'),
         7: EmployeeData(id=7, first_name='Р', last_name='Руководитель',
                         role_id=0, role_name='Руководитель'),
     }
-    monkeypatch.setattr(data_array, 'EMPLOYEES', emps)
-    monkeypatch.setattr(analysis, 'EMPLOYEES', emps)
+    monkeypatch.setattr(config, 'EMPLOYEES', emps)
     return emps
 
 
@@ -146,17 +145,12 @@ class TestF05ModeBoundary:
         # emp 99 есть в DAT-списке, но назначения SQLite нет
         emps = {99: EmployeeData(id=99, first_name='X', last_name='Y',
                                  role_id=1, role_name='Работник')}
-        from core import analysis, data_array
-        monkeypatch.setattr(data_array, 'EMPLOYEES', emps)
-        monkeypatch.setattr(analysis, 'EMPLOYEES', emps)
+        monkeypatch.setattr(config, 'EMPLOYEES', emps)
         da, wt, summary = _make_tables(emps=(1,))
         # подменим summary на 99 с минимальными данными
-        summary = {99: ((1, timedelta(0), timedelta(0)),
-                        (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
-        da = {'2026-10-06': {99: [_dt('2026-10-06', '16:00'),
-                                  _dt('2026-10-06', '08:00'), 'work']}}
-        wt = {'2026-10-06': {99: (timedelta(0), timedelta(hours=8),
-                                   'недоработка', 'work')}}
+        summary = {99: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+        da = {'2026-10-06': {99: DayMark(_dt('2026-10-06', '16:00'), _dt('2026-10-06', '08:00'), 'work')}}
+        wt = {'2026-10-06': {99: DayWork(timedelta(0), timedelta(hours=8), 'недоработка', 'work')}}
         with pytest.raises(PayrollError, match='назначения'):
             build_bundle(da, wt, summary, YEAR, MONTH, db)
 
@@ -168,12 +162,9 @@ class TestF02Participants:
         db = _make_db(tmp_path)
         da, wt, summary = _make_tables(emps=(1, 7))
         # summary для 7 вручную (роль 0)
-        summary[7] = ((1, timedelta(0), timedelta(0)),
-                      (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
-        da.setdefault('2026-10-06', {})[7] = [_dt('2026-10-06', '16:00'),
-                                              _dt('2026-10-06', '08:00'), 'work']
-        wt.setdefault('2026-10-06', {})[7] = (timedelta(0), timedelta(hours=8),
-                                              'недоработка', 'work')
+        summary[7] = EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
+        da.setdefault('2026-10-06', {})[7] = DayMark(_dt('2026-10-06', '16:00'), _dt('2026-10-06', '08:00'), 'work')
+        wt.setdefault('2026-10-06', {})[7] = DayWork(timedelta(0), timedelta(hours=8), 'недоработка', 'work')
         bundle = build_bundle(da, wt, summary, YEAR, MONTH, db)
         assert 1 in bundle.results
         assert 7 not in bundle.results
@@ -185,8 +176,8 @@ class TestF02Participants:
         from core.roles import get_default_rule
         from core.ui import build_preview_rows
         summary = {
-            101: ((1, _td(0), _td(0)), (0, _td(0), _td(0), _td(0)), 0, 0),
-            102: ((1, _td(0), _td(0)), (0, _td(0), _td(0), _td(0)), 0, 0),
+            101: EmployeeMonth(WorkGroup(1, _td(0), _td(0)), HolidayGroup(0, _td(0), _td(0), _td(0)), 0, 0),
+            102: EmployeeMonth(WorkGroup(1, _td(0), _td(0)), HolidayGroup(0, _td(0), _td(0), _td(0)), 0, 0),
         }
         from core.day_models import WageResult
         wages = {101: WageResult(Decimal('100'), Decimal('40'), Decimal('140')),
@@ -211,7 +202,7 @@ class TestF02Participants:
 
     def test_dashboard_extra_excluded(self, setup_employees):
         from core.ui import build_dashboard_rows
-        tt = {'2026-07-06': {101: [datetime(2026, 7, 6, 16), datetime(2026, 7, 6, 8), 'work']}}
+        tt = {'2026-07-06': {101: DayMark(datetime(2026, 7, 6, 16), datetime(2026, 7, 6, 8), 'work')}}
         rows = build_dashboard_rows(tt, [101], 2026, 7, employees=setup_employees,
                                     extra_excluded={101: 'роль не участвует'})
         assert rows[0]['excluded'] is True

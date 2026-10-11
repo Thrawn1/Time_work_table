@@ -1,6 +1,8 @@
 """Регрессия по ревью 2026-09-10: P1+P2."""
 import json
 from datetime import datetime, timedelta
+from core import config
+from core.day_models import DayMark, DayWork, EmployeeMonth, HolidayGroup, WageResult, WorkGroup
 
 
 def make_dt(date_str, time_str):
@@ -26,11 +28,8 @@ def _patch_role2(monkeypatch):
     }
     monkeypatch.setattr(config, 'ROLES', roles)
     monkeypatch.setattr(config, 'EMPLOYEES', employees)
-    monkeypatch.setattr(calculations, 'EMPLOYEES', employees)
     monkeypatch.setattr(calculations, 'load_wage_rates',
                         lambda: {101: Decimal('800.00'), 104: Decimal('800.00')})
-    monkeypatch.setattr(data_array, 'EMPLOYEES', employees)
-    monkeypatch.setattr(analysis, 'EMPLOYEES', employees)
     return employees
 
 
@@ -41,9 +40,10 @@ class TestRole2Storekeeper:
         _patch_role2(monkeypatch)
         from core.calculations import calculate_hours_per_day
         d = '2026-07-06'
-        tt = {d: {104: [make_dt(d, '18:00:00'), make_dt(d, '08:00:00'), 'work']}}
+        tt = {d: {104: DayMark(make_dt(d, '18:00:00'), make_dt(d, '08:00:00'), 'work')}}
         res = calculate_hours_per_day(tt)
-        abs_delta, worked, tag_over, tag_day = res[d][104]
+        day = res[d][104]
+        abs_delta, worked, tag_day = day.delta, day.worked, day.day_tag
         assert worked == timedelta(hours=10)
         assert abs_delta == timedelta(hours=2)
         assert tag_day == 'work'
@@ -54,7 +54,7 @@ class TestRole2Storekeeper:
         monkeypatch.setattr('core.file_parser.load_postponed_days', lambda year: [])
         from core.analysis import _get_marks_and_missed
         dt = make_dt('2026-07-06', '08:00:00')
-        tt = {'2026-07-06': {104: [dt, dt, 'work']}}
+        tt = {'2026-07-06': {104: DayMark(dt, dt, 'work')}}
         single, missed = _get_marks_and_missed(tt, 104, 2026, 7)
         assert single != 0  # одиночная метка детектится, как у роли 1
 
@@ -63,13 +63,10 @@ class TestRole2Storekeeper:
         from decimal import Decimal
         from core.calculations import calculate_wages
         summary = {
-            104: (
-                (1, timedelta(hours=2), timedelta(0)),
-                (0, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            104: EmployeeMonth(WorkGroup(1, timedelta(hours=2), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
-        total, milk, _ = calculate_wages(summary)[104]
+        wage = calculate_wages(summary)[104]
+        total, milk = wage.salary, wage.milk
         assert total == Decimal('800.00')  # 2ч сверхурочных не плюсуются
         assert milk == Decimal('40.00')
 
@@ -78,13 +75,9 @@ class TestRole2Storekeeper:
         from decimal import Decimal
         from core.calculations import calculate_wages
         summary = {
-            104: (
-                (1, timedelta(0), timedelta(hours=6)),
-                (0, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            104: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(hours=6)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
-        total, _, _ = calculate_wages(summary)[104]
+        total = calculate_wages(summary)[104].salary
         assert total == Decimal('200.00')  # как у роли 1: 800 - 600
 
     def test_weekend_single_rate(self, monkeypatch):
@@ -92,13 +85,10 @@ class TestRole2Storekeeper:
         from decimal import Decimal
         from core.calculations import calculate_wages
         summary = {
-            104: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), timedelta(hours=8)),
-                0, 0,
-            )
+            104: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), timedelta(hours=8)), 0, 0)
         }
-        total, milk, _ = calculate_wages(summary)[104]
+        wage = calculate_wages(summary)[104]
+        total, milk = wage.salary, wage.milk
         assert total == Decimal('800.00')  # факт без 1.5x (у роли 1 было бы 1200)
         assert milk == Decimal('40.00')
 
@@ -113,12 +103,10 @@ class TestExcludedNotInPreview:
         # build_preview_rows импортирует is_settlement_allowed из data_array при вызове,
         # поэтому патча data_array достаточно
         summary = {
-            101: ((1, timedelta(0), timedelta(0)),
-                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
-            102: ((1, timedelta(0), timedelta(0)),
-                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
+            101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
+            102: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
         }
-        wages = {101: (800, 40, 840), 102: (800, 0, 800)}
+        wages = {101: WageResult(800, 40, 840), 102: WageResult(800, 0, 800)}
         rows = build_preview_rows(summary, wages)
         assert {r['emp_id'] for r in rows} == {101}
 
@@ -147,16 +135,15 @@ class TestHtmlUniqueAndEscaped:
         from core.html_builder import build_html, sanitize_filename_part
         monkeypatch.chdir(tmp_path)
         d = '2026-07-06'
-        tt = {d: {101: [make_dt(d, '16:00:00'), make_dt(d, '08:00:00'), 'work']}}
+        tt = {d: {101: DayMark(make_dt(d, '16:00:00'), make_dt(d, '08:00:00'), 'work')}}
         from core.calculations import calculate_hours_per_day, calculate_hours_per_month, calculate_wages
         wt = calculate_hours_per_day(tt)
-        summary, _ = calculate_hours_per_month(wt)
+        summary = calculate_hours_per_month(wt)
         wages = calculate_wages(summary)
         # подменим ставки чтобы wages непустой
         if 101 not in wages:
-            wages = {101: (800, 40, 840)}
-            summary = {101: ((1, timedelta(0), timedelta(0)),
-                              (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+            wages = {101: WageResult(800, 40, 840)}
+            summary = {101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
         fname = build_html(101, tt, wt, summary, wages)
         assert '_101_' in fname
         assert sanitize_filename_part('a/b:c') == 'a_b_c'
@@ -176,16 +163,12 @@ class TestExcelFormulaAndFilter:
     def test_name_formula_stored_as_string(self, setup_employees, monkeypatch):
         from openpyxl import Workbook
         from core.excel_builder import _write_data_rows, _set_cell
-        from core import data_array
-        monkeypatch.setattr(data_array, 'EMPLOYEES', {
+        monkeypatch.setattr(config, 'EMPLOYEES', {
             101: type('E', (), {'last_name': '=1+1', 'first_name': ''})(),
         })
-        # также пропатчить EMPLOYEES в excel_builder (импортирован напрямую)
-        from core import excel_builder
-        monkeypatch.setattr(excel_builder, 'EMPLOYEES', data_array.EMPLOYEES)
         d = '2026-07-06'
-        tt = {d: {101: [make_dt(d, '16:00:00'), make_dt(d, '08:00:00'), 'work']}}
-        wt = {d: {101: (timedelta(0), timedelta(hours=8), 'недоработка', 'work')}}
+        tt = {d: {101: DayMark(make_dt(d, '16:00:00'), make_dt(d, '08:00:00'), 'work')}}
+        wt = {d: {101: DayWork(timedelta(0), timedelta(hours=8), 'недоработка', 'work')}}
         wb = Workbook()
         ws = wb.active
         _write_data_rows(ws, tt, wt)
@@ -200,8 +183,8 @@ class TestExcelFormulaAndFilter:
         wt = {}
         for day in range(1, 32):
             k = f'2026-07-{day:02d}'
-            tt[k] = {101: [make_dt(k, '16:00:00'), make_dt(k, '08:00:00'), 'work']}
-            wt[k] = {101: (timedelta(0), timedelta(hours=8), 'недоработка', 'work')}
+            tt[k] = {101: DayMark(make_dt(k, '16:00:00'), make_dt(k, '08:00:00'), 'work')}
+            wt[k] = {101: DayWork(timedelta(0), timedelta(hours=8), 'недоработка', 'work')}
         wb = Workbook()
         ws = wb.active
         last = _write_data_rows(ws, tt, wt)

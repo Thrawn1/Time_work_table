@@ -1,9 +1,7 @@
 from datetime import datetime
+from core.file_parser import parse_attlog_line as _parse_line
 from core.data_array import (
     build_data_array,
-    _parse_line,
-    get_employee_work_dates,
-    get_all_employees_in_data,
     get_employees_with_marks,
     get_name_employee,
     is_settlement_allowed,
@@ -42,8 +40,8 @@ class TestBuildDataArray:
         result = build_data_array(lines)
         assert '2026-07-06' in result
         marks = result['2026-07-06'][101]
-        assert marks[0] == marks[1]  # same dt for single mark
-        assert marks[2] == 'work'
+        assert marks.go == marks.come  # same dt for single mark
+        assert marks.tag == 'work'
 
     def test_two_marks_expands_window(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """Two marks: earliest and latest are stored."""
@@ -53,8 +51,8 @@ class TestBuildDataArray:
         ]
         result = build_data_array(lines)
         marks = result['2026-07-06'][101]
-        assert marks[0] == datetime(2026, 7, 6, 16, 0, 0)  # latest
-        assert marks[1] == datetime(2026, 7, 6, 8, 0, 0)   # earliest
+        assert marks.go == datetime(2026, 7, 6, 16, 0, 0)  # latest
+        assert marks.come == datetime(2026, 7, 6, 8, 0, 0)   # earliest
 
     def test_multiple_marks_window(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """Three marks: window is min/max of all."""
@@ -65,8 +63,8 @@ class TestBuildDataArray:
         ]
         result = build_data_array(lines)
         marks = result['2026-07-06'][101]
-        assert marks[0] == datetime(2026, 7, 6, 18, 0, 0)
-        assert marks[1] == datetime(2026, 7, 6, 7, 0, 0)
+        assert marks.go == datetime(2026, 7, 6, 18, 0, 0)
+        assert marks.come == datetime(2026, 7, 6, 7, 0, 0)
 
     def test_two_employees(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """Two employees on same day."""
@@ -114,52 +112,15 @@ class TestBuildDataArray:
         lines = [make_line(101, '2026-01-01', '08:00:00')]
         result = build_data_array(lines)
         marks = result['2026-01-01'][101]
-        assert marks[2] == 'holiday'
+        assert marks.tag == 'holiday'
 
     def test_weekend_tag_preserved(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
         """Weekend tag is set correctly."""
         lines = [make_line(101, '2026-07-04', '08:00:00')]  # Saturday
         result = build_data_array(lines)
         marks = result['2026-07-04'][101]
-        assert marks[2] == 'weekend'
+        assert marks.tag == 'weekend'
 
-
-class TestGetEmployeeWorkDates:
-    def test_returns_dates(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        lines = [
-            make_line(101, '2026-07-07', '08:00:00'),
-            make_line(101, '2026-07-06', '08:00:00'),
-        ]
-        tt = build_data_array(lines)
-        dates = get_employee_work_dates(tt, 101)
-        assert '2026-07-06' in dates
-        assert '2026-07-07' in dates
-        assert len(dates) == 2
-
-    def test_other_employee_not_included(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        lines = [
-            make_line(101, '2026-07-06', '08:00:00'),
-            make_line(102, '2026-07-07', '08:00:00'),
-        ]
-        tt = build_data_array(lines)
-        dates = get_employee_work_dates(tt, 101)
-        assert '2026-07-07' not in dates
-
-
-class TestGetAllEmployeesInData:
-    def test_returns_all_handbook_employees(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
-        """P1 #5 FIXED: returns all employees from handbook, not just those with marks."""
-        lines = [
-            make_line(101, '2026-07-06', '08:00:00'),
-            make_line(101, '2026-07-07', '08:00:00'),
-            make_line(102, '2026-07-06', '08:00:00'),
-        ]
-        tt = build_data_array(lines)
-        ids = get_all_employees_in_data(tt)
-        # FIXED: all handbook employees, not just those with marks
-        assert 101 in ids
-        assert 102 in ids
-        assert 103 in ids
 
 
 class TestGetEmployeesWithMarks:

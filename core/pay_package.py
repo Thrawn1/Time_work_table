@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import platform
-import tempfile
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -110,9 +109,9 @@ def serialize_marks(data_array: dict) -> dict:
     for date_key, employees in (data_array or {}).items():
         day: dict = {}
         for emp_id, marks in employees.items():
-            go = getattr(marks, 'go', marks[0])
-            come = getattr(marks, 'come', marks[1])
-            tag = getattr(marks, 'tag', marks[2])
+            go = marks.go
+            come = marks.come
+            tag = marks.tag
             day[str(emp_id)] = [go.isoformat(), come.isoformat(), str(tag)]
         out[str(date_key)] = day
     return out
@@ -160,25 +159,25 @@ def serialize_summary(summary: dict) -> dict:
     """Агрегаты legacy-пути: дни/часы/отпуск/прогул по сотрудникам."""
     out: dict = {}
     for emp_id, data in (summary or {}).items():
-        work = getattr(data, 'work', data[0])
-        holiday = getattr(data, 'holiday', data[1])
+        work = data.work
+        holiday = data.holiday
         out[str(emp_id)] = {
-            'work': {'days': work.days if hasattr(work, 'days') else work[0],
-                     'overtime_h': _timedelta_hours(work.overtime if hasattr(work, 'overtime') else work[1]),
-                     'undertime_h': _timedelta_hours(work.undertime if hasattr(work, 'undertime') else work[2])},
-            'holiday': {'days': holiday.days if hasattr(holiday, 'days') else holiday[0],
-                        'overtime_h': _timedelta_hours(holiday.overtime if hasattr(holiday, 'overtime') else holiday[1]),
-                        'undertime_h': _timedelta_hours(holiday.undertime if hasattr(holiday, 'undertime') else holiday[2])},
-            'vacation_days': getattr(data, 'vacation_days', data[2]),
-            'truancy_days': getattr(data, 'truancy_days', data[3]),
-            'sick_days': getattr(data, 'sick_days', 0),
+            'work': {'days': work.days,
+                     'overtime_h': _timedelta_hours(work.overtime),
+                     'undertime_h': _timedelta_hours(work.undertime)},
+            'holiday': {'days': holiday.days,
+                        'overtime_h': _timedelta_hours(holiday.overtime),
+                        'undertime_h': _timedelta_hours(holiday.undertime)},
+            'vacation_days': data.vacation_days,
+            'truancy_days': data.truancy_days,
+            'sick_days': data.sick_days,
         }
     return out
 
 
 def serialize_wages(wages: dict) -> dict:
-    return {str(emp_id): {'salary': _str(w[0]), 'milk': _str(w[1]),
-                          'total_with_milk': _str(w[2])}
+    return {str(emp_id): {'salary': _str(w.salary), 'milk': _str(w.milk),
+                          'total_with_milk': _str(w.total_with_milk)}
             for emp_id, w in (wages or {}).items()}
 
 
@@ -242,55 +241,32 @@ def staff_snapshot(db_path: str, emp_ids: list[int], month_start: str,
     R11: ошибки чтения — отказ (PayrollError), а не неполные значения.
     Не пишет в БД; отсутствие БД — пустой снимок.
     """
-    from core.data_array import get_name_employee
+    from core.data_array import display_name
     from core.payroll import PayrollError
-    from core.pay_store import connect
+    from core.pay_store import open_db
 
     snap: dict = {'assignments': {}, 'names': {}, 'hires': {}, 'schema_version': None}
     if not os.path.exists(db_path):
         return snap
-    import sqlite3 as _sqlite3
-
-    try:
-        con = connect(db_path)
-    except _sqlite3.Error as e:
-        raise PayrollError(f'{db_path}: не удалось открыть справочник ({e}).') from e
-    try:
-        try:
-            row = con.execute(
-                "SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()
-            snap['schema_version'] = row['value'] if row else None
-        except _sqlite3.Error as e:
-            raise PayrollError(f'{db_path}: ошибка чтения версии схемы ({e}).') from e
-        try:
-            hires = {r['id']: r['hire_date'] for r in con.execute('SELECT id, hire_date FROM employees')}
-        except _sqlite3.Error as e:
-            raise PayrollError(f'{db_path}: ошибка чтения сотрудников ({e}).') from e
+    with open_db(db_path, error=PayrollError) as con:
+        row = con.execute(
+            "SELECT value FROM schema_meta WHERE key='schema_version'").fetchone()
+        snap['schema_version'] = row['value'] if row else None
+        hires = {r['id']: r['hire_date'] for r in con.execute('SELECT id, hire_date FROM employees')}
         for emp_id in emp_ids:
-            try:
-                row = con.execute(
-                    'SELECT role_id, effective_from, effective_to FROM assignments'
-                    ' WHERE emp_id=? AND effective_from <= ?'
-                    ' AND (effective_to IS NULL OR effective_to >= ?)'
-                    ' ORDER BY effective_from DESC LIMIT 1',
-                    (int(emp_id), month_start, month_start)).fetchone()
-            except _sqlite3.Error as e:
-                raise PayrollError(f'{db_path}: ошибка чтения назначений ({e}).') from e
-            if row is None:
-                snap['assignments'][str(emp_id)] = None
-            else:
-                snap['assignments'][str(emp_id)] = {
-                    'role_id': row['role_id'],
-                    'effective_from': row['effective_from'],
-                    'effective_to': row['effective_to'],
-                }
+            row = con.execute(
+                'SELECT role_id, effective_from, effective_to FROM assignments'
+                ' WHERE emp_id=? AND effective_from <= ?'
+                ' AND (effective_to IS NULL OR effective_to >= ?)'
+                ' ORDER BY effective_from DESC LIMIT 1',
+                (int(emp_id), month_start, month_start)).fetchone()
+            snap['assignments'][str(emp_id)] = None if row is None else {
+                'role_id': row['role_id'],
+                'effective_from': row['effective_from'],
+                'effective_to': row['effective_to'],
+            }
             snap['hires'][int(emp_id)] = hires.get(int(emp_id))
-            snap['names'][int(emp_id)] = get_name_employee(int(emp_id), employees) or f'ID {emp_id}'
-    finally:
-        try:
-            con.close()
-        except Exception:
-            pass
+            snap['names'][int(emp_id)] = display_name(int(emp_id), employees)
     return snap
 
 

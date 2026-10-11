@@ -6,6 +6,7 @@ from core.calculations import (
     calculate_hours_per_month,
     calculate_wages,
 )
+from core.day_models import DayMark, DayWork, EmployeeMonth, HolidayGroup, WorkGroup
 
 
 def make_dt(date_str, time_str):
@@ -121,11 +122,12 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'  # Monday
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][101]
+        day = result[date_key][101]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert worked == timedelta(hours=8)
         assert abs_delta == timedelta(0)
         assert tag_day == 'work'
@@ -135,11 +137,12 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '18:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                101: DayMark(make_dt(date_key, '18:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][101]
+        day = result[date_key][101]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert worked == timedelta(hours=10)
         assert abs_delta == timedelta(hours=2)
         assert tag_overtime == 'переработка'
@@ -149,11 +152,12 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '14:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                101: DayMark(make_dt(date_key, '14:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][101]
+        day = result[date_key][101]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert worked == timedelta(hours=6)
         assert abs_delta == timedelta(hours=2)
         assert tag_overtime == 'недоработка'
@@ -163,11 +167,12 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '10:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                101: DayMark(make_dt(date_key, '10:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][101]
+        day = result[date_key][101]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert worked == timedelta(hours=2)
         assert abs_delta == timedelta(hours=6)
         assert tag_overtime == 'недоработка'
@@ -177,11 +182,11 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-04'  # Saturday
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'weekend'],
+                101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'weekend'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        _, _, _, tag_day = result[date_key][101]
+        tag_day = result[date_key][101].day_tag
         assert tag_day == 'weekend'
 
     def test_role1_holiday_day(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty):
@@ -189,11 +194,11 @@ class TestCalculateHoursPerDay:
         date_key = '2026-01-01'
         time_table = {
             date_key: {
-                101: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday'],
+                101: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'holiday'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        _, _, _, tag_day = result[date_key][101]
+        tag_day = result[date_key][101].day_tag
         assert tag_day == 'holiday'
 
     def test_role3_always_full_day(self, setup_employees):
@@ -201,11 +206,12 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                102: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                102: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][102]
+        day = result[date_key][102]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert worked == timedelta(hours=8)
         assert abs_delta == timedelta(0)
         assert tag_overtime == ''
@@ -216,11 +222,12 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                102: [make_dt(date_key, '00:00:01'), make_dt(date_key, '00:00:01'), 'vacation'],
+                102: DayMark(make_dt(date_key, '00:00:01'), make_dt(date_key, '00:00:01'), 'vacation'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        abs_delta, worked, tag_overtime, tag_day = result[date_key][102]
+        day = result[date_key][102]
+        abs_delta, worked, tag_overtime, tag_day = day.delta, day.worked, day.overtime_tag, day.day_tag
         assert tag_day == 'vacation'
         assert worked == timedelta(0)
 
@@ -229,11 +236,11 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                102: [make_dt(date_key, '23:59:59'), make_dt(date_key, '23:59:59'), 'truancy'],
+                102: DayMark(make_dt(date_key, '23:59:59'), make_dt(date_key, '23:59:59'), 'truancy'),
             }
         }
         result = calculate_hours_per_day(time_table)
-        _, _, _, tag_day = result[date_key][102]
+        tag_day = result[date_key][102].day_tag
         assert tag_day == 'truancy'
 
     def test_role4_excluded_from_accruals(self, setup_employees):
@@ -241,7 +248,7 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                103: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                103: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
@@ -252,7 +259,7 @@ class TestCalculateHoursPerDay:
         date_key = '2026-07-06'
         time_table = {
             date_key: {
-                999: [make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'],
+                999: DayMark(make_dt(date_key, '16:00:00'), make_dt(date_key, '08:00:00'), 'work'),
             }
         }
         result = calculate_hours_per_day(time_table)
@@ -269,7 +276,7 @@ class TestCalculateHoursPerMonth:
         for date_key, emp_id, abs_delta, worked, tag_overtime, tag_day in entries:
             if date_key not in work_time:
                 work_time[date_key] = {}
-            work_time[date_key][emp_id] = (abs_delta, worked, tag_overtime, tag_day)
+            work_time[date_key][emp_id] = DayWork(abs_delta, worked, tag_overtime, tag_day)
         return work_time
 
     def test_single_workday(self, setup_employees):
@@ -277,11 +284,13 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-07-06', 101, timedelta(0), timedelta(hours=8), '', 'work'),
         ])
-        summary, restructured = calculate_hours_per_month(work_time)
-        total_work, overtime_wd, undertime_wd = summary[101][0]
-        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
-        vacation = summary[101][2]
-        truancy = summary[101][3]
+        summary = calculate_hours_per_month(work_time)
+        work = summary[101].work
+        total_work, overtime_wd, undertime_wd = work.days, work.overtime, work.undertime
+        holiday = summary[101].holiday
+        total_holiday, overtime_we, undertime_we, total_worked_we = holiday.days, holiday.overtime, holiday.undertime, holiday.worked
+        vacation = summary[101].vacation_days
+        truancy = summary[101].truancy_days
         assert total_work == 1
         assert total_holiday == 0
         assert vacation == 0
@@ -294,8 +303,9 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-07-06', 101, timedelta(hours=6), timedelta(hours=2), 'недоработка', 'work'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        _, overtime_wd, undertime_wd = summary[101][0]
+        summary = calculate_hours_per_month(work_time)
+        work = summary[101].work
+        overtime_wd, undertime_wd = work.overtime, work.undertime
         # FIX: undertime goes to separate field, overtime stays zero
         assert overtime_wd == timedelta(0)
         assert undertime_wd == timedelta(hours=6)
@@ -305,8 +315,9 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-07-06', 101, timedelta(hours=2), timedelta(hours=10), 'переработка', 'work'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        _, overtime_wd, undertime_wd = summary[101][0]
+        summary = calculate_hours_per_month(work_time)
+        work = summary[101].work
+        overtime_wd, undertime_wd = work.overtime, work.undertime
         assert overtime_wd == timedelta(hours=2)
         assert undertime_wd == timedelta(0)
 
@@ -315,8 +326,9 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-07-04', 101, timedelta(hours=2), timedelta(hours=10), 'переработка', 'weekend'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
+        summary = calculate_hours_per_month(work_time)
+        holiday = summary[101].holiday
+        total_holiday, overtime_we, undertime_we, total_worked_we = holiday.days, holiday.overtime, holiday.undertime, holiday.worked
         assert total_holiday == 1
         assert overtime_we == timedelta(hours=2)
         assert total_worked_we == timedelta(hours=10)
@@ -326,8 +338,8 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-07-06', 101, timedelta(0), timedelta(hours=8), '', 'vacation'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        vacation = summary[101][2]
+        summary = calculate_hours_per_month(work_time)
+        vacation = summary[101].vacation_days
         assert vacation == 1
 
     def test_truancy_counted(self, setup_employees):
@@ -335,8 +347,8 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-07-06', 101, timedelta(0), timedelta(hours=8), '', 'truancy'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        truancy = summary[101][3]
+        summary = calculate_hours_per_month(work_time)
+        truancy = summary[101].truancy_days
         assert truancy == 1
 
     def test_multiple_days_mixed(self, setup_employees):
@@ -348,11 +360,13 @@ class TestCalculateHoursPerMonth:
             ('2026-07-08', 101, timedelta(0), timedelta(0), '', 'vacation'),
             ('2026-07-09', 101, timedelta(0), timedelta(0), '', 'truancy'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        total_work, overtime_wd, undertime_wd = summary[101][0]
-        total_holiday, overtime_we, undertime_we, total_worked_we = summary[101][1]
-        vacation = summary[101][2]
-        truancy = summary[101][3]
+        summary = calculate_hours_per_month(work_time)
+        work = summary[101].work
+        total_work, overtime_wd, undertime_wd = work.days, work.overtime, work.undertime
+        holiday = summary[101].holiday
+        total_holiday, overtime_we, undertime_we, total_worked_we = holiday.days, holiday.overtime, holiday.undertime, holiday.worked
+        vacation = summary[101].vacation_days
+        truancy = summary[101].truancy_days
         assert total_work == 2
         assert total_holiday == 1
         assert vacation == 1
@@ -367,9 +381,10 @@ class TestCalculateHoursPerMonth:
         work_time = self._build_work_time([
             ('2026-01-01', 101, timedelta(hours=2), timedelta(hours=10), 'переработка', 'holiday'),
         ])
-        summary, restructured = calculate_hours_per_month(work_time)
-        total_work, _, _ = summary[101][0]
-        total_holiday, overtime_we, _, total_worked_we = summary[101][1]
+        summary = calculate_hours_per_month(work_time)
+        total_work = summary[101].work.days
+        holiday = summary[101].holiday
+        total_holiday, overtime_we, total_worked_we = holiday.days, holiday.overtime, holiday.worked
         # FIXED: holiday counted in total_holiday, not lost
         assert total_work == 0
         assert total_holiday == 1
@@ -382,8 +397,8 @@ class TestCalculateHoursPerMonth:
             ('2026-07-06', 102, timedelta(0), timedelta(hours=8), '', 'work'),
             ('2026-07-07', 102, timedelta(0), timedelta(hours=8), '', 'work'),
         ])
-        summary, _ = calculate_hours_per_month(work_time)
-        total_work, _, _ = summary[102][0]
+        summary = calculate_hours_per_month(work_time)
+        total_work = summary[102].work.days
         assert total_work == 2
 
 
@@ -395,15 +410,11 @@ class TestCalculateWages:
     def test_role1_standard_8h(self, setup_employees, mock_wage_rates):
         """8-hour day, no overtime: 800 * 1 = 800."""
         summary = {
-            101: (
-                (1, timedelta(0), timedelta(0)),   # work_days, overtime, undertime
-                (0, timedelta(0), timedelta(0), timedelta(0)),   # holiday_days, overtime, undertime, worked
-                0,  # vacation
-                0,  # truancy
-            )
+            101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         # rate=800 руб/смена, 1 смена: 800
         assert total == Decimal('800.00')
         assert milk == Decimal('40.00')  # 1 day * 40
@@ -412,14 +423,11 @@ class TestCalculateWages:
     def test_role1_with_overtime(self, setup_employees, mock_wage_rates):
         """1 day worked + 2h overtime: 800 + 1.5*100*2 = 1100."""
         summary = {
-            101: (
-                (1, timedelta(hours=2), timedelta(0)),
-                (0, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(1, timedelta(hours=2), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         assert total == Decimal('1100.00')
         assert milk == Decimal('40.00')
         assert total_with_milk == Decimal('1140.00')
@@ -427,14 +435,11 @@ class TestCalculateWages:
     def test_role1_undertime_reduces_salary_correctly(self, setup_employees, mock_wage_rates):
         """P1 #3 FIX: 2h workday reduces salary by regular hourly fraction, not 1.5x."""
         summary = {
-            101: (
-                (1, timedelta(0), timedelta(hours=6)),
-                (0, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(hours=6)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         # 800 - (800/8)*6 = 800 - 600 = 200
         assert total == Decimal('200.00')
         assert total > 0  # FIX: no longer negative
@@ -443,14 +448,11 @@ class TestCalculateWages:
         """Weekend work: 1.5 * (800/8) * 8h = 1200."""
         worked = timedelta(hours=8)
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), worked),  # 1 day, 0 overtime, 0 undertime, 8h worked
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), worked), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         assert total == Decimal('1200.00')
         assert milk == Decimal('40.00')  # weekends also get milk
         assert total_with_milk == Decimal('1240.00')
@@ -458,15 +460,11 @@ class TestCalculateWages:
     def test_role1_vacation_pay(self, setup_employees, mock_wage_rates):
         """Vacation: 800 * days = 800 * 5 = 4000."""
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (0, timedelta(0), timedelta(0), timedelta(0)),
-                5,  # 5 vacation days
-                0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 5, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         assert total == Decimal('4000.00')
         assert milk == Decimal('0.00')  # no work days -> no milk
         assert total_with_milk == total
@@ -481,14 +479,11 @@ class TestCalculateWages:
         expected_weekend = Decimal('1.5') * (Decimal('800') / 8) * Decimal('8')  # 1200
         expected_vacation = Decimal('800') * 1  # 800
         summary = {
-            101: (
-                (20, timedelta(0), timedelta(0)),
-                (2, weekend_overwork, timedelta(0), weekend_worked),
-                1, 0,
-            )
+            101: EmployeeMonth(WorkGroup(20, timedelta(0), timedelta(0)), HolidayGroup(2, weekend_overwork, timedelta(0), weekend_worked), 1, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[101]
+        wage = result[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         expected_total = expected_weekday + expected_weekend + expected_vacation
         assert total == expected_total == Decimal('18000.00')
         assert milk == Decimal('880.00')  # 22 * 40
@@ -496,14 +491,11 @@ class TestCalculateWages:
     def test_role3_monthly_salary(self, setup_employees, mock_wage_rates):
         """Role 3: 800 * (work_days + holiday_days) = 800*22."""
         summary = {
-            102: (
-                (22, timedelta(0), timedelta(0)),
-                (0, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            102: EmployeeMonth(WorkGroup(22, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         result = calculate_wages(summary)
-        total, milk, total_with_milk = result[102]
+        wage = result[102]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         assert total == Decimal('17600.00')
         assert milk == Decimal('0.00')
         assert total_with_milk == total
@@ -511,37 +503,26 @@ class TestCalculateWages:
     def test_role3_no_milk(self, setup_employees, mock_wage_rates):
         """Role 3 never gets milk allowance."""
         summary = {
-            102: (
-                (1, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(0), timedelta(0)),
-                0, 0,
-            )
+            102: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
         }
         result = calculate_wages(summary)
-        _, milk, _ = result[102]
+        milk = result[102].milk
         assert milk == Decimal('0.00')
 
     def test_short_weekend_never_negative(self, setup_employees, mock_wage_rates):
         """Регрессия: 2ч в выходной + недоработка 6ч -> 300, а не минус."""
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(0), timedelta(hours=6), timedelta(hours=2)),
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(0), timedelta(hours=6), timedelta(hours=2)), 0, 0)
         }
-        total, milk, total_with_milk = calculate_wages(summary)[101]
+        wage = calculate_wages(summary)[101]
+        total, milk, total_with_milk = wage.salary, wage.milk, wage.total_with_milk
         assert total == Decimal('300.00')
         assert total >= 0
 
     def test_weekend_overtime_not_double_counted(self, setup_employees, mock_wage_rates):
         """Регрессия: 10ч в выходной (8+2) -> 1500, а не 1950."""
         summary = {
-            101: (
-                (0, timedelta(0), timedelta(0)),
-                (1, timedelta(hours=2), timedelta(0), timedelta(hours=10)),
-                0, 0,
-            )
+            101: EmployeeMonth(WorkGroup(0, timedelta(0), timedelta(0)), HolidayGroup(1, timedelta(hours=2), timedelta(0), timedelta(hours=10)), 0, 0)
         }
-        total, _, _ = calculate_wages(summary)[101]
+        total = calculate_wages(summary)[101].salary
         assert total == Decimal('1500.00')

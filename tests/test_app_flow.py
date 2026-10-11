@@ -83,10 +83,10 @@ def test_salary_mode_uses_new_model(input_dir, tmp_path, monkeypatch):
     assert list(output.glob('payroll_versions_*.json'))
 
 
-def test_payroll_service_uses_explicit_employees(input_dir):
+def test_build_bundle_uses_explicit_employees(input_dir):
     from core.calculations import calculate_hours_per_day, calculate_hours_per_month
     from core.data_array import build_data_array
-    from core.payroll_service import calculate_payroll
+    from core.payroll import build_bundle, bundle_to_wages
 
     _seed_pay_db(input_dir)
     staff = {101: config.EmployeeData(101, 'Явный', 'Сотрудник', 1, 'Работник')}
@@ -97,12 +97,12 @@ def test_payroll_service_uses_explicit_employees(input_dir):
         lines = file_parser.read_file_data('marks.dat', 2026, 7)
         table = build_data_array(lines, employees=staff)
         work_time = calculate_hours_per_day(table, employees=staff)
-        summary, _ = calculate_hours_per_month(work_time)
-        outcome = calculate_payroll(table, work_time, summary, 2026, 7,
-                                    str(input_dir / 'pay_directory.db'),
-                                    salary_mode=True, employees=staff)
-        assert outcome.wages[101].salary > 0
-        assert outcome.bundle.results[101].name == 'Сотрудник Явный'
+        summary = calculate_hours_per_month(work_time)
+        bundle = build_bundle(table, work_time, summary, 2026, 7,
+                              str(input_dir / 'pay_directory.db'),
+                              salary_mode=True, employees=staff)
+        assert bundle_to_wages(bundle)[101].salary > 0
+        assert bundle.results[101].name == 'Сотрудник Явный'
 
 
 def test_bad_pay_database_aborts_without_fallback(input_dir, tmp_path, monkeypatch, capsys):

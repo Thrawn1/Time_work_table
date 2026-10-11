@@ -89,6 +89,17 @@ def get_default_rule(role_id: int) -> RoleRule:
         ) from None
 
 
+def resolve_rule(role_id, rules_by_role: dict | None) -> RoleRule | None:
+    """Действующее правило роли: SQLite-версия месяца (new) или DAT-умолчание (legacy).
+
+    rules_by_role передан — ищем только в нём, без подмены умолчанием.
+    None — правила нет: вызывающий код решает, ошибка это или «не участвует».
+    """
+    if rules_by_role is not None:
+        return rules_by_role.get(role_id)
+    return DEFAULT_RULES.get(role_id)
+
+
 def known_default_role_ids() -> list[int]:
     return sorted(DEFAULT_RULES)
 

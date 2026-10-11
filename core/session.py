@@ -161,9 +161,9 @@ def save_session(time_table: dict, year: int | None = None, month: int | None = 
     for date_key, employees in time_table.items():
         data['entries'][date_key] = {}
         for emp_id, marks in employees.items():
-            go = getattr(marks, 'go', marks[0])
-            come = getattr(marks, 'come', marks[1])
-            tag = getattr(marks, 'tag', marks[2])
+            go = marks.go
+            come = marks.come
+            tag = marks.tag
             data['entries'][date_key][str(emp_id)] = [
                 go.isoformat(),
                 come.isoformat(),

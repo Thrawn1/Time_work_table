@@ -10,13 +10,8 @@ from core.config import EmployeeData, Role
 
 @pytest.fixture
 def setup_employees(monkeypatch):
-    """Set up synthetic employees for testing, patching all consumer modules."""
-    from core import config
-    from core import calculations
-    from core import data_array
-    from core import analysis
-    from core import html_builder
-    from core import excel_builder
+    """Синтетический DAT-справочник: потребители читают его через config.staff_or_default."""
+    from core import calculations, config, data_array
 
     roles = {
         1: Role(id=1, name='Работник'),
@@ -33,20 +28,12 @@ def setup_employees(monkeypatch):
     }
     exceptions = []
 
-    # Patch config globals
     monkeypatch.setattr(config, 'ROLES', roles)
     monkeypatch.setattr(config, 'EMPLOYEES', employees)
     monkeypatch.setattr(config, 'SETTLEMENT_EXCEPTIONS', exceptions)
-
-    # Patch imported names in all consumer modules
-    monkeypatch.setattr(calculations, 'EMPLOYEES', employees)
+    monkeypatch.setattr(data_array, 'SETTLEMENT_EXCEPTIONS', exceptions)
     monkeypatch.setattr(calculations, 'load_wage_rates',
                         lambda: {101: Decimal('800.00'), 102: Decimal('800.00'), 103: Decimal('800.00')})
-    monkeypatch.setattr(data_array, 'EMPLOYEES', employees)
-    monkeypatch.setattr(data_array, 'SETTLEMENT_EXCEPTIONS', exceptions)
-    monkeypatch.setattr(analysis, 'EMPLOYEES', employees)
-    monkeypatch.setattr(html_builder, 'EMPLOYEES', employees)
-    monkeypatch.setattr(excel_builder, 'EMPLOYEES', employees)
 
     return employees
 

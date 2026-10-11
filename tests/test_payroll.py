@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 
+from core import config
 from core.config import EmployeeData
 from core.money import timedelta_to_hours
 from core.pay_calendar import workday_keys_in_month, working_days_in_month
@@ -12,6 +13,7 @@ from core.pay_store import connect, init_db, migrate_from_dat, seed_defaults
 from core.payroll import (
     PayrollError, build_bundle, bundle_to_wages, new_regime_available,
 )
+from core.day_models import DayMark, DayWork, EmployeeMonth, HolidayGroup, WorkGroup
 
 YEAR, MONTH = 2026, 10
 
@@ -30,7 +32,6 @@ def paydb(tmp_path):
 
 @pytest.fixture
 def emp_patch(monkeypatch):
-    from core import analysis, data_array
     emps = {
         1: EmployeeData(id=1, first_name='А', last_name='Цеховик',
                         role_id=1, role_name='Работник цеха'),
@@ -39,8 +40,7 @@ def emp_patch(monkeypatch):
         7: EmployeeData(id=7, first_name='Р', last_name='Руководитель',
                         role_id=0, role_name='Руководитель'),
     }
-    monkeypatch.setattr(data_array, 'EMPLOYEES', emps)
-    monkeypatch.setattr(analysis, 'EMPLOYEES', emps)
+    monkeypatch.setattr(config, 'EMPLOYEES', emps)
     return emps
 
 
@@ -56,16 +56,16 @@ def make_tables(extra_hours: dict[str, int] | None = None, emps=(1,)):
         hours = 8 + extra_hours.get(key, 0)
         out, inn = _dt(key, f'{8 + hours:02d}:00'), _dt(key, '08:00')
         for emp in emps:
-            data_array.setdefault(key, {})[emp] = [out, inn, 'work']
+            data_array.setdefault(key, {})[emp] = DayMark(out, inn, 'work')
             delta = abs(timedelta(hours=hours) - timedelta(hours=8))
             tag = 'переработка' if hours > 8 else 'недоработка'
-            work_time.setdefault(key, {})[emp] = (delta, timedelta(hours=hours), tag, 'work')
+            work_time.setdefault(key, {})[emp] = DayWork(delta, timedelta(hours=hours), tag, 'work')
     return data_array, work_time
 
 
 def make_summary(work_time, emps=(1,)):
     from core.calculations import calculate_hours_per_month
-    summary, _ = calculate_hours_per_month(work_time)
+    summary = calculate_hours_per_month(work_time)
     return {e: summary[e] for e in emps if e in summary}
 
 
@@ -80,8 +80,7 @@ def test_no_settings_raises(emp_patch):
     os.close(fd)
     init_db(db).close()
     with pytest.raises(PayrollError, match='общих условий'):
-        build_bundle({}, {}, {1: ((1, timedelta(0), timedelta(0)),
-                                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)},
+        build_bundle({}, {}, {1: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)},
                      YEAR, MONTH, db)
 
 
@@ -129,8 +128,7 @@ def test_storekeeper_no_bonuses(paydb, emp_patch):
 def test_excluded_role0_not_in_results(paydb, emp_patch):
     data_array, work_time = make_tables(emps=(1, 7))
     summary = make_summary(work_time, emps=(1, 7))
-    summary[7] = ((1, timedelta(0), timedelta(0)),
-                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
+    summary[7] = EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)
     bundle = build_bundle(data_array, work_time, summary, YEAR, MONTH, paydb)
     assert 7 not in bundle.results
     assert 1 in bundle.results
@@ -197,7 +195,8 @@ def test_bundle_to_wages_and_snapshot(paydb, emp_patch, tmp_path):
     summary = make_summary(work_time)
     bundle = build_bundle(data_array, work_time, summary, YEAR, MONTH, paydb)
     wages = bundle_to_wages(bundle)
-    total, milk, with_milk = wages[1]
+    wage = wages[1]
+    total, milk, with_milk = wage.salary, wage.milk, wage.total_with_milk
     assert (total, milk, with_milk) == (
         bundle.results[1].result.total,
         bundle.results[1].result.milk_amount,

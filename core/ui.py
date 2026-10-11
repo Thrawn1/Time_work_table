@@ -63,24 +63,18 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
     «Включён без отметок», а не «в расчёт не включён» (R07).
     """
     from core.analysis import _current_average, _get_marks_and_missed, _get_undertime_days
-    from core.config import MANUAL_EXCLUSIONS
+    from core.config import MANUAL_EXCLUSIONS, staff_or_default
+    from core.data_array import display_name, exclusion_reason
 
-    if employees is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
-    else:
-        staff = employees
+    staff = staff_or_default(employees)
     rows: list[dict] = []
     for emp_id in emp_ids:
-        role = staff.get(emp_id) if hasattr(staff, 'get') else None
-        name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
+        name = display_name(emp_id, staff)
         has_marks = any(emp_id in day for day in time_table.values())
-        list_marks, list_missed = _get_marks_and_missed(
+        singles, missed = _get_marks_and_missed(
             time_table, emp_id, year, month,
             employees=staff, rules_by_role=rules_by_role)
-        single_count = len(list_marks) if isinstance(list_marks, list) else 0
-        missed_count = len(list_missed) if isinstance(list_missed, list) else 0
+        single_count, missed_count = len(singles), len(missed)
         under_days = _get_undertime_days(
             time_table, emp_id, year, month,
             employees=staff, rules_by_role=rules_by_role)
@@ -90,9 +84,9 @@ def build_dashboard_rows(time_table: dict, emp_ids: list[int], year: int, month:
         # R07: включённый без отметок — отдельный статус, а не «не включён».
         if included and not has_marks:
             info = {'status': 'Включён без отметок', 'style': 'cyan'}
-        from core.data_array import exclusion_reason
-        reason = exclusion_reason(emp_id, staff)
-        rules_reason = exclusion_reason(emp_id, staff, include_manual=False)
+        reason = exclusion_reason(emp_id, staff, rules_by_role=rules_by_role)
+        rules_reason = exclusion_reason(emp_id, staff, include_manual=False,
+                                        rules_by_role=rules_by_role)
         if extra_excluded and emp_id in extra_excluded:
             _sqlite_reason = extra_excluded[emp_id] or 'исключён SQLite'
             if not reason:
@@ -141,18 +135,14 @@ def build_repairmen_lines(time_table: dict, employees: dict, year: int, month: i
     на экране только дни выходов за месяц. Нет выходов — «выходов нет».
     """
     from core.constants import MONTHS_NAME_GENITIVE
-    from core.roles import REPAIRMEN_ROLE_ID
+    from core.data_array import repairmen_attendance
 
-    prefix = f'{year:04d}-{month:02d}-'
     month_ru = MONTHS_NAME_GENITIVE.get(month, str(month)).lower()
     items: list[tuple[str, list[int]]] = []
-    for emp_id, emp in (employees or {}).items():
-        if getattr(emp, 'role_id', None) != REPAIRMEN_ROLE_ID:
-            continue
-        days = sorted(int(date_key[8:10]) for date_key, day in time_table.items()
-                      if date_key.startswith(prefix) and emp_id in day)
+    for emp_id, dates in repairmen_attendance(time_table, employees or {}, year, month).items():
+        emp = employees[emp_id]
         name = f'{emp.first_name} {emp.last_name}'.strip() or f'ID {emp_id}'
-        items.append((name, days))
+        items.append((name, [int(d[8:10]) for d in dates]))
     items.sort(key=lambda item: item[0])
     return [f'{name} — {", ".join(str(d) for d in days)} {month_ru}' if days
             else f'{name} — выходов нет' for name, days in items]
@@ -273,21 +263,51 @@ def error(msg: str) -> None:
     get_console().print(f'[red]{msg}[/red]')
 
 
-def ask_menu(prompt: str, valid: tuple[str, ...], cancel_tokens: tuple[str, ...] = ('0', 'q', 'отмена')) -> str:
-    """Запросить пункт меню до валидного. Возвращает выбор как есть.
+#: Ввод «назад/пропустить» во всех меню и списках.
+CANCEL_TOKENS: tuple[str, ...] = ('0', 'q', 'й', 'отмена')
+#: Что возвращает ask_menu при отмене (любом из CANCEL_TOKENS, EOF или Ctrl+C).
+CANCEL = '0'
+
+
+def ask_menu(prompt: str, valid: tuple[str, ...]) -> str:
+    """Запросить пункт меню до валидного. Отмена — всегда CANCEL ('0').
 
     Ввод — через builtins input (мокается в тестах), оформление — через rich.
-    cancel_tokens считаются валидным выбором «пропустить».
     """
-    allowed = tuple(valid) + tuple(cancel_tokens)
     while True:
         try:
             raw = input(prompt).strip()
         except (EOFError, KeyboardInterrupt):
-            return cancel_tokens[0] if cancel_tokens else '0'
-        if raw in allowed:
+            return CANCEL
+        if raw.lower() in CANCEL_TOKENS:
+            return CANCEL
+        if raw in valid:
             return raw
-        info(f'Введите один из: {", ".join(allowed)}.')
+        info(f'Введите один из: {", ".join(tuple(valid) + (CANCEL,))}.')
+
+
+def read_choice(prompt: str) -> str | None:
+    """Строка ввода в нижнем регистре; None — пустой ввод, отмена, EOF или Ctrl+C."""
+    try:
+        raw = input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    if raw == '' or raw in CANCEL_TOKENS:
+        return None
+    return raw
+
+
+def pick_number(raw: str, count: int, what: str, shown: str | None = None) -> int | None:
+    """Номер строки 1..count -> индекс; иначе сообщение «Нет <what> с номером …» и None.
+
+    shown — исходный ввод для сообщения, если raw уже очищен (напр. от префикса x).
+    """
+    if raw.isdigit() and 1 <= int(raw) <= count:
+        return int(raw) - 1
+    error(f'Нет {what} с номером {shown if shown is not None else raw!r}: '
+          f'введите число от 1 до {count}.')
+    return None
 
 
 def confirm_save(preview: str) -> bool:
@@ -495,47 +515,30 @@ def build_preview_rows(summary: dict, wages: dict, employees: dict | None = None
     emp вне bundle.results пропускается, а не выводится с нулевой зарплатой (F02).
     """
     from core.calculations import str_timedelta
-    from core.data_array import is_settlement_allowed
+    from core.data_array import display_name, is_settlement_allowed
     from core.day_models import WageResult
     from core.money import as_decimal
     from decimal import Decimal
 
-    if employees is None:
-        from core.config import EMPLOYEES as _fallback
-
-        staff = _fallback
-    else:
-        staff = employees
+    no_wage = WageResult(Decimal('0.00'), Decimal('0.00'), Decimal('0.00'))
     rows: list[dict] = []
     for emp_id, data in summary.items():
         if not is_settlement_allowed(emp_id):
             continue
         if bundle is not None and emp_id not in bundle.results:
             continue
-        role = staff.get(emp_id) if hasattr(staff, 'get') else None
-        name = f'{role.last_name} {role.first_name}'.strip() if role else f'ID {emp_id}'
-        wage = wages.get(emp_id, WageResult(Decimal('0.00'), Decimal('0.00'), Decimal('0.00')))
-        salary = getattr(wage, 'salary', wage[0])
-        milk = getattr(wage, 'milk', wage[1])
-        total = getattr(wage, 'total_with_milk', wage[2])
-        work = getattr(data, 'work', data[0])
-        holiday = getattr(data, 'holiday', data[1])
-        work_days = getattr(work, 'days', work[0])
-        overtime = getattr(work, 'overtime', work[1])
-        undertime = getattr(work, 'undertime', work[2])
-        weekend_days = getattr(holiday, 'days', holiday[0])
-        vacation = getattr(data, 'vacation_days', data[2])
+        wage = wages.get(emp_id, no_wage)
         rows.append({
             'emp_id': emp_id,
-            'name': name,
-            'work': work_days,
-            'overtime': str_timedelta(overtime),
-            'undertime': str_timedelta(undertime),
-            'weekend': weekend_days,
-            'vacation': vacation,
-            'salary': as_decimal(salary),
-            'milk': as_decimal(milk),
-            'total': as_decimal(total),
+            'name': display_name(emp_id, employees),
+            'work': data.work.days,
+            'overtime': str_timedelta(data.work.overtime),
+            'undertime': str_timedelta(data.work.undertime),
+            'weekend': data.holiday.days,
+            'vacation': data.vacation_days,
+            'salary': as_decimal(wage.salary),
+            'milk': as_decimal(wage.milk),
+            'total': as_decimal(wage.total_with_milk),
         })
     return sorted(rows, key=lambda r: r['name'])
 

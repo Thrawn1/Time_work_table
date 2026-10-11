@@ -10,6 +10,7 @@ from core.money import (
     timedelta_to_hours,
     timedelta_to_seconds,
 )
+from core.day_models import EmployeeMonth, HolidayGroup, WorkGroup
 
 
 class TestQuantizeHalfUp:
@@ -53,9 +54,9 @@ class TestFormatMoney:
 class TestDailyWagesDecimal:
     def test_standard_day(self, setup_employees, mock_wage_rates):
         from core.calculations import calculate_wages
-        summary = {101: ((1, timedelta(0), timedelta(0)),
-                         (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
-        total, milk, with_milk = calculate_wages(summary)[101]
+        summary = {101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+        wage = calculate_wages(summary)[101]
+        total, milk, with_milk = wage.salary, wage.milk, wage.total_with_milk
         assert isinstance(total, Decimal)
         assert total == Decimal('800.00')  # 800 руб/смена
         assert milk == Decimal('40.00')
@@ -63,18 +64,16 @@ class TestDailyWagesDecimal:
 
     def test_one_second_overtime_quantized_once(self, setup_employees, mock_wage_rates):
         from core.calculations import calculate_wages
-        summary = {101: ((1, timedelta(seconds=1), timedelta(0)),
-                         (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
-        total, _, _ = calculate_wages(summary)[101]
+        summary = {101: EmployeeMonth(WorkGroup(1, timedelta(seconds=1), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+        total = calculate_wages(summary)[101].salary
         # 800 + 1.5*(800/8)/3600 = 800.0416... -> 800.04 (HALF_UP, один раз в конце)
         assert total == Decimal('800.04')
 
     def test_frac_rate_overtime_half_up(self, setup_employees, monkeypatch):
         from core import calculations
         monkeypatch.setattr(calculations, 'load_wage_rates', lambda: {101: Decimal('100.005')})
-        summary = {101: ((1, timedelta(0), timedelta(0)),
-                         (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
-        total, _, _ = calculations.calculate_wages(summary)[101]
+        summary = {101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0)}
+        total = calculations.calculate_wages(summary)[101].salary
         # ставка 100.005 руб/смена за 1 день -> 100.01 (HALF_UP, без float-хвостов)
         assert total == Decimal('100.01')
 

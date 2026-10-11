@@ -17,6 +17,7 @@ from core.ui import (
     print_salary_report,
     print_journal,
 )
+from core.day_models import DayMark, EmployeeMonth, HolidayGroup, WageResult, WorkGroup
 
 
 def make_dt(date_str, time_str):
@@ -43,7 +44,7 @@ class TestBuildRows:
 
         # 101: одна одиночная метка 06.07 + есть отметки; 102/103: пусто
         dt = make_dt('2026-07-06', '08:00:00')
-        tt = {'2026-07-06': {101: [dt, dt, 'work']}}
+        tt = {'2026-07-06': {101: DayMark(dt, dt, 'work')}}
         rows = build_dashboard_rows(tt, [101, 102, 103], 2026, 7)
         by_id = {r['emp_id']: r for r in rows}
         assert by_id[101]['single'] == 1
@@ -61,7 +62,7 @@ class TestBuildRows:
     def test_two_blocks(self, setup_employees, mock_holidays_jan2026, mock_postponed_empty, capsys):
         """Бывшие (без отметок) — отдельным блоком, а не в общей таблице проблем."""
         dt = make_dt('2026-07-06', '08:00:00')
-        tt = {'2026-07-06': {101: [dt, dt, 'work']}}
+        tt = {'2026-07-06': {101: DayMark(dt, dt, 'work')}}
         rows = build_dashboard_rows(tt, [101, 102], 2026, 7)
         print_dashboard(rows, title='Тест')
         out = capsys.readouterr().out
@@ -115,10 +116,9 @@ class TestStartAndPreview:
     def test_preview_rows_and_print(self, setup_employees, mock_wage_rates, capsys):
         from datetime import timedelta
         summary = {
-            101: ((1, timedelta(0), timedelta(0)),
-                  (0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
+            101: EmployeeMonth(WorkGroup(1, timedelta(0), timedelta(0)), HolidayGroup(0, timedelta(0), timedelta(0), timedelta(0)), 0, 0),
         }
-        wages = {101: (800, 40, 840)}
+        wages = {101: WageResult(800, 40, 840)}
         rows = build_preview_rows(summary, wages)
         assert rows[0]['name'] == 'Петров Иван'
         assert rows[0]['total'] == 840
@@ -136,10 +136,9 @@ class TestStartAndPreview:
     def test_salary_report(self, setup_employees, mock_wage_rates, capsys):
         from datetime import timedelta
         summary = {
-            101: ((20, timedelta(hours=3), timedelta(hours=1)),
-                  (2, timedelta(0), timedelta(0), timedelta(hours=16)), 1, 0),
+            101: EmployeeMonth(WorkGroup(20, timedelta(hours=3), timedelta(hours=1)), HolidayGroup(2, timedelta(0), timedelta(0), timedelta(hours=16)), 1, 0),
         }
-        wages = {101: (1750.0, 880, 2630.0)}
+        wages = {101: WageResult(1750.0, 880, 2630.0)}
         rows = build_preview_rows(summary, wages)
         print_salary_report(rows, title='Зарплата')
         out = capsys.readouterr().out
@@ -157,9 +156,9 @@ class TestJournal:
         analysis.clear_journal()
         date_key = '2026-07-06'
         existing = make_dt(date_key, '17:00:00')
-        tt = {date_key: {101: [existing, existing, 'work']}}
+        tt = {date_key: {101: DayMark(existing, existing, 'work')}}
         single = [[date_key, existing]]
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, 0)):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=(single, [])):
             with patch('builtins.input', side_effect=['1', '08 00 00', 'д']):
                 with patch.object(analysis, '_save_session', lambda x: None):
                     analysis.analyze_for_edit(tt, 101, 2026, 7)
@@ -174,7 +173,7 @@ class TestJournal:
         monkeypatch.setattr(rtv, 'minutes_or_seconds_random', lambda: 15)
         from core import analysis
         analysis.clear_journal()
-        with patch.object(analysis, '_get_marks_and_missed', return_value=(0, ['2026-07-06'])):
+        with patch.object(analysis, '_get_marks_and_missed', return_value=([], ['2026-07-06'])):
             inputs = ['1', '08', '17 00 00', 'д']
             with patch('builtins.input', side_effect=inputs):
                 with patch.object(analysis, '_save_session', lambda x: None):

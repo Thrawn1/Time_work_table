@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import argparse
 import sys
+from contextlib import closing
 
 from core.pay_store import (
-    DEFAULT_DB_PATH, DEFAULT_TRANSITION, change_assignment, connect,
+    DEFAULT_DB_PATH, DEFAULT_TRANSITION, change_assignment,
     get_pay_settings, get_role_rule, get_seniority_scale, init_db,
     list_exceptions, migrate_from_dat, role_rule_versions,
-    seed_defaults, update_employee,
+    open_db, seed_defaults, update_employee,
 )
 from core.pay_toml import export_toml, generate_template, import_toml
 
@@ -100,12 +101,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def _dispatch(args) -> int:
     if args.cmd == 'init':
-        init_db(args.db)
-        con = connect(args.db)
-        try:
+        with closing(init_db(args.db)) as con:
             seed_defaults(con)
-        finally:
-            con.close()
         print(f'Справочник {args.db}: схема создана, стартовые условия внесены.')
         return 0
     if args.cmd == 'migrate':
@@ -114,17 +111,12 @@ def _dispatch(args) -> int:
         except Exception as e:
             print(f'Ошибка: справочник недоступен ({e})')
             return 1
-        try:
+        with closing(con):
             try:
                 report = migrate_from_dat(con, args.dat_dir, args.from_date)
             except (ValueError, OSError) as e:
                 print(f'Ошибка: перенос невозможен ({e})')
                 return 1
-        finally:
-            try:
-                con.close()
-            except Exception:
-                pass
         print(f"Ролей: {report['roles']}, сотрудников: {report['employees']}, "
               f"исключений: {report['exceptions']}, пропущено: {report['skipped']}")
         return 0
@@ -154,8 +146,7 @@ def _dispatch(args) -> int:
             print('Предпросмотр (запись не выполнялась):')
         return _print_report(report)
     if args.cmd == 'show':
-        con = connect(args.db)
-        try:
+        with open_db(args.db) as con:
             settings = get_pay_settings(con, args.date)
             if settings is None:
                 print(f'На {args.date}: общие условия не заданы.')
@@ -186,12 +177,9 @@ def _dispatch(args) -> int:
                   + (', '.join(f'{k} ({v})' for k, v in exc.items()) or '—'))
             n_assign = con.execute('SELECT COUNT(*) c FROM assignments').fetchone()['c']
             print(f'  Назначений всего: {n_assign}.')
-        finally:
-            con.close()
         return 0
     if args.cmd == 'rules-history':
-        con = connect(args.db)
-        try:
+        with open_db(args.db) as con:
             versions = role_rule_versions(con, args.role_id)
             if not versions:
                 print(f'Роль {args.role_id}: версий нет.')
@@ -201,27 +189,21 @@ def _dispatch(args) -> int:
                       f'участие={int(rule.participates)}, бонусы='
                       f"{int(rule.overtime_eligible)}{int(rule.full_month_eligible)}"
                       f"{int(rule.seniority_eligible)}")
-        finally:
-            con.close()
         return 0
     if args.cmd == 'change-assignment':
-        con = connect(args.db)
-        try:
+        with open_db(args.db) as con:
             try:
                 closed = change_assignment(con, args.emp, args.role, args.from_date)
             except ValueError as e:
                 print(f'Ошибка: {e}')
                 return 1
-        finally:
-            con.close()
         print(f'Сотрудник {args.emp}: закрыто по {closed}, новая роль {args.role} с {args.from_date}.')
         return 0
     if args.cmd == 'update-employee':
         if args.hire is not None and args.clear_hire:
             print('Ошибка: укажите либо --hire, либо --clear-hire.')
             return 1
-        con = connect(args.db)
-        try:
+        with open_db(args.db) as con:
             try:
                 changed = update_employee(
                     con, args.emp, first_name=args.first, last_name=args.last,
@@ -230,8 +212,6 @@ def _dispatch(args) -> int:
             except ValueError as e:
                 print(f'Ошибка: {e}')
                 return 1
-        finally:
-            con.close()
         print(f'Сотрудник {args.emp}: {"карточка обновлена." if changed else "без изменений."}')
         return 0
     return 1
